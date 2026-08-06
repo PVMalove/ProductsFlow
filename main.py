@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, status
 
@@ -35,6 +35,20 @@ async def get_products_by_category(category_name: str):
         product
         for product in PRODUCTS
         if needle == product.get("category", "").casefold()
+    ]
+
+
+@app.get("/products/price-range")
+async def get_products_by_price_range(
+    min_price: Optional[float] = None, max_price: Optional[float] = None
+):
+    lower_bound = min_price if min_price is not None else 0.0
+    upper_bound = max_price if max_price is not None else float("inf")
+    
+    return [
+        product
+        for product in PRODUCTS
+        if lower_bound <= product.get("price", 0.0) <= upper_bound
     ]
 
 
