@@ -1,0 +1,6 @@
+{
+    "editor.formatOnSave": true,
+    "editor.hover.delay": 100,
+    "editor.quickSuggestionsDelay": 10,
+    "commentTranslate.targetLanguage": "ru"
+}
