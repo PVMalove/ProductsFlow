@@ -1,7 +1,12 @@
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from fastapi import FastAPI, HTTPException, Path, Query, status
+from pydantic import BaseModel, ConfigDict, Field
 
 app = FastAPI()
+
+
+ProductID = Annotated[int, Path(gt=0)]
 
 
 class ProductBase(BaseModel):
@@ -14,7 +19,18 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
-    pass
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "Название товара",
+                    "category": "Категория",
+                    "price": 0.0,
+                    "description": "Описание товара",
+                }
+            ]
+        }
+    )
 
 
 class ProductUpdate(BaseModel):
@@ -26,10 +42,33 @@ class ProductUpdate(BaseModel):
     )
     price: float | None = Field(default=None, ge=0, description="Цена продукта")
     description: str = ""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "Название товара",
+                    "category": "Категория",
+                    "price": 0.0,
+                    "description": "Описание товара",
+                }
+            ]
+        }
+    )
 
 
 class Product(ProductBase):
     id: int
+
+
+def find_product_by_index(product_id: int) -> int:
+    for index, product_item in enumerate(PRODUCTS):
+        if product_item.id == product_id:
+            return index
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Продукт не найден!",
+    )
 
 
 @app.get("/health")
@@ -71,8 +110,8 @@ async def get_products_by_category(category_name: str) -> list[Product]:
 
 @app.get("/products/price-range")
 async def get_products_by_price_range(
-    min_price: float | None = None,
-    max_price: float | None = None,
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, ge=0),
     response_model=list[Product],
 ) -> list[Product]:
     lower_bound = min_price if min_price is not None else 0.0
@@ -87,16 +126,9 @@ async def get_products_by_price_range(
     "/products/{product_id}",
     response_model=Product,
 )
-async def get_product(product_id: int) -> Product:
-    product: Product | None = next((p for p in PRODUCTS if p.id == product_id), None)
-
-    if product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Продукт не найден!",
-        )
-
-    return product
+async def get_product(product_id: ProductID) -> Product:
+    product_index = find_product_by_index(product_id)
+    return PRODUCTS[product_index]
 
 
 @app.post(
@@ -114,29 +146,18 @@ async def create_product(product_create: ProductCreate) -> Product:
     # "error_messages": "Цена продукта должна быть положительным числом.",
 
     new_id = max(p.id for p in PRODUCTS) + 1 if PRODUCTS else 1
-    product_data = product_create.model_dump()
-    product_data["id"] = new_id
-    product_instance = Product(**product_data)
+    product_instance = Product(id=new_id, **product_create.model_dump())
     PRODUCTS.append(product_instance)
     return product_instance
 
 
 @app.put(
     "/products/{product_id}",
+    response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def update_product(product_id: int, product_update: ProductUpdate) -> None:
-    product_index: int | None = None
-    for index, product_item in enumerate(PRODUCTS):
-        if product_item.id == product_id:
-            product_index = index
-            break
-
-    if product_index is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Продукт не найден!",
-        )
+async def update_product(product_id: ProductID, product_update: ProductUpdate) -> None:
+    product_index = find_product_by_index(product_id)
 
     # "field required": "name",
     # "error_messages": "Название продукта не может быть пустым.",
@@ -150,20 +171,13 @@ async def update_product(product_id: int, product_update: ProductUpdate) -> None
     return
 
 
-@app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(product_id: int) -> None:
-    product_index: int | None = None
-    for index, product_item in enumerate(PRODUCTS):
-        if product_item.id == product_id:
-            product_index = index
-            break
-
-    if product_index is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Продукт не найден!",
-        )
-
+@app.delete(
+    "/products/{product_id}",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_product(product_id: ProductID) -> None:
+    product_index = find_product_by_index(product_id)
     PRODUCTS.pop(product_index)
     return
 
