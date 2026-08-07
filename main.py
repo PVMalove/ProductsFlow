@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -44,7 +45,7 @@ async def get_products_by_price_range(
 ):
     lower_bound = min_price if min_price is not None else 0.0
     upper_bound = max_price if max_price is not None else float("inf")
-    
+
     return [
         product
         for product in PRODUCTS
@@ -63,6 +64,56 @@ async def get_product(product_id: int):
         )
 
     return product
+
+
+class ProductCreate(BaseModel):
+    name: str = ""
+    category: str = ""
+    price: float = 0.0
+    description: str = ""
+
+
+class Product(ProductCreate):
+    id: int
+
+
+@app.post("/products", response_model=Product, status_code=status.HTTP_201_CREATED)
+async def create_product(product: ProductCreate):
+
+    error_messages: list[dict[str, str]] = []
+    if not product.name:
+        error_messages.append(
+            {
+                "field required": "name",
+                "error_messages": "Название продукта не может быть пустым.",
+            }
+        )
+    if not product.category:
+        error_messages.append(
+            {
+                "field required": "category",
+                "error_messages": "Категория продукта не может быть пустой.",
+            }
+        )
+    if product.price < 0:
+        error_messages.append(
+            {
+                "field required": "price",
+                "error_messages": "Цена продукта должна быть положительным числом.",
+            }
+        )
+
+    if error_messages:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_messages,
+        )
+
+    new_id = max(p["id"] for p in PRODUCTS) + 1 if PRODUCTS else 1
+    product_data = product.model_dump()
+    product_data["id"] = new_id
+    PRODUCTS.append(product_data)
+    return product_data
 
 
 PRODUCTS: list[dict[str, Any]] = [

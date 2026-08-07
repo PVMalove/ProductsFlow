@@ -18,3 +18,11 @@ indent-style = "space"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.1",
+]
+
+[project.optional-dependencies]
+dev = ["ruff"]
