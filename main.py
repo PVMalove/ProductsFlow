@@ -1,18 +1,31 @@
-from typing import Annotated
+from typing import Annotated, Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Path, Query, status
+from fastapi import FastAPI, HTTPException, Path, Query, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 app = FastAPI()
+
+
+VALIDATION_MESSAGES: Dict[tuple[str, str], str] = {
+    ("name", "string_type"): "Название продукта должно быть строкой",
+    ("name", "string_too_short"): "Название продукта слишком короткое",
+    ("name", "string_too_long"): "Название продукта слишком длинное",
+    ("category", "string_type"): "Категория продукта должна быть строкой",
+    ("category", "string_too_short"): "Категория продукта слишком короткая",
+    ("category", "string_too_long"): "Категория продукта слишком длинная",
+    ("price", "greater_than_equal"): "Цена продукта должна быть положительным числом",
+}
 
 
 ProductID = Annotated[int, Path(gt=0)]
 
 
 class ProductBase(BaseModel):
-    name: str = Field(min_length=1, max_length=100, description="Название продукта")
+    name: str = Field(min_length=3, max_length=100, description="Название продукта")
     category: str = Field(
-        min_length=1, max_length=100, description="Категория продукта"
+        min_length=3, max_length=100, description="Категория продукта"
     )
     price: float = Field(..., ge=0, description="Цена продукта")
     description: str = ""
@@ -35,10 +48,10 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(
-        default=None, min_length=1, max_length=100, description="Название продукта"
+        default=None, min_length=3, max_length=100, description="Название продукта"
     )
     category: str | None = Field(
-        default=None, min_length=1, max_length=100, description="Категория продукта"
+        default=None, min_length=3, max_length=100, description="Категория продукта"
     )
     price: float | None = Field(default=None, ge=0, description="Цена продукта")
     description: str = ""
@@ -68,6 +81,31 @@ def find_product_by_index(product_id: int) -> int:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Продукт не найден!",
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    errors: List[Dict[str, Any]] = []
+
+    for error in exc.errors():
+        loc = list(error["loc"])
+        field_key = ".".join(map(str, loc[1:])) if len(loc) > 1 else loc[-1]
+        message = VALIDATION_MESSAGES.get((field_key, error["type"]), error["msg"])
+        errors.append(
+            {
+                "field": field_key,
+                "type": error["type"],
+                "message": message,
+            }
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": errors},
     )
 
 
