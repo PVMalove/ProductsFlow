@@ -163,7 +163,25 @@ async def update_product(product_id: int, product: ProductCreate):
         )
 
     PRODUCTS[product_index].update(product.model_dump())
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return
+
+
+@app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product(product_id: int):
+    product_index: int | None = None
+    for index, product_item in enumerate(PRODUCTS):
+        if product_item.get("id") == product_id:
+            product_index = index
+            break
+
+    if product_index is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Продукт не найден!",
+        )
+
+    PRODUCTS.pop(product_index)
+    return
 
 
 PRODUCTS: list[dict[str, Any]] = [
