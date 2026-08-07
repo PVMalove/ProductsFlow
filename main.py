@@ -1,61 +1,94 @@
-from typing import Any
-
-from fastapi import FastAPI, HTTPException, Response, status
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
 
+class ProductBase(BaseModel):
+    name: str = Field(min_length=1, max_length=100, description="Название продукта")
+    category: str = Field(
+        min_length=1, max_length=100, description="Категория продукта"
+    )
+    price: float = Field(..., ge=0, description="Цена продукта")
+    description: str = ""
+
+
+class ProductCreate(ProductBase):
+    pass
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Название продукта"
+    )
+    category: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Категория продукта"
+    )
+    price: float | None = Field(default=None, ge=0, description="Цена продукта")
+    description: str = ""
+
+
+class Product(ProductBase):
+    id: int
+
+
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/products")
-async def get_products():
+@app.get(
+    "/products",
+    response_model=list[Product],
+)
+async def get_products() -> list[Product]:
     return PRODUCTS
 
 
-@app.get("/products/search")
-async def search_products(query: str):
+@app.get(
+    "/products/search",
+    response_model=list[Product],
+)
+async def search_products(query: str) -> list[Product]:
     needle = query.casefold()
 
     return [
         product
         for product in PRODUCTS
-        if needle in product.get("name", "").casefold()
-        or needle in product.get("description", "").casefold()
+        if needle in product.name.casefold() or needle in product.description.casefold()
     ]
 
 
-@app.get("/products/category/{category_name}")
-async def get_products_by_category(category_name: str):
+@app.get(
+    "/products/category/{category_name}",
+    response_model=list[Product],
+)
+async def get_products_by_category(category_name: str) -> list[Product]:
     needle = category_name.casefold()
 
-    return [
-        product
-        for product in PRODUCTS
-        if needle == product.get("category", "").casefold()
-    ]
+    return [product for product in PRODUCTS if needle == product.category.casefold()]
 
 
 @app.get("/products/price-range")
 async def get_products_by_price_range(
-    min_price: float | None = None, max_price: float | None = None
-):
+    min_price: float | None = None,
+    max_price: float | None = None,
+    response_model=list[Product],
+) -> list[Product]:
     lower_bound = min_price if min_price is not None else 0.0
     upper_bound = max_price if max_price is not None else float("inf")
 
     return [
-        product
-        for product in PRODUCTS
-        if lower_bound <= product.get("price", 0.0) <= upper_bound
+        product for product in PRODUCTS if lower_bound <= product.price <= upper_bound
     ]
 
 
-@app.get("/products/{product_id}")
-async def get_product(product_id: int):
-    product = next((p for p in PRODUCTS if p["id"] == product_id), None)
+@app.get(
+    "/products/{product_id}",
+    response_model=Product,
+)
+async def get_product(product_id: int) -> Product:
+    product: Product | None = next((p for p in PRODUCTS if p.id == product_id), None)
 
     if product is None:
         raise HTTPException(
@@ -66,64 +99,36 @@ async def get_product(product_id: int):
     return product
 
 
-class ProductCreate(BaseModel):
-    name: str = ""
-    category: str = ""
-    price: float = 0.0
-    description: str = ""
+@app.post(
+    "/products",
+    response_model=Product,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_product(product_create: ProductCreate) -> Product:
 
+    # "field required": "name",
+    # "error_messages": "Название продукта не может быть пустым.",
+    # "field required": "category",
+    # "error_messages": "Категория продукта не может быть пустой.",
+    # "field required": "price",
+    # "error_messages": "Цена продукта должна быть положительным числом.",
 
-class Product(ProductCreate):
-    id: int
-
-
-@app.post("/products", response_model=Product, status_code=status.HTTP_201_CREATED)
-async def create_product(product: ProductCreate):
-
-    error_messages: list[dict[str, str]] = []
-    if not product.name:
-        error_messages.append(
-            {
-                "field required": "name",
-                "error_messages": "Название продукта не может быть пустым.",
-            }
-        )
-    if not product.category:
-        error_messages.append(
-            {
-                "field required": "category",
-                "error_messages": "Категория продукта не может быть пустой.",
-            }
-        )
-    if product.price < 0:
-        error_messages.append(
-            {
-                "field required": "price",
-                "error_messages": "Цена продукта должна быть положительным числом.",
-            }
-        )
-
-    if error_messages:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=error_messages,
-        )
-
-    new_id = max(p["id"] for p in PRODUCTS) + 1 if PRODUCTS else 1
-    product_data = product.model_dump()
+    new_id = max(p.id for p in PRODUCTS) + 1 if PRODUCTS else 1
+    product_data = product_create.model_dump()
     product_data["id"] = new_id
-    PRODUCTS.append(product_data)
-    return product_data
+    product_instance = Product(**product_data)
+    PRODUCTS.append(product_instance)
+    return product_instance
 
 
 @app.put(
     "/products/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def update_product(product_id: int, product: ProductCreate):
+async def update_product(product_id: int, product_update: ProductUpdate) -> None:
     product_index: int | None = None
     for index, product_item in enumerate(PRODUCTS):
-        if product_item.get("id") == product_id:
+        if product_item.id == product_id:
             product_index = index
             break
 
@@ -133,44 +138,23 @@ async def update_product(product_id: int, product: ProductCreate):
             detail="Продукт не найден!",
         )
 
-    error_messages: list[dict[str, str]] = []
-    if not product.name:
-        error_messages.append(
-            {
-                "field required": "name",
-                "error_messages": "Название продукта не может быть пустым.",
-            }
-        )
-    if not product.category:
-        error_messages.append(
-            {
-                "field required": "category",
-                "error_messages": "Категория продукта не может быть пустой.",
-            }
-        )
-    if product.price < 0:
-        error_messages.append(
-            {
-                "field required": "price",
-                "error_messages": "Цена продукта должна быть положительным числом.",
-            }
-        )
+    # "field required": "name",
+    # "error_messages": "Название продукта не может быть пустым.",
+    # "field required": "category",
+    # "error_messages": "Категория продукта не может быть пустой.",
+    # "field required": "price",
+    # "error_messages": "Цена продукта должна быть положительным числом.",
 
-    if error_messages:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=error_messages,
-        )
-
-    PRODUCTS[product_index].update(product.model_dump())
+    update_data = product_update.model_dump(exclude_unset=True)
+    PRODUCTS[product_index] = PRODUCTS[product_index].model_copy(update=update_data)
     return
 
 
 @app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(product_id: int):
+async def delete_product(product_id: int) -> None:
     product_index: int | None = None
     for index, product_item in enumerate(PRODUCTS):
-        if product_item.get("id") == product_id:
+        if product_item.id == product_id:
             product_index = index
             break
 
@@ -184,47 +168,47 @@ async def delete_product(product_id: int):
     return
 
 
-PRODUCTS: list[dict[str, Any]] = [
-    {
-        "id": 1,
-        "name": "Ноутбук",
-        "category": "Электроника",
-        "price": 89990.0,
-        "description": "Лёгкий ноутбук для работы и учёбы",
-    },
-    {
-        "id": 2,
-        "name": "Смартфон",
-        "category": "Электроника",
-        "price": 54990.0,
-        "description": "Смартфон с хорошей камерой",
-    },
-    {
-        "id": 3,
-        "name": "Кофеварка",
-        "category": "Бытовая техника",
-        "price": 12990.0,
-        "description": "Капельная кофеварка для дома",
-    },
-    {
-        "id": 4,
-        "name": "Чайник",
-        "category": "Бытовая техника",
-        "price": 2990.0,
-        "description": "Электрический чайник, объём 1.7 л",
-    },
-    {
-        "id": 5,
-        "name": "Книга по Python",
-        "category": "Книги",
-        "price": 1490.0,
-        "description": "Введение в язык программирования Python",
-    },
-    {
-        "id": 6,
-        "name": "Книга по FastAPI",
-        "category": "Книги",
-        "price": 1990.0,
-        "description": "Практическое руководство по фреймворку FastAPI",
-    },
+PRODUCTS: list[Product] = [
+    Product(
+        id=1,
+        name="Ноутбук",
+        category="Электроника",
+        price=89990.0,
+        description="Лёгкий ноутбук для работы и учёбы",
+    ),
+    Product(
+        id=2,
+        name="Смартфон",
+        category="Электроника",
+        price=54990.0,
+        description="Смартфон с хорошей камерой",
+    ),
+    Product(
+        id=3,
+        name="Кофеварка",
+        category="Бытовая техника",
+        price=12990.0,
+        description="Капельная кофеварка для дома",
+    ),
+    Product(
+        id=4,
+        name="Чайник",
+        category="Бытовая техника",
+        price=2990.0,
+        description="Электрический чайник, объём 1.7 л",
+    ),
+    Product(
+        id=5,
+        name="Книга по Python",
+        category="Книги",
+        price=1490.0,
+        description="Введение в язык программирования Python",
+    ),
+    Product(
+        id=6,
+        name="Книга по FastAPI",
+        category="Книги",
+        price=1990.0,
+        description="Практическое руководство по фреймворку FastAPI",
+    ),
 ]

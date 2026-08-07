@@ -3,5 +3,5 @@
     "editor.hover.delay": 100,
     "editor.quickSuggestionsDelay": 10,
     "editor.wordSeparators": "./\\()\"':,.;<>~!@#$%^&*|+=[]{}",
-    "commentTranslate.targetLanguage": "ru"
+    "commentTranslate.targetLanguage": "ru",
 }
