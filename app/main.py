@@ -16,6 +16,7 @@ VALIDATION_MESSAGES: Dict[tuple[str, str], str] = {
     ("category", "string_too_short"): "Категория продукта слишком короткая",
     ("category", "string_too_long"): "Категория продукта слишком длинная",
     ("price", "greater_than_equal"): "Цена продукта должна быть положительным числом",
+    ("product_id", "greater_than"): "ID продукта должен быть положительным числом"
 }
 
 
@@ -75,7 +76,6 @@ class Product(ProductBase):
 
 def find_product_by_index(product_id: int) -> int:
     for index, product_item in enumerate(PRODUCTS):
-        if product_item.id == product_id:
             return index
 
     raise HTTPException(
