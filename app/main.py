@@ -1,9 +1,10 @@
-from typing import Annotated, Any, Dict, List
+from typing import Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Path, Query, Request, status
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 
 app = FastAPI()
 
@@ -18,60 +19,6 @@ VALIDATION_MESSAGES: Dict[tuple[str, str], str] = {
     ("price", "greater_than_equal"): "Цена продукта должна быть положительным числом",
     ("product_id", "greater_than"): "ID продукта должен быть положительным числом"
 }
-
-
-ProductID = Annotated[int, Path(gt=0)]
-
-
-class ProductBase(BaseModel):
-    name: str = Field(min_length=3, max_length=100, description="Название продукта")
-    category: str = Field(
-        min_length=3, max_length=100, description="Категория продукта"
-    )
-    price: float = Field(..., ge=0, description="Цена продукта")
-    description: str = ""
-
-
-class ProductCreate(ProductBase):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "Название товара",
-                    "category": "Категория",
-                    "price": 0.0,
-                    "description": "Описание товара",
-                }
-            ]
-        }
-    )
-
-
-class ProductUpdate(BaseModel):
-    name: str | None = Field(
-        default=None, min_length=3, max_length=100, description="Название продукта"
-    )
-    category: str | None = Field(
-        default=None, min_length=3, max_length=100, description="Категория продукта"
-    )
-    price: float | None = Field(default=None, ge=0, description="Цена продукта")
-    description: str = ""
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "name": "Название товара",
-                    "category": "Категория",
-                    "price": 0.0,
-                    "description": "Описание товара",
-                }
-            ]
-        }
-    )
-
-
-class Product(ProductBase):
-    id: int
 
 
 def find_product_by_index(product_id: int) -> int:
@@ -175,14 +122,6 @@ async def get_product(product_id: ProductID) -> Product:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_product(product_create: ProductCreate) -> Product:
-
-    # "field required": "name",
-    # "error_messages": "Название продукта не может быть пустым.",
-    # "field required": "category",
-    # "error_messages": "Категория продукта не может быть пустой.",
-    # "field required": "price",
-    # "error_messages": "Цена продукта должна быть положительным числом.",
-
     new_id = max(p.id for p in PRODUCTS) + 1 if PRODUCTS else 1
     product_instance = Product(id=new_id, **product_create.model_dump())
     PRODUCTS.append(product_instance)
@@ -196,14 +135,6 @@ async def create_product(product_create: ProductCreate) -> Product:
 )
 async def update_product(product_id: ProductID, product_update: ProductUpdate) -> None:
     product_index = find_product_by_index(product_id)
-
-    # "field required": "name",
-    # "error_messages": "Название продукта не может быть пустым.",
-    # "field required": "category",
-    # "error_messages": "Категория продукта не может быть пустой.",
-    # "field required": "price",
-    # "error_messages": "Цена продукта должна быть положительным числом.",
-
     update_data = product_update.model_dump(exclude_unset=True)
     PRODUCTS[product_index] = PRODUCTS[product_index].model_copy(update=update_data)
     return
