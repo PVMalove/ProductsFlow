@@ -1,7 +1,8 @@
 {
-    "editor.formatOnSave": true,
-    "editor.hover.delay": 100,
-    "editor.quickSuggestionsDelay": 10,
-    "editor.wordSeparators": "./\\()\"':,.;<>~!@#$%^&*|+=[]{}",
-    "commentTranslate.targetLanguage": "ru",
+  "editor.formatOnSave": true,
+  "editor.hover.delay": 100,
+  "editor.quickSuggestionsDelay": 10,
+  "editor.wordSeparators": "./\\()\"':,.;<>~!@#$%^&*|+=[]{}",
+  "commentTranslate.targetLanguage": "ru",
+  "cSpell.words": ["sessionmaker"]
 }

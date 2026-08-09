@@ -45,7 +45,11 @@ FALLBACK_TEMPLATE = "{field}: {msg}"
 KNOWN_LOC_ROOTS = {"body", "query", "path", "header", "cookie"}
 
 
-async def validation_exception_handler(
+def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+
+
+async def _validation_exception_handler(
     _request: Request,
     exc: Exception,
 ) -> JSONResponse:
@@ -70,10 +74,6 @@ async def validation_exception_handler(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": errors},
     )
-
-
-def register_exception_handlers(app: FastAPI) -> None:
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 
 def _build_field_key(loc: tuple[Any, ...]) -> str:
