@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, status
 
-from app.db import engine, init_db
+from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
 from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 
@@ -11,6 +11,7 @@ from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
+    await seed_db()
     yield
     await engine.dispose()
 
