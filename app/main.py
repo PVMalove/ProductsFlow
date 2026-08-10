@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TypeVar
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 
 from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
@@ -82,18 +82,16 @@ async def get_products_by_category(
     return await repository.get_products_by_category(category_name)
 
 
-@app.get("/products/price-range")
+@app.get(
+    "/products/price-range",
+    response_model=list[Product],
+)
 async def get_products_by_price_range(
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
-    response_model=list[Product],
+    repository: ProductRepo = Depends(),
 ) -> list[Product]:
-    lower_bound = min_price if min_price is not None else 0.0
-    upper_bound = max_price if max_price is not None else float("inf")
-
-    return [
-        product for product in PRODUCTS if lower_bound <= product.price <= upper_bound
-    ]
+    return await repository.get_products_by_price_range(min_price, max_price)
 
 
 @app.post(

@@ -58,6 +58,22 @@ class ProductRepository:
         )
         return [Product.model_validate(row._mapping) for row in result.fetchall()]
 
+    async def get_products_by_price_range(
+        self, min_price: float | None, max_price: float | None
+    ) -> list[Product]:
+        lower_bound = min_price if min_price is not None else 0.0
+        upper_bound = max_price if max_price is not None else float("inf")
+
+        result = await self.session.execute(
+            text(
+                """SELECT id, name, category, price, description
+                FROM products
+                WHERE price BETWEEN :lower AND :upper"""
+            ),
+            {"lower": lower_bound, "upper": upper_bound},
+        )
+        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+
     async def create_product(self, request: ProductCreate) -> Product:
         payload = request.model_dump()
         result = await self.session.execute(
