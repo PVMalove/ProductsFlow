@@ -87,9 +87,10 @@ async def get_products_by_category(
     response_model=list[Product],
 )
 async def get_products_by_price_range(
+    repository: ProductRepo,
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
-    repository: ProductRepo = Depends(),
+
 ) -> list[Product]:
     return await repository.get_products_by_price_range(min_price, max_price)
 
@@ -108,11 +109,12 @@ async def create_product(request: ProductCreate, repository: ProductRepo) -> Pro
     response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def update_product(product_id: ProductID, product_update: ProductUpdate) -> None:
-    product_index = find_product_by_index(product_id)
-    update_data = product_update.model_dump(exclude_unset=True)
-    PRODUCTS[product_index] = PRODUCTS[product_index].model_copy(update=update_data)
-    return
+async def update_product(
+    product_id: ProductID, product_update: ProductUpdate, repository: ProductRepo
+):
+    return ensure_product_exists(
+        await repository.update_product(product_id, product_update)
+    )
 
 
 @app.delete(

@@ -1,11 +1,11 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Depends
-from sqlalchemy import Row, text
+from sqlalchemy import CursorResult, Row, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
-from app.schemas import Product, ProductCreate, ProductID
+from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 
 
 class ProductRepository:
@@ -88,6 +88,30 @@ class ProductRepository:
         product_id = result.scalar_one()
         await self.session.commit()
         return Product(id=product_id, **payload)
+
+    async def update_product(
+        self, product_id: ProductID, request: ProductUpdate
+    ) -> bool:
+        payload = request.model_dump()
+        result = await self.session.execute(
+            text("""
+                UPDATE products
+                SET name = :name,
+                    category = :category,
+                    price = :price,
+                    description = :description
+                WHERE id = :id
+                RETURNING id
+            """),
+            {"id": product_id, **payload},
+        )
+
+        update_result: CursorResult[tuple[ProductID]] = cast(
+            CursorResult[tuple[ProductID]], result
+        )
+
+        await self.session.commit()
+        return update_result.rowcount > 0
 
 
 def get_product_repository(session: Session) -> ProductRepository:
