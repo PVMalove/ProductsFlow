@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ KNOWN_LOC_ROOTS = {"body", "query", "path", "header", "cookie"}
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    app.add_exception_handler(IntegrityError, _integrity_exception_handler)
 
 
 async def _validation_exception_handler(
@@ -73,6 +75,23 @@ async def _validation_exception_handler(
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": errors},
+    )
+
+
+async def _integrity_exception_handler(
+    _request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    assert isinstance(exc, IntegrityError)
+
+    logger.debug("Integrity error: %s", exc)
+
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            """detail": "Ошибка целостности данных. Возможно, нарушено уникальное
+            ограничение или внешний ключ."""
+        },
     )
 
 
