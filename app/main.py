@@ -2,11 +2,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TypeVar
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, status
 
 from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
-from app.repository import ProductRepo
+from app.repository import ProductRepositoryDI
 from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 
 T = TypeVar("T")
@@ -52,7 +52,7 @@ async def health_check() -> dict[str, str]:
     "/products",
     response_model=list[Product],
 )
-async def get_products(repository: ProductRepo) -> list[Product]:
+async def get_products(repository: ProductRepositoryDI) -> list[Product]:
     return await repository.get_all_products()
 
 
@@ -60,7 +60,7 @@ async def get_products(repository: ProductRepo) -> list[Product]:
     "/products/search",
     response_model=list[Product],
 )
-async def search_products(query: str, repository: ProductRepo) -> list[Product]:
+async def search_products(query: str, repository: ProductRepositoryDI) -> list[Product]:
     return await repository.search_products(query)
 
 
@@ -68,7 +68,9 @@ async def search_products(query: str, repository: ProductRepo) -> list[Product]:
     "/products/{product_id}",
     response_model=Product,
 )
-async def get_product(product_id: ProductID, repository: ProductRepo) -> Product:
+async def get_product(
+    product_id: ProductID, repository: ProductRepositoryDI
+) -> Product:
     return ensure_product_exists(await repository.get_product_by_id(product_id))
 
 
@@ -77,7 +79,7 @@ async def get_product(product_id: ProductID, repository: ProductRepo) -> Product
     response_model=list[Product],
 )
 async def get_products_by_category(
-    category_name: str, repository: ProductRepo
+    category_name: str, repository: ProductRepositoryDI
 ) -> list[Product]:
     return await repository.get_products_by_category(category_name)
 
@@ -87,10 +89,9 @@ async def get_products_by_category(
     response_model=list[Product],
 )
 async def get_products_by_price_range(
-    repository: ProductRepo,
+    repository: ProductRepositoryDI,
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
-
 ) -> list[Product]:
     return await repository.get_products_by_price_range(min_price, max_price)
 
@@ -100,7 +101,9 @@ async def get_products_by_price_range(
     response_model=Product,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_product(request: ProductCreate, repository: ProductRepo) -> Product:
+async def create_product(
+    request: ProductCreate, repository: ProductRepositoryDI
+) -> Product:
     return await repository.create_product(request)
 
 
@@ -110,7 +113,9 @@ async def create_product(request: ProductCreate, repository: ProductRepo) -> Pro
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def update_product(
-    product_id: ProductID, product_update: ProductUpdate, repository: ProductRepo
+    product_id: ProductID,
+    product_update: ProductUpdate,
+    repository: ProductRepositoryDI,
 ):
     return ensure_product_exists(
         await repository.update_product(product_id, product_update)

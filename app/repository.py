@@ -1,7 +1,7 @@
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from fastapi import Depends
-from sqlalchemy import CursorResult, Row, text
+from sqlalchemy import CursorResult, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -9,82 +9,91 @@ from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
 
 
 class ProductRepository:
+    """Репозиторий для работы с таблицей products"""
+
     def __init__(self, session: AsyncSession) -> None:
-        self.session: AsyncSession = session
+        self.session = session
 
     async def get_all_products(self) -> list[Product]:
+        """Получаем все продукты"""
         result = await self.session.execute(
             text("SELECT id, name, category, price, description FROM products")
         )
-        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+        return [Product.model_validate(row) for row in result.mappings().all()]
 
     async def get_product_by_id(self, product_id: ProductID) -> Product | None:
+        """Получаем продукт по ID"""
         result = await self.session.execute(
             text(
-                """SELECT id, name, category, price, description
-                FROM products
-                WHERE id = :id"""
+                "SELECT id, name, category, price, description "
+                "FROM products WHERE id = :id"
             ),
             {"id": product_id},
         )
-        row: Row[Any] | None = result.fetchone()
-        if row is None:
-            return None
-        return Product.model_validate(row._mapping)
+        row = result.mappings().first()
+        return Product.model_validate(row) if row else None
 
     async def search_products(self, query: str) -> list[Product]:
-        needle = f"%{query.casefold()}%"
+        """Поиск по имени и описанию (без учёта регистра)"""
+        needle = f"%{query}%"
         result = await self.session.execute(
             text(
-                """SELECT id, name, category, price, description
+                """
+                SELECT id, name, category, price, description
                 FROM products
                 WHERE PY_LOWER(name) LIKE :needle
-                OR PY_LOWER(description) LIKE :needle
+                    OR PY_LOWER(description) LIKE :needle
                 """
             ),
             {"needle": needle},
         )
-        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+        return [Product.model_validate(row) for row in result.mappings().all()]
 
     async def get_products_by_category(self, category_name: str) -> list[Product]:
-        needle = category_name.casefold()
+        """Поиск по категории"""
+        needle = f"%{category_name}%"
         result = await self.session.execute(
             text(
-                """SELECT id, name, category, price, description
+                """
+                SELECT id, name, category, price, description
                 FROM products
-                WHERE PY_LOWER(category) = :needle"""
+                WHERE PY_LOWER(category) = :needle
+                """
             ),
             {"needle": needle},
         )
-        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+        return [Product.model_validate(row) for row in result.mappings().all()]
 
     async def get_products_by_price_range(
         self, min_price: float | None, max_price: float | None
     ) -> list[Product]:
-        lower_bound = min_price if min_price is not None else 0.0
-        upper_bound = max_price if max_price is not None else float("inf")
-
+        """Диапазон цен (границы опциональны)"""
         result = await self.session.execute(
             text(
-                """SELECT id, name, category, price, description
+                """
+                SELECT id, name, category, price, description
                 FROM products
-                WHERE price BETWEEN :lower AND :upper"""
+                WHERE (:min_price IS NULL OR price >= :min_price)
+                  AND (:max_price IS NULL OR price <= :max_price)
+                """
             ),
-            {"lower": lower_bound, "upper": upper_bound},
+            {"min_price": min_price, "max_price": max_price},
         )
-        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+        return [Product.model_validate(row) for row in result.mappings().all()]
 
     async def create_product(self, request: ProductCreate) -> Product:
+        """Создаём продукт"""
         payload = request.model_dump()
         result = await self.session.execute(
-            text("""
+            text(
+                """
                 INSERT INTO products (name, category, price, description)
                 VALUES (:name, :category, :price, :description)
                 RETURNING id
-            """),
+                """
+            ),
             payload,
         )
-
         product_id = result.scalar_one()
         await self.session.commit()
         return Product(id=product_id, **payload)
@@ -92,25 +101,26 @@ class ProductRepository:
     async def update_product(
         self, product_id: ProductID, request: ProductUpdate
     ) -> bool:
+        """Обновляем продукт (True, если обновление прошло)"""
         payload = request.model_dump()
         result = await self.session.execute(
-            text("""
+            text(
+                """
                 UPDATE products
                 SET name = :name,
                     category = :category,
                     price = :price,
                     description = :description
                 WHERE id = :id
-                RETURNING id
-            """),
+                """
+            ),
             {"id": product_id, **payload},
         )
-
-        update_result: CursorResult[tuple[ProductID]] = cast(
-            CursorResult[tuple[ProductID]], result
+        update_result: CursorResult[tuple[object, ...]] = cast(
+            CursorResult[tuple[object, ...]], result
         )
-
         await self.session.commit()
+        print(f"Updated product {product_id}, rowcount: {update_result.rowcount}")
         return update_result.rowcount > 0
 
 
@@ -118,4 +128,4 @@ def get_product_repository(session: Session) -> ProductRepository:
     return ProductRepository(session)
 
 
-ProductRepo = Annotated[ProductRepository, Depends(get_product_repository)]
+ProductRepositoryDI = Annotated[ProductRepository, Depends(get_product_repository)]
