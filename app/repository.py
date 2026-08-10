@@ -120,8 +120,18 @@ class ProductRepository:
             CursorResult[tuple[object, ...]], result
         )
         await self.session.commit()
-        print(f"Updated product {product_id}, rowcount: {update_result.rowcount}")
         return update_result.rowcount > 0
+
+    async def delete_product(self, product_id: ProductID) -> bool:
+        """Удаляем продукт (True, если удаление прошло)"""
+        result = await self.session.execute(
+            text("DELETE FROM products WHERE id = :id"), {"id": product_id}
+        )
+        delete_result: CursorResult[tuple[object, ...]] = cast(
+            CursorResult[tuple[object, ...]], result
+        )
+        await self.session.commit()
+        return delete_result.rowcount > 0
 
 
 def get_product_repository(session: Session) -> ProductRepository:

@@ -24,16 +24,6 @@ app = FastAPI(lifespan=lifespan)
 register_exception_handlers(app)
 
 
-def find_product_by_index(product_id: int) -> int:
-    for index, product_item in enumerate(PRODUCTS):
-        return index
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Продукт не найден!",
-    )
-
-
 def ensure_product_exists(entity: T | None) -> T:
     if not entity:
         raise HTTPException(
@@ -116,7 +106,7 @@ async def update_product(
     product_id: ProductID,
     product_update: ProductUpdate,
     repository: ProductRepositoryDI,
-):
+) -> bool:
     return ensure_product_exists(
         await repository.update_product(product_id, product_update)
     )
@@ -127,53 +117,7 @@ async def update_product(
     response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_product(product_id: ProductID) -> None:
-    product_index = find_product_by_index(product_id)
-    PRODUCTS.pop(product_index)
-    return
-
-
-PRODUCTS: list[Product] = [
-    Product(
-        id=1,
-        name="Ноутбук",
-        category="Электроника",
-        price=89990.0,
-        description="Лёгкий ноутбук для работы и учёбы",
-    ),
-    Product(
-        id=2,
-        name="Смартфон",
-        category="Электроника",
-        price=54990.0,
-        description="Смартфон с хорошей камерой",
-    ),
-    Product(
-        id=3,
-        name="Кофеварка",
-        category="Бытовая техника",
-        price=12990.0,
-        description="Капельная кофеварка для дома",
-    ),
-    Product(
-        id=4,
-        name="Чайник",
-        category="Бытовая техника",
-        price=2990.0,
-        description="Электрический чайник, объём 1.7 л",
-    ),
-    Product(
-        id=5,
-        name="Книга по Python",
-        category="Книги",
-        price=1490.0,
-        description="Введение в язык программирования Python",
-    ),
-    Product(
-        id=6,
-        name="Книга по FastAPI",
-        category="Книги",
-        price=1990.0,
-        description="Практическое руководство по фреймворку FastAPI",
-    ),
-]
+async def delete_product(
+    product_id: ProductID, repository: ProductRepositoryDI
+) -> bool:
+    return ensure_product_exists(await repository.delete_product(product_id))
