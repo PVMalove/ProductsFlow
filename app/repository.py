@@ -38,9 +38,21 @@ class ProductRepository:
             text(
                 """SELECT id, name, category, price, description
                 FROM products
-                WHERE py_lower(name) LIKE :needle
-                OR py_lower(description) LIKE :needle
+                WHERE PY_LOWER(name) LIKE :needle
+                OR PY_LOWER(description) LIKE :needle
                 """
+            ),
+            {"needle": needle},
+        )
+        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+
+    async def get_products_by_category(self, category_name: str) -> list[Product]:
+        needle = category_name.casefold()
+        result = await self.session.execute(
+            text(
+                """SELECT id, name, category, price, description
+                FROM products
+                WHERE PY_LOWER(category) = :needle"""
             ),
             {"needle": needle},
         )

@@ -76,10 +76,10 @@ async def get_product(product_id: ProductID, repository: ProductRepo) -> Product
     "/products/category/{category_name}",
     response_model=list[Product],
 )
-async def get_products_by_category(category_name: str) -> list[Product]:
-    needle = category_name.casefold()
-
-    return [product for product in PRODUCTS if needle == product.category.casefold()]
+async def get_products_by_category(
+    category_name: str, repository: ProductRepo
+) -> list[Product]:
+    return await repository.get_products_by_category(category_name)
 
 
 @app.get("/products/price-range")

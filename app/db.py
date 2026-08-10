@@ -34,7 +34,7 @@ def register_functions(dbapi_connection, _connection_record) -> None:
     """ """
     dbapi_connection.create_function(
         # py_lower используется для поиска без учёта регистра.
-        "py_lower", 1, lambda s: s.casefold() if s is not None else None,
+        "PY_LOWER", 1, lambda s: s.casefold() if s is not None else None,
     )
 
 
