@@ -1,11 +1,15 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TypeVar
 
 from fastapi import FastAPI, HTTPException, Query, status
 
 from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
+from app.repository import ProductRepo
 from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
+
+T = TypeVar("T")
 
 
 @asynccontextmanager
@@ -30,6 +34,15 @@ def find_product_by_index(product_id: int) -> int:
     )
 
 
+def ensure_product_exists(entity: T | None) -> T:
+    if not entity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Продукт не найден!",
+        )
+    return entity
+
+
 @app.get("/health")
 async def health_check() -> dict[str, str]:
     return {"status": "ok"}
@@ -39,8 +52,16 @@ async def health_check() -> dict[str, str]:
     "/products",
     response_model=list[Product],
 )
-async def get_products() -> list[Product]:
-    return PRODUCTS
+async def get_products(repository: ProductRepo) -> list[Product]:
+    return await repository.get_all_products()
+
+
+@app.get(
+    "/products/{product_id}",
+    response_model=Product,
+)
+async def get_product(product_id: ProductID, repository: ProductRepo) -> Product:
+    return ensure_product_exists(await repository.get_product_by_id(product_id))
 
 
 @app.get(
@@ -81,25 +102,13 @@ async def get_products_by_price_range(
     ]
 
 
-@app.get(
-    "/products/{product_id}",
-    response_model=Product,
-)
-async def get_product(product_id: ProductID) -> Product:
-    product_index = find_product_by_index(product_id)
-    return PRODUCTS[product_index]
-
-
 @app.post(
     "/products",
     response_model=Product,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_product(product_create: ProductCreate) -> Product:
-    new_id = max(p.id for p in PRODUCTS) + 1 if PRODUCTS else 1
-    product_instance = Product(id=new_id, **product_create.model_dump())
-    PRODUCTS.append(product_instance)
-    return product_instance
+async def create_product(request: ProductCreate, repository: ProductRepo) -> Product:
+    return await repository.create_product(request)
 
 
 @app.put(

@@ -14,7 +14,9 @@ DATABASE_URL = "sqlite+aiosqlite:///./market_store.db"
 
 
 engine: AsyncEngine = create_async_engine(DATABASE_URL, echo=True)
-SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
+    engine, expire_on_commit=False
+)
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
