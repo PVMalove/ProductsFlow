@@ -28,6 +28,16 @@ def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) 
 event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
 
 
+# Регистрируем пользовательские функции SQLite, которые можно использовать SQL-запросах.
+@event.listens_for(engine.sync_engine, "connect")
+def register_functions(dbapi_connection, _connection_record) -> None:
+    """ """
+    dbapi_connection.create_function(
+        # py_lower используется для поиска без учёта регистра.
+        "py_lower", 1, lambda s: s.casefold() if s is not None else None,
+    )
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session

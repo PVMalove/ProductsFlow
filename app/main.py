@@ -57,25 +57,19 @@ async def get_products(repository: ProductRepo) -> list[Product]:
 
 
 @app.get(
+    "/products/search",
+    response_model=list[Product],
+)
+async def search_products(query: str, repository: ProductRepo) -> list[Product]:
+    return await repository.search_products(query)
+
+
+@app.get(
     "/products/{product_id}",
     response_model=Product,
 )
 async def get_product(product_id: ProductID, repository: ProductRepo) -> Product:
     return ensure_product_exists(await repository.get_product_by_id(product_id))
-
-
-@app.get(
-    "/products/search",
-    response_model=list[Product],
-)
-async def search_products(query: str) -> list[Product]:
-    needle = query.casefold()
-
-    return [
-        product
-        for product in PRODUCTS
-        if needle in product.name.casefold() or needle in product.description.casefold()
-    ]
 
 
 @app.get(

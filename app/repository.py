@@ -32,6 +32,20 @@ class ProductRepository:
             return None
         return Product.model_validate(row._mapping)
 
+    async def search_products(self, query: str) -> list[Product]:
+        needle = f"%{query.casefold()}%"
+        result = await self.session.execute(
+            text(
+                """SELECT id, name, category, price, description
+                FROM products
+                WHERE py_lower(name) LIKE :needle
+                OR py_lower(description) LIKE :needle
+                """
+            ),
+            {"needle": needle},
+        )
+        return [Product.model_validate(row._mapping) for row in result.fetchall()]
+
     async def create_product(self, request: ProductCreate) -> Product:
         payload = request.model_dump()
         result = await self.session.execute(
