@@ -74,46 +74,26 @@ class ProductRepository:
         )
         return [ProductResponse.model_validate(row) for row in result.mappings().all()]
 
-    async def create_product(self, request: ProductCreate) -> ProductResponse:
+    async def create_product(self, request: ProductCreate) -> Product:
         """Создаём продукт"""
-        payload = request.model_dump()
-        result = await self.session.execute(
-            text(
-                """
-                INSERT INTO products (name, category, price, description)
-                VALUES (:name, :category, :price, :description)
-                RETURNING id
-                """
-            ),
-            payload,
-        )
-        product_id = result.scalar_one()
+        product = Product(**request.model_dump())
+        self.session.add(product)
         await self.session.commit()
-        return ProductResponse(id=product_id, **payload)
+        await self.session.refresh(product)
+        return product
 
     async def update_product(
         self, product_id: ProductID, request: ProductUpdate
-    ) -> bool:
+    ) -> Product | None:
         """Обновляем продукт (True, если обновление прошло)"""
-        payload = request.model_dump()
-        result = await self.session.execute(
-            text(
-                """
-                UPDATE products
-                SET name = :name,
-                    category = :category,
-                    price = :price,
-                    description = :description
-                WHERE id = :id
-                """
-            ),
-            {"id": product_id, **payload},
-        )
-        update_result: CursorResult[tuple[object, ...]] = cast(
-            CursorResult[tuple[object, ...]], result
-        )
+        product = await self.session.get(Product, product_id)
+        if not product:
+            return None
+        for key, value in request.model_dump(exclude_unset=True).items():
+            setattr(product, key, value)
         await self.session.commit()
-        return update_result.rowcount > 0
+        await self.session.refresh(product)
+        return product
 
     async def delete_product(self, product_id: ProductID) -> bool:
         """Удаляем продукт (True, если удаление прошло)"""
