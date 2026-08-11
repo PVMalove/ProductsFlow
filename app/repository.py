@@ -20,17 +20,9 @@ class ProductRepository:
         result = await self.session.scalars(select(Product))
         return list(result.all())
 
-    async def get_product_by_id(self, product_id: ProductID) -> ProductResponse | None:
+    async def get_product_by_id(self, product_id: ProductID) -> Product | None:
         """Получаем продукт по ID"""
-        result = await self.session.execute(
-            text(
-                "SELECT id, name, category, price, description "
-                "FROM products WHERE id = :id"
-            ),
-            {"id": product_id},
-        )
-        row = result.mappings().first()
-        return ProductResponse.model_validate(row) if row else None
+        return await self.session.get(Product, product_id)
 
     async def search_products(self, query: str) -> list[ProductResponse]:
         """Поиск по имени и описанию (без учёта регистра)"""
