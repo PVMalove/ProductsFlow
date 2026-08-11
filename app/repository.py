@@ -1,7 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Tuple
 
 from fastapi import Depends
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -29,49 +29,41 @@ class ProductRepository:
         """Поиск по имени и описанию (без учёта регистра)"""
         needle = f"%{query}%"
         py_lower = func.PY_LOWER
-        stmt = select(Product).where(
+        stmt: Select[Tuple[Product]] = select(Product).where(
             or_(
-                py_lower(Product.name).like(needle),
-                py_lower(Product.description).like(needle)
+                py_lower(Product.name).like(py_lower(needle)),
+                py_lower(Product.description).like(py_lower(needle)),
             )
         )
+
         result = await self.session.scalars(stmt)
         return [ProductResponse.model_validate(row) for row in result.all()]
-
 
     async def get_products_by_category(
         self, category_name: str
     ) -> list[ProductResponse]:
         """Поиск по категории"""
-        needle = f"%{category_name}%"
-        result = await self.session.execute(
-            text(
-                """
-                SELECT id, name, category, price, description
-                FROM products
-                WHERE PY_LOWER(category) = :needle
-                """
-            ),
-            {"needle": needle},
+        py_lower = func.PY_LOWER
+        stmt: Select[Tuple[Product]] = select(Product).where(
+            py_lower(Product.category) == py_lower(category_name)
         )
-        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
+
+        result = await self.session.scalars(stmt)
+        return [ProductResponse.model_validate(row) for row in result.all()]
 
     async def get_products_by_price_range(
         self, min_price: float | None, max_price: float | None
     ) -> list[ProductResponse]:
         """Диапазон цен (границы опциональны)"""
-        result = await self.session.execute(
-            text(
-                """
-                SELECT id, name, category, price, description
-                FROM products
-                WHERE (:min_price IS NULL OR price >= :min_price)
-                  AND (:max_price IS NULL OR price <= :max_price)
-                """
-            ),
-            {"min_price": min_price, "max_price": max_price},
+        stmt: Select[Tuple[Product]] = select(Product).where(
+            Product.price.between(
+                func.coalesce(min_price, Product.price),
+                func.coalesce(max_price, Product.price)
+            )
         )
-        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
+
+        result = await self.session.scalars(stmt)
+        return [ProductResponse.model_validate(row) for row in result.all()]
 
     async def create_product(self, request: ProductCreate) -> ProductResponse:
         """Создаём продукт"""
