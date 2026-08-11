@@ -1,7 +1,7 @@
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy import CursorResult, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -28,18 +28,16 @@ class ProductRepository:
     async def search_products(self, query: str) -> list[ProductResponse]:
         """Поиск по имени и описанию (без учёта регистра)"""
         needle = f"%{query}%"
-        result = await self.session.execute(
-            text(
-                """
-                SELECT id, name, category, price, description
-                FROM products
-                WHERE PY_LOWER(name) LIKE :needle
-                    OR PY_LOWER(description) LIKE :needle
-                """
-            ),
-            {"needle": needle},
+        py_lower = func.PY_LOWER
+        stmt = select(Product).where(
+            or_(
+                py_lower(Product.name).like(needle),
+                py_lower(Product.description).like(needle)
+            )
         )
-        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
+        result = await self.session.scalars(stmt)
+        return [ProductResponse.model_validate(row) for row in result.all()]
+
 
     async def get_products_by_category(
         self, category_name: str
@@ -101,9 +99,10 @@ class ProductRepository:
         product = await self.session.get(Product, product_id)
         if not product:
             return None
+        snapshot = ProductResponse.model_validate(product)
         await self.session.delete(product)
         await self.session.commit()
-        return ProductResponse.model_validate(product)
+        return snapshot
 
 
 def get_product_repository(session: Session) -> ProductRepository:
