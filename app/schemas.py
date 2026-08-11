@@ -88,3 +88,8 @@ class UserResponse(UserBase):
     is_active: bool
     create_at: datetime
     updated_at: datetime
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

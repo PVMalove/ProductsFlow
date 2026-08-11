@@ -11,8 +11,8 @@ from app.schemas import (
     ProductID,
     ProductResponse,
     ProductUpdate,
-    UserResponse,
     UserCreate,
+    UserResponse,
 )
 
 
