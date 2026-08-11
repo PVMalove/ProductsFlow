@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.models import Base, Product
+from app.models import Base, Product, User, UserRole
 
 DATABASE_URL = "sqlite+aiosqlite:///./market_store.db"
 
@@ -59,9 +59,12 @@ async def seed_db() -> None:
         result = await session.execute(select(func.count(Product.id)))
         count = result.scalar_one()
         if count == 0:
+            admin = User(**_SEED_ADMIN)
+            session.add(admin)
+            await session.flush()
             # Если данных нет, добавляем начальные продукты
             for product_data in _SEED_PRODUCTS:
-                product = Product(**product_data)
+                product = Product(**product_data, user_id = admin.id)
                 session.add(product)
             await session.commit()
 
@@ -69,45 +72,46 @@ async def seed_db() -> None:
 
 _SEED_PRODUCTS: list[dict[str, Any]] = [
     {
-        "id": 1,
         "name": "Ноутбук",
         "category": "Электроника",
         "price": 89990.0,
         "description": "Лёгкий ноутбук для работы и учёбы",
     },
     {
-        "id": 2,
         "name": "Смартфон",
         "category": "Электроника",
         "price": 54990.0,
         "description": "Смартфон с хорошей камерой",
     },
     {
-        "id": 3,
         "name": "Кофеварка",
         "category": "Бытовая техника",
         "price": 12990.0,
         "description": "Капельная кофеварка для дома",
     },
     {
-        "id": 4,
         "name": "Чайник",
         "category": "Бытовая техника",
         "price": 2990.0,
         "description": "Электрический чайник, объём 1.7 л",
     },
     {
-        "id": 5,
         "name": "Книга по Python",
         "category": "Книги",
         "price": 1490.0,
         "description": "Введение в язык программирования Python",
     },
     {
-        "id": 6,
         "name": "Книга по FastAPI",
         "category": "Книги",
         "price": 1990.0,
         "description": "Практическое руководство по фреймворку FastAPI",
     },
 ]
+
+
+_SEED_ADMIN: dict[str, Any] = {
+    "username": "admin",
+    "password": "admin12345",
+    "role": UserRole.ADMIN,
+}
