@@ -1,0 +1,105 @@
+from typing import TypeVar
+
+from fastapi import APIRouter, HTTPException, Query, status
+
+from app.repository import ProductRepositoryDI
+from app.schemas import ProductCreate, ProductID, ProductResponse, ProductUpdate
+
+T = TypeVar("T")
+
+router = APIRouter(prefix="/products", tags=["products"])
+
+
+@router.get(
+    "/",
+    response_model=list[ProductResponse],
+)
+async def get_products(repository: ProductRepositoryDI) -> list[ProductResponse]:
+    return await repository.get_all_products()
+
+
+@router.get(
+    "/search",
+    response_model=list[ProductResponse],
+)
+async def search_products(
+    query: str, repository: ProductRepositoryDI
+) -> list[ProductResponse]:
+    return await repository.search_products(query)
+
+@router.get(
+    "/price-range",
+    response_model=list[ProductResponse],
+)
+async def get_products_by_price_range(
+    repository: ProductRepositoryDI,
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, ge=0),
+) -> list[ProductResponse]:
+    return await repository.get_products_by_price_range(min_price, max_price)
+
+
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+)
+async def get_product(
+    product_id: ProductID, repository: ProductRepositoryDI
+) -> ProductResponse:
+    return ensure_product_exists(await repository.get_product_by_id(product_id))
+
+
+@router.get(
+    "/category/{category_name}",
+    response_model=list[ProductResponse],
+)
+async def get_products_by_category(
+    category_name: str, repository: ProductRepositoryDI
+) -> list[ProductResponse]:
+    return await repository.get_products_by_category(category_name)
+
+
+@router.post(
+    "/",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_product(
+    request: ProductCreate, repository: ProductRepositoryDI
+) -> ProductResponse:
+    return await repository.create_product(request)
+
+
+@router.put(
+    "/{product_id}",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def update_product(
+    product_id: ProductID,
+    product_update: ProductUpdate,
+    repository: ProductRepositoryDI,
+) -> ProductResponse:
+    return ensure_product_exists(
+        await repository.update_product(product_id, product_update)
+    )
+
+
+@router.delete(
+    "/{product_id}",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_product(
+    product_id: ProductID, repository: ProductRepositoryDI
+) -> ProductResponse:
+    return ensure_product_exists(await repository.delete_product(product_id))
+
+
+def ensure_product_exists(entity: T | None) -> T:
+    if not entity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Продукт не найден!",
+        )
+    return entity
