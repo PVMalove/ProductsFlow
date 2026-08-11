@@ -1,10 +1,11 @@
 from typing import Annotated, cast
 
 from fastapi import Depends
-from sqlalchemy import CursorResult, text
+from sqlalchemy import CursorResult, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
+from app.models import Product
 from app.schemas import ProductCreate, ProductID, ProductResponse, ProductUpdate
 
 
@@ -14,12 +15,10 @@ class ProductRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_all_products(self) -> list[ProductResponse]:
+    async def get_all_products(self) -> list[Product]:
         """Получаем все продукты"""
-        result = await self.session.execute(
-            text("SELECT id, name, category, price, description FROM products")
-        )
-        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
+        result = await self.session.scalars(select(Product))
+        return list(result.all())
 
     async def get_product_by_id(self, product_id: ProductID) -> ProductResponse | None:
         """Получаем продукт по ID"""

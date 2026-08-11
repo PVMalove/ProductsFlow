@@ -2,13 +2,15 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import Depends
-from sqlalchemy import event, text
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+from app.models import Base, Product
 
 DATABASE_URL = "sqlite+aiosqlite:///./market_store.db"
 
@@ -48,30 +50,21 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 
 async def init_db() -> None:
     async with engine.begin() as conn:
-        await conn.run_sync(
-            lambda sync_conn: sync_conn.execute(
-                text("""
-                CREATE TABLE IF NOT EXISTS products (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    price REAL NOT NULL,
-                    description TEXT NOT NULL DEFAULT ''
-                )
-                """)
-            )
-        )
+        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn))
 
 
 async def seed_db() -> None:
-    async with engine.begin() as conn:
-        await conn.execute(
-            text("""
-                INSERT OR IGNORE INTO products (id, name, category, price, description)
-                VALUES (:id, :name, :category, :price, :description)
-                """),
-            _SEED_PRODUCTS,
-        )
+    async with SessionLocal() as session:
+        # Проверяем, есть ли уже данные в таблице products
+        result = await session.execute(select(func.count(Product.id)))
+        count = result.scalar_one()
+        if count == 0:
+            # Если данных нет, добавляем начальные продукты
+            for product_data in _SEED_PRODUCTS:
+                product = Product(**product_data)
+                session.add(product)
+            await session.commit()
+
 
 
 _SEED_PRODUCTS: list[dict[str, Any]] = [
