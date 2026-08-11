@@ -108,7 +108,7 @@ async def update_product(
     product_id: ProductID,
     product_update: ProductUpdate,
     repository: ProductRepositoryDI,
-) -> bool:
+) -> ProductResponse:
     return ensure_product_exists(
         await repository.update_product(product_id, product_update)
     )
@@ -121,5 +121,5 @@ async def update_product(
 )
 async def delete_product(
     product_id: ProductID, repository: ProductRepositoryDI
-) -> bool:
+) -> ProductResponse:
     return ensure_product_exists(await repository.delete_product(product_id))

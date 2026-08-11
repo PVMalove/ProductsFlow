@@ -96,16 +96,14 @@ class ProductRepository:
         await self.session.refresh(product)
         return ProductResponse.model_validate(product)
 
-    async def delete_product(self, product_id: ProductID) -> bool:
+    async def delete_product(self, product_id: ProductID) -> ProductResponse | None:
         """Удаляем продукт (True, если удаление прошло)"""
-        result = await self.session.execute(
-            text("DELETE FROM products WHERE id = :id"), {"id": product_id}
-        )
-        delete_result: CursorResult[tuple[object, ...]] = cast(
-            CursorResult[tuple[object, ...]], result
-        )
+        product = await self.session.get(Product, product_id)
+        if not product:
+            return None
+        await self.session.delete(product)
         await self.session.commit()
-        return delete_result.rowcount > 0
+        return ProductResponse.model_validate(product)
 
 
 def get_product_repository(session: Session) -> ProductRepository:
