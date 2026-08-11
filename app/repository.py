@@ -5,7 +5,7 @@ from sqlalchemy import CursorResult, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
-from app.schemas import Product, ProductCreate, ProductID, ProductUpdate
+from app.schemas import ProductCreate, ProductID, ProductResponse, ProductUpdate
 
 
 class ProductRepository:
@@ -14,14 +14,14 @@ class ProductRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_all_products(self) -> list[Product]:
+    async def get_all_products(self) -> list[ProductResponse]:
         """Получаем все продукты"""
         result = await self.session.execute(
             text("SELECT id, name, category, price, description FROM products")
         )
-        return [Product.model_validate(row) for row in result.mappings().all()]
+        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
 
-    async def get_product_by_id(self, product_id: ProductID) -> Product | None:
+    async def get_product_by_id(self, product_id: ProductID) -> ProductResponse | None:
         """Получаем продукт по ID"""
         result = await self.session.execute(
             text(
@@ -31,9 +31,9 @@ class ProductRepository:
             {"id": product_id},
         )
         row = result.mappings().first()
-        return Product.model_validate(row) if row else None
+        return ProductResponse.model_validate(row) if row else None
 
-    async def search_products(self, query: str) -> list[Product]:
+    async def search_products(self, query: str) -> list[ProductResponse]:
         """Поиск по имени и описанию (без учёта регистра)"""
         needle = f"%{query}%"
         result = await self.session.execute(
@@ -47,9 +47,11 @@ class ProductRepository:
             ),
             {"needle": needle},
         )
-        return [Product.model_validate(row) for row in result.mappings().all()]
+        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
 
-    async def get_products_by_category(self, category_name: str) -> list[Product]:
+    async def get_products_by_category(
+        self, category_name: str
+    ) -> list[ProductResponse]:
         """Поиск по категории"""
         needle = f"%{category_name}%"
         result = await self.session.execute(
@@ -62,11 +64,11 @@ class ProductRepository:
             ),
             {"needle": needle},
         )
-        return [Product.model_validate(row) for row in result.mappings().all()]
+        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
 
     async def get_products_by_price_range(
         self, min_price: float | None, max_price: float | None
-    ) -> list[Product]:
+    ) -> list[ProductResponse]:
         """Диапазон цен (границы опциональны)"""
         result = await self.session.execute(
             text(
@@ -79,9 +81,9 @@ class ProductRepository:
             ),
             {"min_price": min_price, "max_price": max_price},
         )
-        return [Product.model_validate(row) for row in result.mappings().all()]
+        return [ProductResponse.model_validate(row) for row in result.mappings().all()]
 
-    async def create_product(self, request: ProductCreate) -> Product:
+    async def create_product(self, request: ProductCreate) -> ProductResponse:
         """Создаём продукт"""
         payload = request.model_dump()
         result = await self.session.execute(
@@ -96,7 +98,7 @@ class ProductRepository:
         )
         product_id = result.scalar_one()
         await self.session.commit()
-        return Product(id=product_id, **payload)
+        return ProductResponse(id=product_id, **payload)
 
     async def update_product(
         self, product_id: ProductID, request: ProductUpdate

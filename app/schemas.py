@@ -53,5 +53,5 @@ class ProductUpdate(BaseModel):
     )
 
 
-class Product(ProductBase):
+class ProductResponse(ProductBase):
     id: int
