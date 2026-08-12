@@ -2,10 +2,10 @@ from typing import TypeVar
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from app.models import Product, User, UserRole
 from app.repository import ProductRepositoryDI
-from app.schemas import ProductCreate, ProductID, ProductResponse, ProductUpdate
+from app.schemas import ProductCreate, ProductId, ProductResponse, ProductUpdate
 from app.security import CurrentUser
-from app.models import User, UserRole, Product
 
 T = TypeVar("T")
 
@@ -50,7 +50,7 @@ async def get_products_by_price_range(
     response_model=ProductResponse,
 )
 async def get_product(
-    product_id: ProductID, repository: ProductRepositoryDI
+    product_id: ProductId, repository: ProductRepositoryDI
 ) -> ProductResponse:
     return ensure_product_exists(await repository.get_product_by_id(product_id))
 
@@ -86,7 +86,7 @@ async def create_product(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def update_product(
-    product_id: ProductID,
+    product_id: ProductId,
     product_update: ProductUpdate,
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
@@ -104,7 +104,7 @@ async def update_product(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_product(
-    product_id: ProductID,
+    product_id: ProductId,
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> None:

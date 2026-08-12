@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import UserRole
 
-ProductID = Annotated[int, Path(gt=0)]
+ProductId = Annotated[int, Path(gt=0)]
+UserId = Annotated[int, Path(gt=0)]
 
 
 class ProductBase(BaseModel):

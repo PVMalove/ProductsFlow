@@ -3,11 +3,10 @@ from typing import Annotated, Any
 
 import bcrypt
 import jwt
-from hmac import compare_digest
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-from app.models import User
+from app.models import User, UserRole
 from app.repository import UserRepositoryDI
 
 ALGORITHM = "HS256"
@@ -76,3 +75,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+async def require_admin(user: CurrentUser) -> User:
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ только для администраторов!",
+        )
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]

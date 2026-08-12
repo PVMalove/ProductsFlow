@@ -8,7 +8,7 @@ from app.db import Session
 from app.models import Product, User
 from app.schemas import (
     ProductCreate,
-    ProductID,
+    ProductId,
     ProductResponse,
     ProductUpdate,
     UserResponse,
@@ -26,11 +26,11 @@ class ProductRepository:
         result = await self.session.scalars(select(Product))
         return [ProductResponse.model_validate(product) for product in result.all()]
 
-    async def product_exists(self, product_id: ProductID) -> bool:
+    async def product_exists(self, product_id: ProductId) -> bool:
         stmt = select(exists().where(Product.id == product_id))
         return bool(await self.session.scalar(stmt))
 
-    async def get_product_by_id(self, product_id: ProductID) -> ProductResponse | None:
+    async def get_product_by_id(self, product_id: ProductId) -> ProductResponse | None:
         """Получаем продукт по ID"""
         product = await self.session.get(Product, product_id)
         return ProductResponse.model_validate(product) if product else None
@@ -87,7 +87,7 @@ class ProductRepository:
 
     async def update_product(
         self,
-        product_id: ProductID,
+        product_id: ProductId,
         request: ProductUpdate,
     ) -> ProductResponse | None:
         """Обновляем продукт (True, если обновление прошло)"""
@@ -100,7 +100,7 @@ class ProductRepository:
         await self.session.refresh(product)
         return ProductResponse.model_validate(product)
 
-    async def delete_product(self, product_id: ProductID) -> ProductResponse | None:
+    async def delete_product(self, product_id: ProductId) -> ProductResponse | None:
         """Удаляем продукт (True, если удаление прошло)"""
         product = await self.session.get(Product, product_id)
         if not product:
@@ -134,7 +134,7 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
-    async def create(self, username: str, password_hash:str) -> User:
+    async def create(self, username: str, password_hash: str) -> User:
         user = User(
             username=username,
             password_hash=password_hash,
@@ -143,14 +143,14 @@ class UserRepository:
         await self.session.commit()
         await self.session.refresh(user)
         return user
-    
+
     async def update_user_password(
         self, user_id: int, new_password: str
     ) -> User | None:
         user = await self.session.scalar(select(User).where(User.id == user_id))
         if user is None:
             return None
-        user.password_hash = new_password 
+        user.password_hash = new_password
         await self.session.commit()
         await self.session.refresh(user)
         return user
