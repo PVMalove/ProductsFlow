@@ -143,6 +143,17 @@ class UserRepository:
         await self.session.commit()
         await self.session.refresh(user)
         return user
+    
+    async def update_user_password(
+        self, user_id: int, new_password: str
+    ) -> User | None:
+        user = await self.session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            return None
+        user.password_hash = new_password 
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
 
 
 def get_product_repository(session: Session) -> ProductRepository:

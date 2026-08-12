@@ -3,6 +3,7 @@ from typing import Annotated, Any
 
 import bcrypt
 import jwt
+from hmac import compare_digest
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 

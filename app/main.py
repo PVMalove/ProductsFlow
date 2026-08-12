@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
-from app.router import auth, products
+from app.router import auth, products, users
 
 
 @asynccontextmanager
@@ -19,6 +19,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(products.router)
+app.include_router(users.router)
+
 register_exception_handlers(app)
 
 

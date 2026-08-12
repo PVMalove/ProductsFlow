@@ -72,13 +72,7 @@ class UserCreate(UserBase):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if len(value) < 8:
-            raise ValueError("Пароль должен содержать минимум 8 символов")
-        if not any(ch.islower() for ch in value):
-            raise ValueError("Пароль должен содержать строчную букву")
-        if not any(ch.isdigit() for ch in value):
-            raise ValueError("Пароль должен содержать цифру")
-        return value
+        return _validate_password(value)
 
 
 class UserResponse(UserBase):
@@ -93,3 +87,23 @@ class UserResponse(UserBase):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password(value)
+
+
+def _validate_password(value):
+    if len(value) < 8:
+        raise ValueError("Пароль должен содержать минимум 8 символов")
+    if not any(ch.islower() for ch in value):
+        raise ValueError("Пароль должен содержать строчную букву")
+    if not any(ch.isdigit() for ch in value):
+        raise ValueError("Пароль должен содержать цифру")
+    return value
