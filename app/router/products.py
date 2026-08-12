@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.repository import ProductRepositoryDI
 from app.schemas import ProductCreate, ProductID, ProductResponse, ProductUpdate
+from app.security import CurrentUser
+from app.models import User, UserRole, Product
 
 T = TypeVar("T")
 
@@ -23,9 +25,12 @@ async def get_products(repository: ProductRepositoryDI) -> list[ProductResponse]
     response_model=list[ProductResponse],
 )
 async def search_products(
-    query: str, repository: ProductRepositoryDI
+    query: str,
+    repository: ProductRepositoryDI,
+    _current_user: CurrentUser,
 ) -> list[ProductResponse]:
     return await repository.search_products(query)
+
 
 @router.get(
     "/price-range",
@@ -33,6 +38,7 @@ async def search_products(
 )
 async def get_products_by_price_range(
     repository: ProductRepositoryDI,
+    _current_user: CurrentUser,
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
 ) -> list[ProductResponse]:
@@ -54,7 +60,9 @@ async def get_product(
     response_model=list[ProductResponse],
 )
 async def get_products_by_category(
-    category_name: str, repository: ProductRepositoryDI
+    category_name: str,
+    repository: ProductRepositoryDI,
+    _current_user: CurrentUser,
 ) -> list[ProductResponse]:
     return await repository.get_products_by_category(category_name)
 
@@ -65,9 +73,11 @@ async def get_products_by_category(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_product(
-    request: ProductCreate, repository: ProductRepositoryDI
+    request: ProductCreate,
+    repository: ProductRepositoryDI,
+    current_user: CurrentUser,
 ) -> ProductResponse:
-    return await repository.create_product(request)
+    return await repository.create_product(request, current_user.id)
 
 
 @router.put(
@@ -79,10 +89,13 @@ async def update_product(
     product_id: ProductID,
     product_update: ProductUpdate,
     repository: ProductRepositoryDI,
-) -> ProductResponse:
-    return ensure_product_exists(
-        await repository.update_product(product_id, product_update)
+    current_user: CurrentUser,
+) -> None:
+    existing_product = ensure_product_exists(
+        await repository.get_product_by_id(product_id)
     )
+    ensure_owner_or_admin(existing_product, current_user)
+    await repository.update_product(product_id, product_update)
 
 
 @router.delete(
@@ -91,9 +104,15 @@ async def update_product(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_product(
-    product_id: ProductID, repository: ProductRepositoryDI
-) -> ProductResponse:
-    return ensure_product_exists(await repository.delete_product(product_id))
+    product_id: ProductID,
+    repository: ProductRepositoryDI,
+    current_user: CurrentUser,
+) -> None:
+    existing_product = ensure_product_exists(
+        await repository.get_product_by_id(product_id)
+    )
+    ensure_owner_or_admin(existing_product, current_user)
+    await repository.delete_product(product_id)
 
 
 def ensure_product_exists(entity: T | None) -> T:
@@ -103,3 +122,15 @@ def ensure_product_exists(entity: T | None) -> T:
             detail="Продукт не найден!",
         )
     return entity
+
+
+def ensure_owner_or_admin(
+    product: Product | ProductResponse, current_user: User
+) -> None:
+    is_owner = product.user_id == current_user.id
+    is_admin = current_user.role == UserRole.ADMIN
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет прав на этот продукт!",
+        )

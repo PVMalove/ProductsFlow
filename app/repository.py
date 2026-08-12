@@ -1,7 +1,7 @@
 from typing import Annotated, Tuple
 
 from fastapi import Depends
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -26,6 +26,10 @@ class ProductRepository:
         """Получаем все продукты"""
         result = await self.session.scalars(select(Product))
         return [ProductResponse.model_validate(product) for product in result.all()]
+
+    async def product_exists(self, product_id: ProductID) -> bool:
+        stmt = select(exists().where(Product.id == product_id))
+        return bool(await self.session.scalar(stmt))
 
     async def get_product_by_id(self, product_id: ProductID) -> ProductResponse | None:
         """Получаем продукт по ID"""
@@ -72,16 +76,20 @@ class ProductRepository:
         result = await self.session.scalars(stmt)
         return [ProductResponse.model_validate(row) for row in result.all()]
 
-    async def create_product(self, request: ProductCreate) -> ProductResponse:
+    async def create_product(
+        self, request: ProductCreate, user_id: int
+    ) -> ProductResponse:
         """Создаём продукт"""
-        product = Product(**request.model_dump(), user_id=1)
+        product = Product(**request.model_dump(), user_id=user_id)
         self.session.add(product)
         await self.session.commit()
         await self.session.refresh(product)
         return ProductResponse.model_validate(product)
 
     async def update_product(
-        self, product_id: ProductID, request: ProductUpdate
+        self,
+        product_id: ProductID,
+        request: ProductUpdate,
     ) -> ProductResponse | None:
         """Обновляем продукт (True, если обновление прошло)"""
         product = await self.session.get(Product, product_id)
