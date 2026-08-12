@@ -11,7 +11,6 @@ from app.schemas import (
     ProductID,
     ProductResponse,
     ProductUpdate,
-    UserCreate,
     UserResponse,
 )
 
@@ -135,8 +134,11 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
-    async def create(self, data: UserCreate) -> User:
-        user = User(**data.model_dump())
+    async def create(self, username: str, password_hash:str) -> User:
+        user = User(
+            username=username,
+            password_hash=password_hash,
+        )
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)

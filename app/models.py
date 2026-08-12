@@ -19,7 +19,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(unique=True)
-    password: Mapped[str]
+    password_hash: Mapped[str]
     role: Mapped[UserRole] = mapped_column(default=UserRole.USER)
     is_active: Mapped[bool] = mapped_column(default=True)
     create_at: Mapped[datetime] = mapped_column(server_default=func.now())

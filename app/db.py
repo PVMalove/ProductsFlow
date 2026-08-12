@@ -36,7 +36,9 @@ def register_functions(dbapi_connection, _connection_record) -> None:
     """ """
     dbapi_connection.create_function(
         # py_lower используется для поиска без учёта регистра.
-        "PY_LOWER", 1, lambda s: s.casefold() if s is not None else None,
+        "PY_LOWER",
+        1,
+        lambda s: s.casefold() if s is not None else None,
     )
 
 
@@ -54,20 +56,40 @@ async def init_db() -> None:
 
 
 async def seed_db() -> None:
-    async with SessionLocal() as session:
-        # Проверяем, есть ли уже данные в таблице products
-        result = await session.execute(select(func.count(Product.id)))
-        count = result.scalar_one()
-        if count == 0:
-            admin = User(**_SEED_ADMIN)
-            session.add(admin)
-            await session.flush()
-            # Если данных нет, добавляем начальные продукты
-            for product_data in _SEED_PRODUCTS:
-                product = Product(**product_data, user_id = admin.id)
-                session.add(product)
-            await session.commit()
+    async with SessionLocal() as session, session.begin():
+        admin = await _ensure_admin_seeded(session)
+        await _ensure_products_seeded(session, owner_id=admin.id)
 
+async def _ensure_admin_seeded(session: AsyncSession) -> User:
+    from app.security import hash_password
+    """Возвращает существующего или создаёт нового seed-админа."""
+    existing = await session.scalar(
+        select(User).where(User.username == _SEED_ADMIN["username"])
+    )
+    if existing is not None:
+        return existing
+
+    admin = User(
+        username=_SEED_ADMIN["username"],
+        password_hash=hash_password(_SEED_ADMIN["password"]),
+        role=_SEED_ADMIN["role"],
+    )
+    session.add(admin)
+    await session.flush()
+    return admin
+
+
+async def _ensure_products_seeded(session: AsyncSession, owner_id: int) -> None:
+    result = await session.execute(select(func.count()).select_from(Product))
+    count = result.scalar_one()
+    if count > 0:
+        return
+
+
+    products = [
+        Product(**product_data, user_id=owner_id) for product_data in _SEED_PRODUCTS
+    ]
+    session.add_all(products)
 
 
 _SEED_PRODUCTS: list[dict[str, Any]] = [

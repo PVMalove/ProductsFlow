@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -13,6 +14,7 @@ SECRET_KEY = "9B-Q9MaiLNMzpM2x7fSrLjKvTMkO8yXS2vYvodMqDkmoFLJvCX3fOUFTf_Y2BAU1"
 ACCESS_TOKEN_TTL = timedelta(hours=1)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
 
 def create_access_token(sub: int) -> str:
     now = datetime.now(timezone.utc)
@@ -29,8 +31,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 
 async def get_current_user(
-        token: Annotated[str, Depends(oauth2_scheme)],
-        repo: UserRepositoryDI,
+    token: Annotated[str, Depends(oauth2_scheme)],
+    repo: UserRepositoryDI,
 ) -> User:
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -55,6 +57,21 @@ async def get_current_user(
             detail="Учётная запись отключена",
         )
     return user
+
+
+def hash_password(plain_password: str) -> str:
+    return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
+    except ValueError:
+        return False
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
