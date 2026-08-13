@@ -112,7 +112,7 @@ def _on_product_update(
     )
 
 
-@event.listens_for(Product, "after_delete")
+@event.listens_for(Product, "before_delete")
 def _on_product_delete(
     _mapper: Mapper[Product], connection: Connection, target: Product
 ) -> None:
