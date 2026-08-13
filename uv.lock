@@ -316,6 +316,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-multipart" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "starlette" },
     { name = "uvicorn" },
 ]
 
@@ -340,6 +341,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "starlette", specifier = ">=1.4.1" },
     { name = "uvicorn", specifier = ">=0.52.1" },
 ]
 provides-extras = ["dev"]

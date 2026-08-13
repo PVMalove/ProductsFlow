@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app import audit
-from app.db import Session
-from app.models import AuditAction, User
+from app.models import User
 from app.repository import AuditLogRepositoryDI, UserRepositoryDI
 from app.schemas import AuditLogResponse, PasswordChange, UserId, UserResponse
 from app.security import AdminUser, CurrentUser, hash_password, verify_password
@@ -43,7 +41,6 @@ async def read_own_audit_logs(
 async def update_password(
     request: PasswordChange,
     current_user: CurrentUser,
-    session: Session,
     repository: UserRepositoryDI,
 ) -> User | None:
     if not verify_password(request.old_password, current_user.password_hash):
@@ -52,26 +49,16 @@ async def update_password(
             detail="Текущий пароль указан неверно",
         )
 
-    user = await repository.update_user_password(
+    return await repository.update_user_password(
         current_user.id,
         hash_password(request.new_password),
     )
-
-    await audit.record(
-        session,
-        AuditAction.PASSWORD_CHANGED,
-        user_id=current_user.id,
-        actor_user_id=current_user.id,
-    )
-
-    return user
 
 
 @router.patch("/{user_id}/activate", response_model=UserResponse)
 async def activate_user(
     admin: AdminUser,
     user_id: UserId,
-    session: Session,
     repository: UserRepositoryDI,
 ) -> User:
     user = await repository.set_active_user(user_id, True)
@@ -81,13 +68,6 @@ async def activate_user(
             detail="Пользователь не найден",
         )
 
-    await audit.record(
-        session,
-        AuditAction.ACTIVATED,
-        user_id=user.id,
-        actor_user_id=admin.id,
-    )
-
     return user
 
 
@@ -95,7 +75,6 @@ async def activate_user(
 async def deactivate_user(
     admin: AdminUser,
     user_id: UserId,
-    session: Session,
     repository: UserRepositoryDI,
 ) -> User:
     if user_id == admin.id:
@@ -110,14 +89,6 @@ async def deactivate_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Пользователь не найден",
         )
-
-
-    await audit.record(
-        session,
-        AuditAction.ACTIVATED,
-        user_id=user.id,
-        actor_user_id=admin.id,
-    )
 
     return user
 

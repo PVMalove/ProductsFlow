@@ -3,9 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app import audit
-from app.db import Session
-from app.models import AuditAction, User
+from app.models import User
 from app.repository import UserRepositoryDI
 from app.schemas import TokenResponse, UserCreate, UserResponse
 from app.security import create_access_token, hash_password, verify_password
@@ -18,17 +16,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register_user(
-    request: UserCreate, session: Session, repository: UserRepositoryDI
-) -> User:
-    user = await repository.create(
+async def register_user(request: UserCreate, repository: UserRepositoryDI) -> User:
+    return await repository.create(
         username=request.username,
         password_hash=hash_password(request.password),
     )
-    await audit.record(
-        session, AuditAction.REGISTERED, user_id=user.id, actor_user_id=user.id
-    )
-    return user
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)

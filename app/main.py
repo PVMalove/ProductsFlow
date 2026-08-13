@@ -1,11 +1,17 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from contextvars import Token
+from typing import Any
 
-from fastapi import FastAPI
+import jwt
+from fastapi import FastAPI, Request, Response
+from starlette.middleware.base import RequestResponseEndpoint
 
+from app.audit import current_actor_id
 from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
 from app.router import auth, products, users
+from app.security import decode_access_token
 
 
 @asynccontextmanager
@@ -22,6 +28,33 @@ app.include_router(products.router)
 app.include_router(users.router)
 
 register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def actor_context_middleware(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+    actor_id: int | None = None
+    auth_header: str = request.headers.get("authorization", "")
+
+    if auth_header.lower().startswith("bearer "):
+        try:
+            payload: dict[str, Any] = decode_access_token(auth_header[7:])
+            sub_raw: Any | None = payload.get("sub")
+            if sub_raw is not None:
+                actor_id = int(sub_raw)
+        except (jwt.PyJWTError, ValueError):
+            pass
+
+    reset_token: Token[int | None] | None = (
+        current_actor_id.set(actor_id) if actor_id else None
+    )
+    try:
+        return await call_next(request)
+    finally:
+        if reset_token is not None:
+            current_actor_id.reset(reset_token)
 
 
 @app.get("/health")
