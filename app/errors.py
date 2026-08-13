@@ -89,8 +89,8 @@ async def _integrity_exception_handler(
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={
-            """detail": "Ошибка целостности данных. Возможно, нарушено уникальное
-            ограничение или внешний ключ."""
+            "detail": "Ошибка целостности данных. Возможно, нарушено уникальное "
+            "ограничение или внешний ключ."
         },
     )
 

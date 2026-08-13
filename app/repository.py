@@ -14,6 +14,8 @@ from app.schemas import (
     UserResponse,
 )
 
+PY_LOWER = func.PY_LOWER
+
 
 class ProductRepository:
     """Репозиторий для работы с таблицей products"""
@@ -23,8 +25,7 @@ class ProductRepository:
 
     async def get_all_products(self) -> list[ProductResponse]:
         """Получаем все продукты"""
-        result = await self.session.scalars(select(Product))
-        return [ProductResponse.model_validate(product) for product in result.all()]
+        return await self._fetch_products(select(Product))
 
     async def product_exists(self, product_id: ProductId) -> bool:
         stmt = select(exists().where(Product.id == product_id))
@@ -38,28 +39,22 @@ class ProductRepository:
     async def search_products(self, query: str) -> list[ProductResponse]:
         """Поиск по имени и описанию (без учёта регистра)"""
         needle = f"%{query}%"
-        py_lower = func.PY_LOWER
         stmt: Select[Tuple[Product]] = select(Product).where(
             or_(
-                py_lower(Product.name).like(py_lower(needle)),
-                py_lower(Product.description).like(py_lower(needle)),
+                PY_LOWER(Product.name).like(PY_LOWER(needle)),
+                PY_LOWER(Product.description).like(PY_LOWER(needle)),
             )
         )
-
-        result = await self.session.scalars(stmt)
-        return [ProductResponse.model_validate(row) for row in result.all()]
+        return await self._fetch_products(stmt)
 
     async def get_products_by_category(
         self, category_name: str
     ) -> list[ProductResponse]:
         """Поиск по категории"""
-        py_lower = func.PY_LOWER
         stmt: Select[Tuple[Product]] = select(Product).where(
-            py_lower(Product.category) == py_lower(category_name)
+            PY_LOWER(Product.category) == PY_LOWER(category_name)
         )
-
-        result = await self.session.scalars(stmt)
-        return [ProductResponse.model_validate(row) for row in result.all()]
+        return await self._fetch_products(stmt)
 
     async def get_products_by_price_range(
         self, min_price: float | None, max_price: float | None
@@ -71,9 +66,7 @@ class ProductRepository:
                 func.coalesce(max_price, Product.price),
             )
         )
-
-        result = await self.session.scalars(stmt)
-        return [ProductResponse.model_validate(row) for row in result.all()]
+        return await self._fetch_products(stmt)
 
     async def create_product(
         self, request: ProductCreate, user_id: int
@@ -110,6 +103,12 @@ class ProductRepository:
         await self.session.commit()
         return snapshot
 
+    async def _fetch_products(
+        self, stmt: Select[Tuple[Product]]
+    ) -> list[ProductResponse]:
+        result = await self.session.scalars(stmt)
+        return [ProductResponse.model_validate(row) for row in result.all()]
+
 
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -126,7 +125,7 @@ class UserRepository:
         return await self.session.scalar(select(User).where(User.username == name))
 
     async def set_active_user(self, user_id: int, active: bool) -> User | None:
-        user = await self.session.scalar(select(User).where(User.id == user_id))
+        user = await self.get_user_by_id(user_id)
         if user is None:
             return None
         user.is_active = active
@@ -147,7 +146,7 @@ class UserRepository:
     async def update_user_password(
         self, user_id: int, new_password: str
     ) -> User | None:
-        user = await self.session.scalar(select(User).where(User.id == user_id))
+        user = await self.get_user_by_id(user_id)
         if user is None:
             return None
         user.password_hash = new_password
