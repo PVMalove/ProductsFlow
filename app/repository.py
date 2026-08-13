@@ -5,8 +5,9 @@ from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
-from app.models import Product, User
+from app.models import AuditAction, Product, User, UserAuditLog
 from app.schemas import (
+    AuditLogResponse,
     ProductCreate,
     ProductId,
     ProductResponse,
@@ -155,6 +156,46 @@ class UserRepository:
         return user
 
 
+class AuditLogRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_all_audit_logs(self) -> list[AuditLogResponse]:
+        return await self._fetch_audit_logs(select(UserAuditLog))
+
+    async def get_audit_logs_by_user(self, user_id: int) -> list[AuditLogResponse]:
+        stmt = (
+            select(UserAuditLog)
+            .where(UserAuditLog.user_id == user_id)
+            .order_by(UserAuditLog.created_at.desc())
+        )
+        return await self._fetch_audit_logs(stmt)
+
+    async def add_audit_log(
+        self,
+        user_id: int,
+        actor_user_id: int,
+        action: AuditAction,
+        description: str = "",
+    ) -> UserAuditLog:
+        log = UserAuditLog(
+            user_id=user_id,
+            actor_user_id=actor_user_id,
+            action=action,
+            description=description,
+        )
+        self.session.add(log)
+        await self.session.flush()
+        await self.session.refresh(log)
+        return log
+
+    async def _fetch_audit_logs(
+        self, stmt: Select[Tuple[UserAuditLog]]
+    ) -> list[AuditLogResponse]:
+        result = await self.session.scalars(stmt)
+        return [AuditLogResponse.model_validate(row) for row in result.all()]
+
+
 def get_product_repository(session: Session) -> ProductRepository:
     return ProductRepository(session)
 
@@ -163,5 +204,10 @@ def get_user_repository(session: Session) -> UserRepository:
     return UserRepository(session)
 
 
+def get_audit_log_repository(session: Session) -> AuditLogRepository:
+    return AuditLogRepository(session)
+
+
 ProductRepositoryDI = Annotated[ProductRepository, Depends(get_product_repository)]
 UserRepositoryDI = Annotated[UserRepository, Depends(get_user_repository)]
+AuditLogRepositoryDI = Annotated[AuditLogRepository, Depends(get_audit_log_repository)]

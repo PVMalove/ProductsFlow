@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import UserRole
+from app.models import UserRole, AuditAction
 
 ProductId = Annotated[int, Path(gt=0)]
 UserId = Annotated[int, Path(gt=0)]
@@ -98,6 +98,16 @@ class PasswordChange(BaseModel):
     @classmethod
     def validate_password(cls, value: str) -> str:
         return _validate_password(value)
+
+
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    actor_user_id: int
+    action: AuditAction
+    description: str
+    created_at: datetime
 
 
 def _validate_password(value):

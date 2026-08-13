@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.models import User
-from app.repository import UserRepositoryDI
-from app.schemas import PasswordChange, UserId, UserResponse
+from app import audit
+from app.db import Session
+from app.models import AuditAction, User
+from app.repository import AuditLogRepositoryDI, UserRepositoryDI
+from app.schemas import AuditLogResponse, PasswordChange, UserId, UserResponse
 from app.security import AdminUser, CurrentUser, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -16,15 +18,32 @@ async def list_users(
     return await repository.get_all_users()
 
 
+@router.get("/audit", response_model=list[AuditLogResponse])
+async def list_all_audit_logs(
+    _admin: AdminUser,
+    repository: AuditLogRepositoryDI,
+) -> list[AuditLogResponse]:
+    return await repository.get_all_audit_logs()
+
+
 @router.get("/me", response_model=UserResponse)
 async def read_current_user(current_user: CurrentUser) -> CurrentUser:
     return current_user
+
+
+@router.get("/me/audit", response_model=list[AuditLogResponse])
+async def read_own_audit_logs(
+    current_user: CurrentUser,
+    repository: AuditLogRepositoryDI,
+) -> list[AuditLogResponse]:
+    return await repository.get_audit_logs_by_user(current_user.id)
 
 
 @router.patch("/me/password", response_model=UserResponse)
 async def update_password(
     request: PasswordChange,
     current_user: CurrentUser,
+    session: Session,
     repository: UserRepositoryDI,
 ) -> User | None:
     if not verify_password(request.old_password, current_user.password_hash):
@@ -33,16 +52,26 @@ async def update_password(
             detail="Текущий пароль указан неверно",
         )
 
-    return await repository.update_user_password(
+    user = await repository.update_user_password(
         current_user.id,
         hash_password(request.new_password),
     )
 
+    await audit.record(
+        session,
+        AuditAction.PASSWORD_CHANGED,
+        user_id=current_user.id,
+        actor_user_id=current_user.id,
+    )
+
+    return user
+
 
 @router.patch("/{user_id}/activate", response_model=UserResponse)
 async def activate_user(
-    _admin: AdminUser,
+    admin: AdminUser,
     user_id: UserId,
+    session: Session,
     repository: UserRepositoryDI,
 ) -> User:
     user = await repository.set_active_user(user_id, True)
@@ -51,6 +80,14 @@ async def activate_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Пользователь не найден",
         )
+
+    await audit.record(
+        session,
+        AuditAction.ACTIVATED,
+        user_id=user.id,
+        actor_user_id=admin.id,
+    )
+
     return user
 
 
@@ -58,6 +95,7 @@ async def activate_user(
 async def deactivate_user(
     admin: AdminUser,
     user_id: UserId,
+    session: Session,
     repository: UserRepositoryDI,
 ) -> User:
     if user_id == admin.id:
@@ -72,4 +110,29 @@ async def deactivate_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Пользователь не найден",
         )
+
+
+    await audit.record(
+        session,
+        AuditAction.ACTIVATED,
+        user_id=user.id,
+        actor_user_id=admin.id,
+    )
+
     return user
+
+
+@router.get("/{user_id}/audit", response_model=list[AuditLogResponse])
+async def read_user_audit_logs(
+    _admin: AdminUser,
+    user_id: UserId,
+    repository: AuditLogRepositoryDI,
+    user_repository: UserRepositoryDI,
+) -> list[AuditLogResponse]:
+    if not await user_repository.get_user_by_id(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден",
+        )
+
+    return await repository.get_audit_logs_by_user(user_id)

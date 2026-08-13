@@ -27,6 +27,7 @@ class User(Base):
         server_default=func.now(), onupdate=func.now()
     )
 
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -36,3 +37,20 @@ class Product(Base):
     price: Mapped[float]
     description: Mapped[str] = mapped_column(default="", server_default="")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class AuditAction(enum.StrEnum):
+    REGISTERED = "registered"
+    PASSWORD_CHANGED = "password_changed"
+    ACTIVATED = "activated"
+    DEACTIVATED = "deactivated"
+
+
+class UserAuditLog(Base):
+    __tablename__ = "user_audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[AuditAction]
+    description: Mapped[str] = mapped_column(default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
