@@ -3,9 +3,15 @@ from typing import TypeVar
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.models import Product, User, UserRole
-from app.repository import ProductRepositoryDI
-from app.schemas import ProductCreate, ProductId, ProductResponse, ProductUpdate
-from app.security import CurrentUser
+from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
+from app.schemas import (
+    ProductAuditLogResponse,
+    ProductCreate,
+    ProductId,
+    ProductResponse,
+    ProductUpdate,
+)
+from app.security import AdminUser, CurrentUser
 
 T = TypeVar("T")
 
@@ -43,6 +49,17 @@ async def get_products_by_price_range(
     max_price: float | None = Query(default=None, ge=0),
 ) -> list[ProductResponse]:
     return await repository.get_products_by_price_range(min_price, max_price)
+
+
+@router.get(
+    "/audit",
+    response_model=list[ProductAuditLogResponse],
+)
+async def list_all_product_audit_logs(
+    _admin: AdminUser,
+    repository: ProductAuditLogRepositoryDI,
+) -> list[ProductAuditLogResponse]:
+    return await repository.get_all_audit_logs()
 
 
 @router.get(
@@ -113,6 +130,37 @@ async def delete_product(
     )
     ensure_owner_or_admin(existing_product, current_user)
     await repository.delete_product(product_id)
+
+
+@router.get(
+    "/{product_id}/audit",
+    response_model=list[ProductAuditLogResponse],
+)
+async def get_product_audit_logs(
+    product_id: ProductId,
+    repository: ProductRepositoryDI,
+    audit_repository: ProductAuditLogRepositoryDI,
+    current_user: CurrentUser,
+) -> list[ProductAuditLogResponse]:
+    product = await repository.get_product_by_id(product_id)
+    logs = await audit_repository.get_audit_logs_by_product(product_id)
+
+    if product is not None:
+        ensure_owner_or_admin(product, current_user)
+    elif logs:
+        # Продукт удалён — владельца проверить уже не по чему, доступ только админу.
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Нет прав на этот продукт!",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Продукт не найден!",
+        )
+
+    return logs
 
 
 def ensure_product_exists(entity: T | None) -> T:

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.models import User
-from app.repository import AuditLogRepositoryDI, UserRepositoryDI
-from app.schemas import AuditLogResponse, PasswordChange, UserId, UserResponse
+from app.repository import UserAuditLogRepositoryDI, UserRepositoryDI
+from app.schemas import PasswordChange, UserAuditLogResponse, UserId, UserResponse
 from app.security import AdminUser, CurrentUser, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -16,11 +16,11 @@ async def list_users(
     return await repository.get_all_users()
 
 
-@router.get("/audit", response_model=list[AuditLogResponse])
+@router.get("/audit", response_model=list[UserAuditLogResponse])
 async def list_all_audit_logs(
     _admin: AdminUser,
-    repository: AuditLogRepositoryDI,
-) -> list[AuditLogResponse]:
+    repository: UserAuditLogRepositoryDI,
+) -> list[UserAuditLogResponse]:
     return await repository.get_all_audit_logs()
 
 
@@ -29,11 +29,11 @@ async def read_current_user(current_user: CurrentUser) -> CurrentUser:
     return current_user
 
 
-@router.get("/me/audit", response_model=list[AuditLogResponse])
+@router.get("/me/audit", response_model=list[UserAuditLogResponse])
 async def read_own_audit_logs(
     current_user: CurrentUser,
-    repository: AuditLogRepositoryDI,
-) -> list[AuditLogResponse]:
+    repository: UserAuditLogRepositoryDI,
+) -> list[UserAuditLogResponse]:
     return await repository.get_audit_logs_by_user(current_user.id)
 
 
@@ -93,13 +93,13 @@ async def deactivate_user(
     return user
 
 
-@router.get("/{user_id}/audit", response_model=list[AuditLogResponse])
+@router.get("/{user_id}/audit", response_model=list[UserAuditLogResponse])
 async def read_user_audit_logs(
     _admin: AdminUser,
     user_id: UserId,
-    repository: AuditLogRepositoryDI,
+    repository: UserAuditLogRepositoryDI,
     user_repository: UserRepositoryDI,
-) -> list[AuditLogResponse]:
+) -> list[UserAuditLogResponse]:
     if not await user_repository.get_user_by_id(user_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

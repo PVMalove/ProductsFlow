@@ -39,7 +39,7 @@ class Product(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
 
-class AuditAction(enum.StrEnum):
+class UserAuditAction(enum.StrEnum):
     REGISTERED = "registered"
     PASSWORD_CHANGED = "password_changed"
     ACTIVATED = "activated"
@@ -51,6 +51,24 @@ class UserAuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    action: Mapped[AuditAction]
+    action: Mapped[UserAuditAction]
+    description: Mapped[str] = mapped_column(default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class ProductAuditAction(enum.StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    DELETED = "deleted"
+
+
+class ProductAuditLog(Base):
+    __tablename__ = "product_audit_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Без ForeignKey: после DELETED продукта строка в products уже отсутствует,
+    # и с PRAGMA foreign_keys=ON вставка в этот момент нарушила бы ограничение.
+    product_id: Mapped[int]
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[ProductAuditAction]
     description: Mapped[str] = mapped_column(default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

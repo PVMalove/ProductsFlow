@@ -5,13 +5,20 @@ from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
-from app.models import AuditAction, Product, User, UserAuditLog
+from app.models import (
+    Product,
+    ProductAuditLog,
+    User,
+    UserAuditAction,
+    UserAuditLog,
+)
 from app.schemas import (
-    AuditLogResponse,
+    ProductAuditLogResponse,
     ProductCreate,
     ProductId,
     ProductResponse,
     ProductUpdate,
+    UserAuditLogResponse,
     UserResponse,
 )
 
@@ -156,14 +163,14 @@ class UserRepository:
         return user
 
 
-class AuditLogRepository:
+class UserAuditLogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_all_audit_logs(self) -> list[AuditLogResponse]:
+    async def get_all_audit_logs(self) -> list[UserAuditLogResponse]:
         return await self._fetch_audit_logs(select(UserAuditLog))
 
-    async def get_audit_logs_by_user(self, user_id: int) -> list[AuditLogResponse]:
+    async def get_audit_logs_by_user(self, user_id: int) -> list[UserAuditLogResponse]:
         stmt = (
             select(UserAuditLog)
             .where(UserAuditLog.user_id == user_id)
@@ -175,7 +182,7 @@ class AuditLogRepository:
         self,
         user_id: int,
         actor_user_id: int,
-        action: AuditAction,
+        action: UserAuditAction,
         description: str = "",
     ) -> UserAuditLog:
         log = UserAuditLog(
@@ -191,9 +198,33 @@ class AuditLogRepository:
 
     async def _fetch_audit_logs(
         self, stmt: Select[Tuple[UserAuditLog]]
-    ) -> list[AuditLogResponse]:
+    ) -> list[UserAuditLogResponse]:
         result = await self.session.scalars(stmt)
-        return [AuditLogResponse.model_validate(row) for row in result.all()]
+        return [UserAuditLogResponse.model_validate(row) for row in result.all()]
+
+
+class ProductAuditLogRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_all_audit_logs(self) -> list[ProductAuditLogResponse]:
+        return await self._fetch_audit_logs(select(ProductAuditLog))
+
+    async def get_audit_logs_by_product(
+        self, product_id: int
+    ) -> list[ProductAuditLogResponse]:
+        stmt = (
+            select(ProductAuditLog)
+            .where(ProductAuditLog.product_id == product_id)
+            .order_by(ProductAuditLog.created_at.desc())
+        )
+        return await self._fetch_audit_logs(stmt)
+
+    async def _fetch_audit_logs(
+        self, stmt: Select[Tuple[ProductAuditLog]]
+    ) -> list[ProductAuditLogResponse]:
+        result = await self.session.scalars(stmt)
+        return [ProductAuditLogResponse.model_validate(row) for row in result.all()]
 
 
 def get_product_repository(session: Session) -> ProductRepository:
@@ -204,10 +235,19 @@ def get_user_repository(session: Session) -> UserRepository:
     return UserRepository(session)
 
 
-def get_audit_log_repository(session: Session) -> AuditLogRepository:
-    return AuditLogRepository(session)
+def get_user_audit_log_repository(session: Session) -> UserAuditLogRepository:
+    return UserAuditLogRepository(session)
+
+
+def get_product_audit_log_repository(session: Session) -> ProductAuditLogRepository:
+    return ProductAuditLogRepository(session)
 
 
 ProductRepositoryDI = Annotated[ProductRepository, Depends(get_product_repository)]
 UserRepositoryDI = Annotated[UserRepository, Depends(get_user_repository)]
-AuditLogRepositoryDI = Annotated[AuditLogRepository, Depends(get_audit_log_repository)]
+UserAuditLogRepositoryDI = Annotated[
+    UserAuditLogRepository, Depends(get_user_audit_log_repository)
+]
+ProductAuditLogRepositoryDI = Annotated[
+    ProductAuditLogRepository, Depends(get_product_audit_log_repository)
+]
