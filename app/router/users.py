@@ -1,9 +1,13 @@
+from typing import TypeVar
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.models import User
 from app.repository import UserAuditLogRepositoryDI, UserRepositoryDI
 from app.schemas import PasswordChange, UserAuditLogResponse, UserId, UserResponse
 from app.security import AdminUser, CurrentUser, hash_password, verify_password
+
+T = TypeVar("T")
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -61,14 +65,7 @@ async def activate_user(
     user_id: UserId,
     repository: UserRepositoryDI,
 ) -> User:
-    user = await repository.set_active_user(user_id, True)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пользователь не найден",
-        )
-
-    return user
+    return ensure_user_exists(await repository.set_active_user(user_id, True))
 
 
 @router.patch("/{user_id}/deactivate", response_model=UserResponse)
@@ -83,14 +80,7 @@ async def deactivate_user(
             detail="Нельзя деактивировать собственную учетную запись",
         )
 
-    user = await repository.set_active_user(user_id, False)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пользователь не найден",
-        )
-
-    return user
+    return ensure_user_exists(await repository.set_active_user(user_id, False))
 
 
 @router.get("/{user_id}/audit", response_model=list[UserAuditLogResponse])
@@ -100,10 +90,14 @@ async def read_user_audit_logs(
     repository: UserAuditLogRepositoryDI,
     user_repository: UserRepositoryDI,
 ) -> list[UserAuditLogResponse]:
-    if not await user_repository.get_user_by_id(user_id):
+    ensure_user_exists(await user_repository.get_user_by_id(user_id))
+    return await repository.get_audit_logs_by_user(user_id)
+
+
+def ensure_user_exists(entity: T | None) -> T:
+    if not entity:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Пользователь не найден",
         )
-
-    return await repository.get_audit_logs_by_user(user_id)
+    return entity

@@ -81,7 +81,7 @@ class UserResponse(UserBase):
     id: int
     role: UserRole
     is_active: bool
-    create_at: datetime
+    created_at: datetime
     updated_at: datetime
 
 

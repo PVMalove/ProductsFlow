@@ -45,8 +45,8 @@ async def get_current_user(
         if sub_raw is None:
             raise credentials_exc
         user_id = int(sub_raw)
-    except Exception:
-        raise credentials_exc
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise credentials_exc from exc
 
     user = await repo.get_user_by_id(user_id)
     if user is None:
