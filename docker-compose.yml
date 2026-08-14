@@ -1,0 +1,29 @@
+version: '3.8'
+name: product_flow-backend-dev
+services:
+  products_db:
+    container_name: product-db-dev
+    image: postgres:18.0
+    environment:
+      POSTGRES_PASSWORD: admin12345
+      POSTGRES_USER: admin
+      POSTGRES_DB: products
+    ports:
+      - "7600:5432"
+    volumes:
+      - postgres_product:/var/tib/postgresql/data/
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "products"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - eshop-network
+
+volumes:
+  postgres_product:
+
+networks:
+  eshop-network:
+    driver: bridge
