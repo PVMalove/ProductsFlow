@@ -1,28 +1,79 @@
-version: '3.8'
-name: product_flow-backend-dev
+version: "3.8"
+name: product_flow-backend
 services:
-  products_db:
+  products_db_dev:
     container_name: product-db-dev
     image: postgres:18.0
+    env_file:
+      - .env
     environment:
-      POSTGRES_PASSWORD: admin12345
-      POSTGRES_USER: admin
-      POSTGRES_DB: products
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "7600:5432"
+      - "${POSTGRES_PORT_DEV:-7600}:5432"
     volumes:
-      - postgres_product:/var/tib/postgresql/data/
+      - postgres_product_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "products"]
+      test:
+        ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
     networks:
       - eshop-network
+    profiles: ["dev"]
+
+  products_db_prod:
+    container_name: product-db-prod
+    image: postgres:18.0
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT_PROD:-7601}:5432"
+    volumes:
+      - postgres_product_prod:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - eshop-network
+    profiles: ["prod"]
+
+  products-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-products-prod
+    env_file:
+      - .env
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@products_db_prod:5432/${POSTGRES_DB}
+    ports:
+      - "9000:8000"
+    depends_on:
+      products_db_prod:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - eshop-network
+    profiles: ["prod"]
 
 volumes:
-  postgres_product:
+  postgres_product_dev:
+  postgres_product_prod:
 
 networks:
   eshop-network:

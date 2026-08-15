@@ -12,6 +12,7 @@ from app.db import engine, init_db, seed_db
 from app.errors import register_exception_handlers
 from app.router import auth, products, users
 from app.security import decode_access_token
+from app.settings import settings
 
 
 @asynccontextmanager
@@ -22,7 +23,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title=f"ProductsFlow API [{settings.app_env.lower()}]",
+    description=(
+        "Сервис учёта товаров: аутентификация пользователей, "
+        "CRUD-операции над товарами и управление пользователями."
+    ),
+    lifespan=lifespan,
+)
 app.include_router(auth.router)
 app.include_router(products.router)
 app.include_router(users.router)

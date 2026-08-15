@@ -9,7 +9,7 @@ SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
 .PHONY: check format lint test test_sec_image coverage renovate \
-        make_migration migrate downgrade shell logs up down build \
+        make_migration migrate downgrade shell logs up_dev up_prod down_dev down_prod build \
         clean install help
 
 # ---- Переменные по умолчанию (можно переопределить: make check path=app) ----
@@ -44,11 +44,17 @@ test_sec_image: ## Собрать и протестировать защищён
 	docker build --file $(service)/$(dockerfile) --target sec_image --tag $(service):sec ./
 	docker run --env-file .env.template --env-file $(service)/.env.template --name $(service) $(service):sec
 
-up: ## Поднять окружение docker compose в фоне
-	docker compose up -d
+up_dev: ## Поднять dev-профиль (только БД, приложение запускается локально)
+	docker compose --profile dev up -d
 
-down: ## Остановить и удалить контейнеры docker compose
-	docker compose down
+up_prod: ## Поднять prod-профиль (БД + API в докере)
+	docker compose --profile prod up -d --build
+
+down_dev: ## Остановить и удалить контейнеры dev-профиля (volume с данными сохраняется)
+	docker compose --profile dev down
+
+down_prod: ## Остановить и удалить контейнеры prod-профиля (volume с данными сохраняется)
+	docker compose --profile prod down
 
 build: ## Пересобрать образы docker compose
 	docker compose build $(service)
@@ -83,8 +89,10 @@ help: ## Показать список команд с описанием
 	@echo   test            - Запустить тесты сервиса в docker compose
 	@echo   coverage        - Тесты с отчётом покрытия
 	@echo   test_sec_image  - Собрать и протестировать защищённый docker-образ
-	@echo   up              - Поднять окружение docker compose в фоне
-	@echo   down            - Остановить и удалить контейнеры docker compose
+	@echo   up_dev          - Поднять dev-профиль (только БД)
+	@echo   up_prod         - Поднять prod-профиль (БД + API в докере)
+	@echo   down_dev        - Остановить контейнеры dev-профиля
+	@echo   down_prod       - Остановить контейнеры prod-профиля
 	@echo   build           - Пересобрать образы docker compose
 	@echo   shell           - Зайти в shell контейнера сервиса
 	@echo   logs            - Смотреть логи сервиса
