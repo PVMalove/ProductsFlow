@@ -11,11 +11,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.models import Base, Product, User, UserRole
+from app.settings import settings
 
-DATABASE_URL = "postgresql+asyncpg://admin:admin12345@localhost:7600/products"
-
-
-engine: AsyncEngine = create_async_engine(DATABASE_URL, echo=True)
+engine: AsyncEngine = create_async_engine(settings.database_url, echo=True)
 SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine, expire_on_commit=False
 )
@@ -50,7 +48,7 @@ async def _ensure_admin_seeded(session: AsyncSession) -> User:
 
     admin = User(
         username=_SEED_ADMIN["username"],
-        password_hash=hash_password(_SEED_ADMIN["password"]),
+        password_hash=hash_password(settings.admin_password),
         role=_SEED_ADMIN["role"],
     )
     session.add(admin)
@@ -113,6 +111,5 @@ _SEED_PRODUCTS: list[dict[str, Any]] = [
 
 _SEED_ADMIN: dict[str, Any] = {
     "username": "admin",
-    "password": "admin12345",
     "role": UserRole.ADMIN,
 }

@@ -8,10 +8,9 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.models import User, UserRole
 from app.repository import UserRepositoryDI
+from app.settings import settings
 
 ALGORITHM = "HS256"
-SECRET_KEY = "9B-Q9MaiLNMzpM2x7fSrLjKvTMkO8yXS2vYvodMqDkmoFLJvCX3fOUFTf_Y2BAU1"
-ACCESS_TOKEN_TTL = timedelta(hours=1)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -21,13 +20,15 @@ def create_access_token(sub: int) -> str:
     payload: dict[str, Any] = {
         "sub": str(sub),
         "iat": int(now.timestamp()),
-        "exp": int((now + ACCESS_TOKEN_TTL).timestamp()),
+        "exp": int(
+            (now + timedelta(hours=settings.access_token_ttl_hours)).timestamp()
+        ),
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    return jwt.decode(token, SECRET_KEY, algorithms=ALGORITHM)
+    return jwt.decode(token, settings.secret_key, algorithms=ALGORITHM)
 
 
 async def get_current_user(
@@ -75,6 +76,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
 
 async def require_admin(user: CurrentUser) -> User:
     if user.role != UserRole.ADMIN:
