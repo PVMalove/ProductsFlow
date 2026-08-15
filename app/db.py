@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import Depends
-from sqlalchemy import event, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -12,34 +12,13 @@ from sqlalchemy.ext.asyncio import (
 
 from app.models import Base, Product, User, UserRole
 
-DATABASE_URL = "sqlite+aiosqlite:///./market_store.db"
+DATABASE_URL = "postgresql+asyncpg://admin:admin12345@localhost:7600/products"
 
 
 engine: AsyncEngine = create_async_engine(DATABASE_URL, echo=True)
 SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine, expire_on_commit=False
 )
-
-
-def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-
-event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
-
-
-# Регистрируем пользовательские функции SQLite, которые можно использовать SQL-запросах.
-@event.listens_for(engine.sync_engine, "connect")
-def register_functions(dbapi_connection, _connection_record) -> None:
-    """ """
-    dbapi_connection.create_function(
-        # py_lower используется для поиска без учёта регистра.
-        "PY_LOWER",
-        1,
-        lambda s: s.casefold() if s is not None else None,
-    )
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

@@ -1,5 +1,6 @@
 from typing import Annotated, Tuple
 
+from annotated_types import LowerCase
 from fastapi import Depends
 from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,8 +50,8 @@ class ProductRepository:
         needle = f"%{query}%"
         stmt: Select[Tuple[Product]] = select(Product).where(
             or_(
-                PY_LOWER(Product.name).like(PY_LOWER(needle)),
-                PY_LOWER(Product.description).like(PY_LOWER(needle)),
+                Product.name.like(needle.casefold()),
+                Product.description.like(needle.casefold()),
             )
         )
         return await self._fetch_products(stmt)
@@ -60,7 +61,7 @@ class ProductRepository:
     ) -> list[ProductResponse]:
         """Поиск по категории"""
         stmt: Select[Tuple[Product]] = select(Product).where(
-            PY_LOWER(Product.category) == PY_LOWER(category_name)
+            Product.category == category_name.casefold()
         )
         return await self._fetch_products(stmt)
 
