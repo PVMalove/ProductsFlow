@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
+from alembic.config import Config
 from fastapi import Depends
 from sqlalchemy import func, select
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -10,7 +12,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.models import Base, Product, User, UserRole
+from alembic import command
+from app.models import Product, User, UserRole
 from app.settings import settings
 
 engine: AsyncEngine = create_async_engine(settings.database_url, echo=True)
@@ -27,9 +30,15 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 
-async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn))
+def _run_upgrade(connection: Connection) -> None:
+    cfg = Config("alembic.ini")
+    cfg.attributes["connection"] = connection
+    command.upgrade(cfg, "head")
+
+
+async def run_migrations() -> None:
+    async with engine.connect() as connection:
+        await connection.run_sync(_run_upgrade)
 
 
 async def seed_db() -> None:

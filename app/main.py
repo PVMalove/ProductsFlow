@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app.audit import current_actor_id
-from app.db import engine, init_db, seed_db
+from app.db import engine, run_migrations, seed_db
 from app.errors import register_exception_handlers
 from app.router import auth, products, users
 from app.security import decode_access_token
@@ -17,7 +17,7 @@ from app.settings import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    await init_db()
+    await run_migrations()
     await seed_db()
     yield
     await engine.dispose()
