@@ -222,3 +222,7 @@ __marimo__/
 *.db
 .idea
 .vscode
+.claude
+.agents
+
+skills-lock.json

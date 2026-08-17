@@ -23,8 +23,6 @@ from app.schemas import (
     UserResponse,
 )
 
-PY_LOWER = func.PY_LOWER
-
 
 class ProductRepository:
     """Репозиторий для работы с таблицей products"""
