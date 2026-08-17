@@ -109,6 +109,84 @@ async def test_full_product_lifecycle_reflects_in_get_and_audit(
     ]
 
 
+async def test_owner_reading_own_product_audit_twice_in_a_row_is_idempotent(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "reader1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    first = await _audit_actions(client, owner_token, product_id)
+    second = await _audit_actions(client, owner_token, product_id)
+
+    assert first == second == ["created"]
+
+
+async def test_owner_loses_audit_access_after_deleting_their_own_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "deleter1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    delete_response = await client.delete(
+        f"/products/{product_id}", headers=_auth(owner_token)
+    )
+    assert delete_response.status_code == 204
+
+    response = await client.get(
+        f"/products/{product_id}/audit", headers=_auth(owner_token)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_non_owner_cannot_read_audit_of_an_existing_foreign_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "owner5")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    _, intruder_token = await _register_and_login(client, "intruder3")
+
+    response = await client.get(
+        f"/products/{product_id}/audit", headers=_auth(intruder_token)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_admin_can_read_audit_of_an_existing_foreign_product(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "owner6")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    admin_id, admin_token = await _register_and_login(client, "admin4")
+    await _promote_to_admin(db_session, admin_id)
+
+    assert await _audit_actions(client, admin_token, product_id) == ["created"]
+
+
+async def test_reading_audit_for_a_product_that_never_existed_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # 404 не зависит от роли вызывающего: даже админ, который в остальном
+    # обходит проверку владения, получает 404 на id без единой audit-записи
+    # (см. else-ветку get_product_audit_logs — роль там вообще не смотрится).
+    _, user_token = await _register_and_login(client, "norole1")
+    admin_id, admin_token = await _register_and_login(client, "norole2")
+    await _promote_to_admin(db_session, admin_id)
+
+    user_response = await client.get(
+        "/products/999999/audit", headers=_auth(user_token)
+    )
+    admin_response = await client.get(
+        "/products/999999/audit", headers=_auth(admin_token)
+    )
+
+    assert user_response.status_code == 404
+    assert admin_response.status_code == 404
+
+
 async def test_non_owner_without_admin_cannot_update_a_foreign_product(
     client: AsyncClient,
 ) -> None:
