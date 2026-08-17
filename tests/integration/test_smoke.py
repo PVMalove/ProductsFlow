@@ -1,7 +1,8 @@
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.models import User, UserAuditLog
 
@@ -17,28 +18,37 @@ async def test_health_check_responds_ok(client: AsyncClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-async def test_a_insert_is_visible_within_its_own_transaction(
-    db_session: AsyncSession,
+async def test_insert_and_rollback_isolates_writes_between_transactions(
+    db_engine: AsyncEngine,
 ) -> None:
-    db_session.add(User(username="smoke-user", password_hash="hash"))
-    await db_session.flush()
+    # Reproduces the db_session fixture's begin+SAVEPOINT+rollback dance
+    # directly against db_engine (rather than using the db_session fixture
+    # itself), so this test can trigger the rollback mid-test and check its
+    # effect on a second, independent connection — proving the isolation
+    # mechanism actually discards writes, not just that another transaction
+    # can't see uncommitted ones.
+    def _count(connection: Connection) -> tuple[int | None, int | None]:
+        users = connection.execute(select(func.count()).select_from(User)).scalar()
+        audit_rows = connection.execute(
+            select(func.count()).select_from(UserAuditLog)
+        ).scalar()
+        return users, audit_rows
 
-    count = await db_session.scalar(select(func.count()).select_from(User))
+    async with db_engine.connect() as connection:
+        await connection.begin()
+        session = AsyncSession(
+            bind=connection, join_transaction_mode="create_savepoint"
+        )
+        session.add(User(username="smoke-user", password_hash="hash"))
+        await session.flush()
 
-    assert count == 1
+        user_count, audit_count = await connection.run_sync(_count)
+        assert (user_count, audit_count) == (1, 1)
 
+        await session.close()
+        await connection.rollback()
 
-async def test_b_previous_tests_insert_and_its_audit_row_were_rolled_back(
-    db_session: AsyncSession,
-) -> None:
-    # Relies on running after test_a in the same session: proves that the
-    # db_session fixture's rollback-per-test actually discards writes
-    # (including the audit-log insert triggered by the User insert above),
-    # rather than merely relying on cross-transaction isolation.
-    user_count = await db_session.scalar(select(func.count()).select_from(User))
-    audit_count = await db_session.scalar(
-        select(func.count()).select_from(UserAuditLog)
-    )
+    async with db_engine.connect() as connection:
+        user_count, audit_count = await connection.run_sync(_count)
 
-    assert user_count == 0
-    assert audit_count == 0
+    assert (user_count, audit_count) == (0, 0)
