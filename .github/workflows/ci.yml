@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy --explicit-package-bases app
+
+  test:
+    runs-on: ubuntu-latest
+    # DATABASE_URL нужен просто как синтаксически валидный URL: app/db.py
+    # строит движок из settings.database_url при импорте модуля (ещё до
+    # того, как testcontainers поднимет собственный Postgres для тестов),
+    # и без него create_async_engine() падает прямо на сборе тестов —
+    # реального подключения по этому URL никогда не происходит.
+    # SECRET_KEY, в отличие от него, используется по-настоящему: unit-тесты
+    # в tests/unit/test_security.py подписывают и проверяют JWT этим ключом.
+    env:
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+      SECRET_KEY: ci-test-only-secret-key-do-not-use-in-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      # Postgres не поднимается отдельным services-блоком: testcontainers
+      # сам стартует и гасит контейнер на Docker-демоне раннера.
+      - run: uv run pytest

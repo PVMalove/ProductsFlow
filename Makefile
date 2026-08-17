@@ -33,11 +33,11 @@ lint: format check ## Сначала отформатировать, затем 
 install: ## Установить зависимости проекта (poetry/uv/pip — под ваш стек)
 	pip install -r requirements.txt
 
-test: ## Запустить тесты сервиса в docker compose (make test service=app)
-	docker compose run --rm $(service) pytest
+test: ## Запустить тесты (pytest)
+	uv run pytest
 
-coverage: ## Запустить тесты с отчётом покрытия
-	docker compose run --rm $(service) pytest --cov=$(service) --cov-report=term-missing
+coverage: ## Запустить тесты с отчётом покрытия (make coverage service=app)
+	uv run pytest --cov=$(service) --cov-report=term-missing
 
 test_sec_image: ## Собрать и протестировать защищённый (sec) docker-образ сервиса
 	docker rm $(service) || true
@@ -86,7 +86,7 @@ help: ## Показать список команд с описанием
 	@echo   format          - Автоформатирование кода (ruff format + ruff check --fix)
 	@echo   lint            - format + check одной командой
 	@echo   install         - Установить зависимости проекта
-	@echo   test            - Запустить тесты сервиса в docker compose
+	@echo   test            - Запустить тесты (pytest)
 	@echo   coverage        - Тесты с отчётом покрытия
 	@echo   test_sec_image  - Собрать и протестировать защищённый docker-образ
 	@echo   up_dev          - Поднять dev-профиль (только БД)
