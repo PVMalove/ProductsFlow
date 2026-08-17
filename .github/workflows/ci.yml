@@ -14,9 +14,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
 
@@ -39,9 +39,9 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
       SECRET_KEY: ci-test-only-secret-key-do-not-use-in-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
 
@@ -55,16 +55,16 @@ jobs:
         run: uv run pytest --junitxml=test-results.xml
 
       - name: Publish Test Report
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         if: always() # выполняется всегда, чтобы отчёт был виден и при падении тестов
         with:
           name: Test Results
           path: test-results.xml
-          reporter: java-junit # формат JUnit XML — тот же, что генерирует pytest --junitxml
+          reporter: python-xunit # формат отчёта, который генерирует pytest --junitxml
           fail-on-error: 'true'
 
       - name: Upload test results artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
