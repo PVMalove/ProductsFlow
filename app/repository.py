@@ -1,6 +1,5 @@
 from typing import Annotated, Tuple
 
-from annotated_types import LowerCase
 from fastapi import Depends
 from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
