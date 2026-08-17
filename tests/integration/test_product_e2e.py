@@ -66,38 +66,43 @@ async def _audit_actions(client: AsyncClient, token: str, product_id: int) -> li
 async def test_full_product_lifecycle_reflects_in_get_and_audit(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    # Админ выступает и владельцем, и наблюдателем на всех этапах: обычный
-    # владелец теряет доступ к /products/{id}/audit после удаления продукта
-    # (см. app/router/products.py::get_product_audit_logs), а этот сценарий
-    # должен проверить audit-запись именно после каждого шага, включая delete.
-    user_id, token = await _register_and_login(client, "admin1")
-    await _promote_to_admin(db_session, user_id)
+    _, owner_token = await _register_and_login(client, "lifecycle1")
 
-    product_id = await _create_product_via_http(client, token, name="Ноутбук")
+    product_id = await _create_product_via_http(client, owner_token, name="Ноутбук")
 
     get_response = await client.get(f"/products/{product_id}")
     assert get_response.status_code == 200
     assert get_response.json()["name"] == "Ноутбук"
-    assert await _audit_actions(client, token, product_id) == ["created"]
+    assert await _audit_actions(client, owner_token, product_id) == ["created"]
 
     update_response = await client.put(
-        f"/products/{product_id}", json={"price": 1200.0}, headers=_auth(token)
+        f"/products/{product_id}", json={"price": 1200.0}, headers=_auth(owner_token)
     )
     assert update_response.status_code == 204
 
     get_after_update = await client.get(f"/products/{product_id}")
     assert get_after_update.json()["price"] == 1200.0
     assert get_after_update.json()["name"] == "Ноутбук"
-    assert await _audit_actions(client, token, product_id) == ["created", "updated"]
+    assert await _audit_actions(client, owner_token, product_id) == [
+        "created",
+        "updated",
+    ]
 
     delete_response = await client.delete(
-        f"/products/{product_id}", headers=_auth(token)
+        f"/products/{product_id}", headers=_auth(owner_token)
     )
     assert delete_response.status_code == 204
 
     get_after_delete = await client.get(f"/products/{product_id}")
     assert get_after_delete.status_code == 404
-    assert await _audit_actions(client, token, product_id) == [
+
+    # После удаления продукта get_product_audit_logs (app/router/products.py)
+    # больше не пускает обычного владельца к его audit-логу — только админа.
+    # Проверяем итоговую DELETED-запись от имени отдельного администратора,
+    # а не подменяем весь сценарий на "владелец = админ" с самого начала.
+    admin_id, admin_token = await _register_and_login(client, "lifeadmin1")
+    await _promote_to_admin(db_session, admin_id)
+    assert await _audit_actions(client, admin_token, product_id) == [
         "created",
         "updated",
         "deleted",
@@ -174,4 +179,6 @@ async def test_admin_can_list_product_audit(
     response = await client.get("/products/audit", headers=_auth(admin_token))
 
     assert response.status_code == 200
-    assert len(response.json()) >= 1
+    # db_session изолирует каждый тест отдельной транзакцией с откатом
+    # (см. conftest.py), поэтому в этой БД ровно одна audit-запись.
+    assert len(response.json()) == 1
