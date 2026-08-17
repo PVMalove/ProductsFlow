@@ -11,3 +11,7 @@ Custom namespaced taxonomy (`hitl`/`afk` execution mode + `type::*` + `workflow:
 ### Domain docs
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Git workflow
+
+Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`. See `docs/agents/git-workflow.md`.
