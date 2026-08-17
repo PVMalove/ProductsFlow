@@ -46,8 +46,10 @@ async def seed_db() -> None:
         admin = await _ensure_admin_seeded(session)
         await _ensure_products_seeded(session, owner_id=admin.id)
 
+
 async def _ensure_admin_seeded(session: AsyncSession) -> User:
     from app.security import hash_password
+
     """Возвращает существующего или создаёт нового seed-админа."""
     existing = await session.scalar(
         select(User).where(User.username == _SEED_ADMIN["username"])
@@ -70,7 +72,6 @@ async def _ensure_products_seeded(session: AsyncSession, owner_id: int) -> None:
     count = result.scalar_one()
     if count > 0:
         return
-
 
     products = [
         Product(**product_data, user_id=owner_id) for product_data in _SEED_PRODUCTS
