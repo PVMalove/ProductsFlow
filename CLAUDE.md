@@ -19,3 +19,7 @@ Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight 
 ### Communication language
 
 The agent must always respond and generate output exclusively in Russian, regardless of the language of the prompt.
+
+### Artifacts management
+
+Rules for saving intermediate specs and scratchpads locally. See `docs/agents/artifacts.md`.
