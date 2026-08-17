@@ -10,6 +10,10 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 async def _create_owner(session: AsyncSession, username: str = "owner") -> int:
+    # Возвращаем голый id, а не User: большинство вызовов ProductRepository
+    # ниже сами делают session.commit(), после чего атрибуты owner истекают
+    # (expire_on_commit=True в фикстуре db_session) и повторное обращение
+    # к owner.id роняет тест с MissingGreenlet вне async-контекста.
     user = User(username=username, password_hash="hashed-password")
     session.add(user)
     await session.flush()
