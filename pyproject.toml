@@ -21,6 +21,8 @@ dependencies = [
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+# Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -32,8 +34,10 @@ select = ["E", "F", "I"]
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.1",
     "testcontainers[postgres]>=4.15.0",
 ]
