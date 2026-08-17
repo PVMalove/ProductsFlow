@@ -127,6 +127,11 @@ async def test_owner_loses_audit_access_after_deleting_their_own_product(
     _, owner_token = await _register_and_login(client, "deleter1")
     product_id = await _create_product_via_http(client, owner_token)
 
+    # Явно фиксируем, что до удаления у владельца был полный доступ к
+    # audit-логу — иначе тест ниже мог бы "случайно" пройти, если бы
+    # доступ был закрыт по какой-то другой причине, не связанной с удалением.
+    assert await _audit_actions(client, owner_token, product_id) == ["created"]
+
     delete_response = await client.delete(
         f"/products/{product_id}", headers=_auth(owner_token)
     )
@@ -177,10 +182,10 @@ async def test_reading_audit_for_a_product_that_never_existed_returns_404(
     await _promote_to_admin(db_session, admin_id)
 
     user_response = await client.get(
-        "/products/999999/audit", headers=_auth(user_token)
+        f"/products/{999_999}/audit", headers=_auth(user_token)
     )
     admin_response = await client.get(
-        "/products/999999/audit", headers=_auth(admin_token)
+        f"/products/{999_999}/audit", headers=_auth(admin_token)
     )
 
     assert user_response.status_code == 404
