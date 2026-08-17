@@ -47,8 +47,8 @@ class ProductRepository:
         needle = f"%{query}%"
         stmt: Select[Tuple[Product]] = select(Product).where(
             or_(
-                Product.name.like(needle.casefold()),
-                Product.description.like(needle.casefold()),
+                Product.name.ilike(needle),
+                Product.description.ilike(needle),
             )
         )
         return await self._fetch_products(stmt)
@@ -56,9 +56,9 @@ class ProductRepository:
     async def get_products_by_category(
         self, category_name: str
     ) -> list[ProductResponse]:
-        """Поиск по категории"""
+        """Поиск по категории (без учёта регистра)"""
         stmt: Select[Tuple[Product]] = select(Product).where(
-            Product.category == category_name.casefold()
+            Product.category.ilike(category_name)
         )
         return await self._fetch_products(stmt)
 
