@@ -47,8 +47,8 @@ class ProductRepository:
         needle = f"%{query}%"
         stmt: Select[Tuple[Product]] = select(Product).where(
             or_(
-                Product.name.like(needle.casefold()),
-                Product.description.like(needle.casefold()),
+                Product.name.ilike(needle),
+                Product.description.ilike(needle),
             )
         )
         return await self._fetch_products(stmt)
@@ -58,7 +58,7 @@ class ProductRepository:
     ) -> list[ProductResponse]:
         """Поиск по категории"""
         stmt: Select[Tuple[Product]] = select(Product).where(
-            Product.category == category_name.casefold()
+            func.lower(Product.category) == category_name.casefold()
         )
         return await self._fetch_products(stmt)
 
