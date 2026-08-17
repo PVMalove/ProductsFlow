@@ -23,13 +23,16 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    # app/db.py строит движок из settings.database_url при импорте модуля,
-    # а app/security.py подписывает JWT settings.secret_key — обе нужны
-    # ещё до того, как testcontainers поднимет собственный Postgres для
-    # самих тестов, поэтому значения ниже никогда реально не используются.
+    # DATABASE_URL нужен просто как синтаксически валидный URL: app/db.py
+    # строит движок из settings.database_url при импорте модуля (ещё до
+    # того, как testcontainers поднимет собственный Postgres для тестов),
+    # и без него create_async_engine() падает прямо на сборе тестов —
+    # реального подключения по этому URL никогда не происходит.
+    # SECRET_KEY, в отличие от него, используется по-настоящему: unit-тесты
+    # в tests/unit/test_security.py подписывают и проверяют JWT этим ключом.
     env:
       DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
-      SECRET_KEY: ci-only-placeholder-secret-key-not-used-for-anything-real
+      SECRET_KEY: ci-test-only-secret-key-do-not-use-in-production
     steps:
       - uses: actions/checkout@v4
 
