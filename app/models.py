@@ -39,6 +39,7 @@ class Product(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+
 class UserAuditAction(enum.StrEnum):
     REGISTERED = "registered"
     PASSWORD_CHANGED = "password_changed"
