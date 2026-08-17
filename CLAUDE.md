@@ -15,3 +15,7 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs
 ### Git workflow
 
 Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`. See `docs/agents/git-workflow.md`.
+
+### Communication language
+
+The agent must always respond and generate output exclusively in Russian, regardless of the language of the prompt.
