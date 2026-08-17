@@ -226,3 +226,5 @@ __marimo__/
 .agents
 
 skills-lock.json
+/CONTEXT.md
+/SPEC.md
