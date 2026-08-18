@@ -46,22 +46,38 @@ async def get_products(
     viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
     return await repository.get_products_page(
         limit=limit,
-        after=parse_cursor(after),
-        before=parse_cursor(before),
+        after=_parse_cursor(after),
+        before=_parse_cursor(before),
         viewer_is_admin=viewer_is_admin,
     )
 
 
 @router.get(
     "/search",
-    response_model=list[ProductResponse],
+    response_model=ProductListResponse,
 )
 async def search_products(
     query: str,
     repository: ProductRepositoryDI,
-    _current_user: CurrentUser,
-) -> list[ProductResponse]:
-    return await repository.search_products(query)
+    viewer: OptionalUser,
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+) -> ProductListResponse:
+    if after is not None and before is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя одновременно указать after и before",
+        )
+
+    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    return await repository.search_products_page(
+        query,
+        limit=limit,
+        after=_parse_cursor(after),
+        before=_parse_cursor(before),
+        viewer_is_admin=viewer_is_admin,
+    )
 
 
 @router.get(
@@ -95,7 +111,7 @@ async def list_all_product_audit_logs(
 async def get_product(
     product_id: ProductId, repository: ProductRepositoryDI
 ) -> ProductResponse:
-    return ensure_product_exists(await repository.get_product_by_id(product_id))
+    return _ensure_product_exists(await repository.get_product_by_id(product_id))
 
 
 @router.get(
@@ -134,10 +150,10 @@ async def update_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> None:
-    existing_product = ensure_product_exists(
+    existing_product = _ensure_product_exists(
         await repository.get_product_by_id(product_id)
     )
-    ensure_owner_or_admin(existing_product, current_user)
+    _ensure_owner_or_admin(existing_product, current_user)
     await repository.update_product(product_id, product_update)
 
 
@@ -151,10 +167,10 @@ async def delete_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> None:
-    existing_product = ensure_product_exists(
+    existing_product = _ensure_product_exists(
         await repository.get_product_by_id(product_id)
     )
-    ensure_owner_or_admin(existing_product, current_user)
+    _ensure_owner_or_admin(existing_product, current_user)
     await repository.delete_product(product_id)
 
 
@@ -172,7 +188,7 @@ async def get_product_audit_logs(
     logs = await audit_repository.get_audit_logs_by_product(product_id)
 
     if product is not None:
-        ensure_owner_or_admin(product, current_user)
+        _ensure_owner_or_admin(product, current_user)
     elif logs:
         # Продукт удалён — владельца проверить уже не по чему, доступ только админу.
         if current_user.role != UserRole.ADMIN:
@@ -189,7 +205,7 @@ async def get_product_audit_logs(
     return logs
 
 
-def ensure_product_exists(entity: T | None) -> T:
+def _ensure_product_exists(entity: T | None) -> T:
     if not entity:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -198,7 +214,7 @@ def ensure_product_exists(entity: T | None) -> T:
     return entity
 
 
-def ensure_owner_or_admin(
+def _ensure_owner_or_admin(
     product: Product | ProductResponse, current_user: User
 ) -> None:
     is_owner = product.user_id == current_user.id
@@ -210,7 +226,7 @@ def ensure_owner_or_admin(
         )
 
 
-def parse_cursor(raw: str | None) -> Cursor | None:
+def _parse_cursor(raw: str | None) -> Cursor | None:
     if raw is None:
         return None
     try:

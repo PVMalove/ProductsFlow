@@ -41,7 +41,6 @@ class ProductRepository:
         viewer_is_admin: bool,
     ) -> ProductListResponse:
         """Постраничный список продуктов, новые сначала"""
-        # Сортировка — ADR 0001, видимость деактивированных владельцев — CONTEXT.md.
         base_stmt = select(Product)
         if not viewer_is_admin:
             base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
@@ -60,16 +59,30 @@ class ProductRepository:
         product = await self.session.get(Product, product_id)
         return ProductResponse.model_validate(product) if product else None
 
-    async def search_products(self, query: str) -> list[ProductResponse]:
-        """Поиск по имени и описанию (без учёта регистра)"""
+    async def search_products_page(
+        self,
+        query: str,
+        *,
+        limit: int,
+        after: Cursor | None,
+        before: Cursor | None,
+        viewer_is_admin: bool,
+    ) -> ProductListResponse:
+        """Постраничный поиск по имени/описанию (без учёта регистра), новые сначала"""
         needle = f"%{query}%"
-        stmt: Select[Tuple[Product]] = select(Product).where(
+        base_stmt = select(Product).where(
             or_(
                 Product.name.ilike(needle),
                 Product.description.ilike(needle),
             )
         )
-        return await self._fetch_products(stmt)
+        if not viewer_is_admin:
+            base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
+                User.is_active.is_(True)
+            )
+        return await self._fetch_page(
+            base_stmt, limit=limit, after=after, before=before
+        )
 
     async def get_products_by_category(
         self, category_name: str

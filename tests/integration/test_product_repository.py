@@ -340,7 +340,7 @@ async def test_get_products_page_returns_an_empty_page_when_there_are_no_product
     )
 
 
-async def test_search_products_matches_the_name_regardless_of_case(
+async def test_search_products_page_matches_the_name_regardless_of_case(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
@@ -349,14 +349,18 @@ async def test_search_products_matches_the_name_regardless_of_case(
     await _create_product(db_session, owner_id, name="Ноутбук")
     repository = ProductRepository(db_session)
 
-    lower = await repository.search_products("ноутбук")
-    upper = await repository.search_products("НОУТБУК")
+    lower = await repository.search_products_page(
+        "ноутбук", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+    upper = await repository.search_products_page(
+        "НОУТБУК", limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert [product.name for product in lower] == ["Ноутбук"]
-    assert [product.name for product in upper] == ["Ноутбук"]
+    assert [product.name for product in lower.items] == ["Ноутбук"]
+    assert [product.name for product in upper.items] == ["Ноутбук"]
 
 
-async def test_search_products_matches_the_description_regardless_of_case(
+async def test_search_products_page_matches_the_description_regardless_of_case(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
@@ -365,19 +369,95 @@ async def test_search_products_matches_the_description_regardless_of_case(
     )
     repository = ProductRepository(db_session)
 
-    found = await repository.search_products("ЭЛЕКТРИЧЕСКИЙ")
+    found = await repository.search_products_page(
+        "ЭЛЕКТРИЧЕСКИЙ", limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert [product.name for product in found] == ["Чайник"]
+    assert [product.name for product in found.items] == ["Чайник"]
 
 
-async def test_search_products_does_not_match_unrelated_products(
+async def test_search_products_page_does_not_match_unrelated_products(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
     await _create_product(db_session, owner_id, name="Ноутбук")
     repository = ProductRepository(db_session)
 
-    assert await repository.search_products("холодильник") == []
+    found = await repository.search_products_page(
+        "холодильник", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert found.items == []
+
+
+async def test_search_products_page_after_cursor_returns_the_remaining_matching_rows(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    first = await _create_product(db_session, owner_id, name="Ноутбук Первый")
+    await _create_product(db_session, owner_id, name="Холодильник")
+    second = await _create_product(db_session, owner_id, name="Ноутбук Второй")
+    third = await _create_product(db_session, owner_id, name="Ноутбук Третий")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.search_products_page(
+        "Ноутбук", limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [third.id, second.id]
+
+    second_page = await repository.search_products_page(
+        "Ноутбук",
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    # "Холодильник" не подходит под query — не должен просочиться на вторую
+    # страницу курсорной навигации, хотя и стоит между двумя "Ноутбук" по
+    # created_at.
+    assert [product.id for product in second_page.items] == [first.id]
+    assert second_page.page_info.has_more is False
+
+
+async def test_search_products_page_hides_matches_of_deactivated_owners_by_default(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="search_active_owner")
+    inactive_owner_id = await _create_owner(
+        db_session, username="search_inactive_owner"
+    )
+    visible = await _create_product(db_session, active_owner_id, name="Ноутбук Актив")
+    await _create_product(db_session, inactive_owner_id, name="Ноутбук Скрытый")
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.search_products_page(
+        "Ноутбук", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_search_products_page_admin_sees_matches_of_deactivated_owners(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="search_active_owner2")
+    inactive_owner_id = await _create_owner(
+        db_session, username="search_inactive_owner2"
+    )
+    visible = await _create_product(db_session, active_owner_id, name="Ноутбук Актив")
+    hidden = await _create_product(
+        db_session, inactive_owner_id, name="Ноутбук Скрытый"
+    )
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.search_products_page(
+        "Ноутбук", limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
 async def test_get_products_by_category_matches_regardless_of_case(
