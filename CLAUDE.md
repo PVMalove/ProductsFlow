@@ -59,7 +59,7 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs
 
 ### Git workflow
 
-Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`. See `docs/agents/git-workflow.md`.
+Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`; after the PR is open, the agent pauses for the developer's review-or-changes decision and never merges it itself. See `docs/agents/git-workflow.md`.
 
 ### Communication language
 
