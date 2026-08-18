@@ -46,22 +46,10 @@ async def get_products(
     viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
     return await repository.get_products_page(
         limit=limit,
-        after=_parse_cursor(after),
-        before=_parse_cursor(before),
+        after=parse_cursor(after),
+        before=parse_cursor(before),
         viewer_is_admin=viewer_is_admin,
     )
-
-
-def _parse_cursor(raw: str | None) -> Cursor | None:
-    if raw is None:
-        return None
-    try:
-        return decode_cursor(raw)
-    except InvalidCursorError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Некорректный курсор пагинации",
-        ) from exc
 
 
 @router.get(
@@ -220,3 +208,15 @@ def ensure_owner_or_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Нет прав на этот продукт!",
         )
+
+
+def parse_cursor(raw: str | None) -> Cursor | None:
+    if raw is None:
+        return None
+    try:
+        return decode_cursor(raw)
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный курсор пагинации",
+        ) from exc

@@ -40,6 +40,7 @@ class ProductRepository:
         before: Cursor | None,
         viewer_is_admin: bool,
     ) -> ProductListResponse:
+        """Постраничный список продуктов, новые сначала"""
         # Сортировка — ADR 0001, видимость деактивированных владельцев — CONTEXT.md.
         base_stmt = select(Product)
         if not viewer_is_admin:
@@ -132,6 +133,13 @@ class ProductRepository:
         result = await self.session.scalars(stmt)
         return [ProductResponse.model_validate(row) for row in result.all()]
 
+    async def _overfetch(
+        self, stmt: Select[Tuple[Product]], limit: int
+    ) -> tuple[list[Product], bool]:
+        """Выполняет stmt с overfetch +1 (ADR 0001); True = за limit есть ещё строка"""
+        rows = list((await self.session.scalars(stmt.limit(limit + 1))).all())
+        return rows[:limit], len(rows) > limit
+
     async def _fetch_page(
         self,
         base_stmt: Select[Tuple[Product]],
@@ -142,17 +150,10 @@ class ProductRepository:
     ) -> ProductListResponse:
         # Общий keyset-хелпер поверх base_stmt — переиспользуется для #16-18.
         if before is not None:
-            stmt = (
-                base_stmt.where(
-                    tuple_(Product.created_at, Product.id)
-                    > (before.created_at, before.id)
-                )
-                .order_by(Product.created_at.asc(), Product.id.asc())
-                .limit(limit + 1)
-            )
-            rows = list((await self.session.scalars(stmt)).all())
-            has_prev = len(rows) > limit
-            page = rows[:limit]
+            stmt = base_stmt.where(
+                tuple_(Product.created_at, Product.id) > (before.created_at, before.id)
+            ).order_by(Product.created_at.asc(), Product.id.asc())
+            page, has_prev = await self._overfetch(stmt, limit)
             page.reverse()
             # before передан ⇒ есть страница вперёд, к более старым (Relay-style).
             has_more = True
@@ -163,12 +164,8 @@ class ProductRepository:
                     tuple_(Product.created_at, Product.id)
                     < (after.created_at, after.id)
                 )
-            stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc()).limit(
-                limit + 1
-            )
-            rows = list((await self.session.scalars(stmt)).all())
-            has_more = len(rows) > limit
-            page = rows[:limit]
+            stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
+            page, has_more = await self._overfetch(stmt, limit)
             # Relay-style: курсор передан ⇒ предыдущая страница есть.
             has_prev = after is not None
 

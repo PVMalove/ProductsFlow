@@ -1,3 +1,4 @@
+from base64 import urlsafe_b64encode
 from datetime import datetime
 
 import pytest
@@ -25,8 +26,6 @@ def test_decode_cursor_rejects_a_token_that_is_not_valid_base64():
 
 
 def test_decode_cursor_rejects_a_token_missing_the_id_part():
-    from base64 import urlsafe_b64encode
-
     malformed = urlsafe_b64encode(b"2026-08-18T12:30:45").decode("ascii")
 
     with pytest.raises(InvalidCursorError):
@@ -34,8 +33,6 @@ def test_decode_cursor_rejects_a_token_missing_the_id_part():
 
 
 def test_decode_cursor_rejects_a_token_with_a_non_integer_id():
-    from base64 import urlsafe_b64encode
-
     malformed = urlsafe_b64encode(b"2026-08-18T12:30:45|not-an-id").decode("ascii")
 
     with pytest.raises(InvalidCursorError):
@@ -43,8 +40,6 @@ def test_decode_cursor_rejects_a_token_with_a_non_integer_id():
 
 
 def test_decode_cursor_rejects_a_token_with_an_unparseable_timestamp():
-    from base64 import urlsafe_b64encode
-
     malformed = urlsafe_b64encode(b"not-a-date|42").decode("ascii")
 
     with pytest.raises(InvalidCursorError):

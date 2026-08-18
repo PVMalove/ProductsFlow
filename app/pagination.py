@@ -20,8 +20,8 @@ class Cursor:
     id: int
 
 
-def encode_cursor(created_at: datetime, id: int) -> str:
-    raw = f"{created_at.isoformat()}|{id}"
+def encode_cursor(created_at: datetime, product_id: int) -> str:
+    raw = f"{created_at.isoformat()}|{product_id}"
     return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
 
 
