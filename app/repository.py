@@ -34,7 +34,6 @@ class ProductRepository:
 
     async def get_products_page(
         self,
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
@@ -62,7 +61,6 @@ class ProductRepository:
     async def search_products_page(
         self,
         query: str,
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
@@ -97,14 +95,12 @@ class ProductRepository:
         self,
         min_price: float | None,
         max_price: float | None,
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
         viewer_is_admin: bool,
     ) -> ProductListResponse:
         """Постраничный список продуктов в диапазоне цен, новые сначала"""
-        # Сортировка — ADR 0001, видимость деактивированных владельцев — CONTEXT.md.
         base_stmt = select(Product).where(
             Product.price.between(
                 func.coalesce(min_price, Product.price),
@@ -170,7 +166,6 @@ class ProductRepository:
     async def _fetch_page(
         self,
         base_stmt: Select[Tuple[Product]],
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
