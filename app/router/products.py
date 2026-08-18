@@ -3,15 +3,23 @@ from typing import TypeVar
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.models import Product, User, UserRole
+from app.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    Cursor,
+    InvalidCursorError,
+    decode_cursor,
+)
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
 from app.schemas import (
     ProductAuditLogResponse,
     ProductCreate,
     ProductId,
+    ProductListResponse,
     ProductResponse,
     ProductUpdate,
 )
-from app.security import AdminUser, CurrentUser
+from app.security import AdminUser, CurrentUser, OptionalUser
 
 T = TypeVar("T")
 
@@ -20,10 +28,40 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 @router.get(
     "/",
-    response_model=list[ProductResponse],
+    response_model=ProductListResponse,
 )
-async def get_products(repository: ProductRepositoryDI) -> list[ProductResponse]:
-    return await repository.get_all_products()
+async def get_products(
+    repository: ProductRepositoryDI,
+    viewer: OptionalUser,
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+) -> ProductListResponse:
+    if after is not None and before is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя одновременно указать after и before",
+        )
+
+    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    return await repository.get_products_page(
+        limit=limit,
+        after=_parse_cursor(after),
+        before=_parse_cursor(before),
+        viewer_is_admin=viewer_is_admin,
+    )
+
+
+def _parse_cursor(raw: str | None) -> Cursor | None:
+    if raw is None:
+        return None
+    try:
+        return decode_cursor(raw)
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный курсор пагинации",
+        ) from exc
 
 
 @router.get(

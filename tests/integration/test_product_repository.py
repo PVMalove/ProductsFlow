@@ -3,8 +3,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Product, ProductAuditAction, ProductAuditLog, User
+from app.pagination import Cursor, decode_cursor
 from app.repository import ProductRepository
-from app.schemas import ProductCreate, ProductResponse, ProductUpdate
+from app.schemas import (
+    ProductCreate,
+    ProductListResponse,
+    ProductResponse,
+    ProductUpdate,
+)
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -18,6 +24,18 @@ async def _create_owner(session: AsyncSession, username: str = "owner") -> int:
     session.add(user)
     await session.flush()
     return user.id
+
+
+async def _deactivate_owner(session: AsyncSession, owner_id: int) -> None:
+    owner = await session.get(User, owner_id)
+    assert owner is not None
+    owner.is_active = False
+    await session.commit()
+
+
+def _cursor_of(raw: str | None) -> Cursor:
+    assert raw is not None
+    return decode_cursor(raw)
 
 
 async def _create_product(
@@ -93,17 +111,233 @@ async def test_get_product_by_id_returns_none_for_an_unknown_id(
     assert await repository.get_product_by_id(999_999) is None
 
 
-async def test_get_all_products_returns_every_product(
+async def test_get_products_page_orders_newest_first(db_session: AsyncSession) -> None:
+    owner_id = await _create_owner(db_session)
+    first = await _create_product(db_session, owner_id, name="Первый")
+    second = await _create_product(db_session, owner_id, name="Второй")
+    third = await _create_product(db_session, owner_id, name="Третий")
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [third.id, second.id, first.id]
+
+
+async def test_get_products_page_first_page_reports_no_previous_page(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
-    await _create_product(db_session, owner_id, name="Ноутбук")
-    await _create_product(db_session, owner_id, name="Смартфон")
+    await _create_product(db_session, owner_id)
+    await _create_product(db_session, owner_id)
+    await _create_product(db_session, owner_id)
     repository = ProductRepository(db_session)
 
-    products = await repository.get_all_products()
+    page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert {product.name for product in products} == {"Ноутбук", "Смартфон"}
+    assert len(page.items) == 2
+    assert page.page_info.has_prev is False
+    assert page.page_info.prev_cursor is None
+
+
+async def test_get_products_page_reports_a_next_cursor_when_more_rows_exist(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    await _create_product(db_session, owner_id)
+    await _create_product(db_session, owner_id)
+    await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert page.page_info.has_more is True
+    assert page.page_info.next_cursor is not None
+    last_item = page.items[-1]
+    cursor = _cursor_of(page.page_info.next_cursor)
+    assert cursor.created_at == last_item.created_at
+    assert cursor.id == last_item.id
+
+
+async def test_get_products_page_after_cursor_returns_the_remaining_rows(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    first = await _create_product(db_session, owner_id, name="Первый")
+    await _create_product(db_session, owner_id, name="Второй")
+    await _create_product(db_session, owner_id, name="Третий")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert first_page.page_info.next_cursor is not None
+
+    second_page = await repository.get_products_page(
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    assert [product.id for product in second_page.items] == [first.id]
+    assert second_page.page_info.has_more is False
+    assert second_page.page_info.next_cursor is None
+    assert second_page.page_info.has_prev is True
+    assert second_page.page_info.prev_cursor is not None
+
+
+async def test_get_products_page_before_cursor_returns_the_previous_page(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    p1 = await _create_product(db_session, owner_id, name="Товар1")
+    p2 = await _create_product(db_session, owner_id, name="Товар2")
+    p3 = await _create_product(db_session, owner_id, name="Товар3")
+    p4 = await _create_product(db_session, owner_id, name="Товар4")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [p4.id, p3.id]
+
+    second_page = await repository.get_products_page(
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+    assert [product.id for product in second_page.items] == [p2.id, p1.id]
+
+    back_to_first_page = await repository.get_products_page(
+        limit=2,
+        after=None,
+        before=_cursor_of(second_page.page_info.prev_cursor),
+        viewer_is_admin=False,
+    )
+
+    assert [product.id for product in back_to_first_page.items] == [p4.id, p3.id]
+    assert back_to_first_page.page_info.has_prev is False
+    assert back_to_first_page.page_info.prev_cursor is None
+    assert back_to_first_page.page_info.has_more is True
+
+
+async def test_get_products_page_is_unaffected_by_deleting_an_already_delivered_row(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    p1 = await _create_product(db_session, owner_id, name="Товар1")
+    p2 = await _create_product(db_session, owner_id, name="Товар2")
+    p3 = await _create_product(db_session, owner_id, name="Товар3")
+    p4 = await _create_product(db_session, owner_id, name="Товар4")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [p4.id, p3.id]
+
+    await repository.delete_product(p3.id)
+
+    second_page = await repository.get_products_page(
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    # p3 уже отдан на первой странице — его удаление не влияет на вторую.
+    assert [product.id for product in second_page.items] == [p2.id, p1.id]
+    assert second_page.page_info.has_more is False
+
+
+async def test_get_products_page_skips_a_row_deleted_before_it_was_delivered(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    p1 = await _create_product(db_session, owner_id, name="Товар1")
+    p2 = await _create_product(db_session, owner_id, name="Товар2")
+    p3 = await _create_product(db_session, owner_id, name="Товар3")
+    p4 = await _create_product(db_session, owner_id, name="Товар4")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_page(
+        limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [p4.id, p3.id]
+
+    await repository.delete_product(p2.id)
+
+    second_page = await repository.get_products_page(
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    assert [product.id for product in second_page.items] == [p1.id]
+
+
+async def test_get_products_page_hides_products_of_deactivated_owners_by_default(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="active_owner")
+    inactive_owner_id = await _create_owner(db_session, username="inactive_owner")
+    visible = await _create_product(db_session, active_owner_id, name="Видимый")
+    await _create_product(db_session, inactive_owner_id, name="Скрытый")
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_get_products_page_admin_sees_products_of_deactivated_owners(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="active_owner2")
+    inactive_owner_id = await _create_owner(db_session, username="inactive_owner2")
+    visible = await _create_product(db_session, active_owner_id, name="Видимый")
+    hidden = await _create_product(db_session, inactive_owner_id, name="Скрытый")
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
+
+
+async def test_get_products_page_returns_an_empty_page_when_there_are_no_products(
+    db_session: AsyncSession,
+) -> None:
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert page == ProductListResponse.model_validate(
+        {
+            "items": [],
+            "page_info": {
+                "next_cursor": None,
+                "prev_cursor": None,
+                "has_more": False,
+                "has_prev": False,
+            },
+        }
+    )
 
 
 async def test_search_products_matches_the_name_regardless_of_case(

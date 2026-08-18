@@ -64,6 +64,18 @@ class ProductResponse(ProductBase):
     created_at: datetime
 
 
+class PageInfo(BaseModel):
+    next_cursor: str | None
+    prev_cursor: str | None
+    has_more: bool
+    has_prev: bool
+
+
+class ProductListResponse(BaseModel):
+    items: list[ProductResponse]
+    page_info: PageInfo
+
+
 class UserBase(BaseModel):
     username: str = Field(min_length=3, max_length=10)
 
