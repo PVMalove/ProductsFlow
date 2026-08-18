@@ -121,14 +121,26 @@ async def get_product(
 
 @router.get(
     "/category/{category_name}",
-    response_model=list[ProductResponse],
+    response_model=ProductListResponse,
 )
 async def get_products_by_category(
     category_name: str,
     repository: ProductRepositoryDI,
-    _current_user: CurrentUser,
-) -> list[ProductResponse]:
-    return await repository.get_products_by_category(category_name)
+    viewer: OptionalUser,
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+) -> ProductListResponse:
+    after_cursor, before_cursor, viewer_is_admin = _resolve_page_request(
+        viewer, after, before
+    )
+    return await repository.get_products_by_category_page(
+        category_name,
+        limit=limit,
+        after=after_cursor,
+        before=before_cursor,
+        viewer_is_admin=viewer_is_admin,
+    )
 
 
 @router.post(

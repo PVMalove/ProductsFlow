@@ -791,3 +791,273 @@ async def test_price_range_with_a_deactivated_callers_token_returns_403_not_anon
     )
 
     assert response.status_code == 403
+
+
+async def test_category_without_a_token_returns_the_envelope_shape(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "catown1")
+    await _create_product_via_http(client, owner_token, category="Электроника")
+
+    response = await client.get("/products/category/Электроника")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "items" in body
+    assert set(body["page_info"]) == {
+        "next_cursor",
+        "prev_cursor",
+        "has_more",
+        "has_prev",
+    }
+
+
+async def test_category_only_returns_items_in_that_category(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "catown2")
+    await _create_product_via_http(
+        client, owner_token, name="Ноутбук", category="Электроника"
+    )
+    await _create_product_via_http(client, owner_token, name="Роман", category="Книги")
+
+    response = await client.get("/products/category/Электроника")
+
+    names = [item["name"] for item in response.json()["items"]]
+    assert names == ["Ноутбук"]
+
+
+async def test_category_orders_newest_first(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "catown3")
+    await _create_product_via_http(
+        client, owner_token, name="Первый", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Второй", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Третий", category="Электроника"
+    )
+
+    response = await client.get("/products/category/Электроника")
+
+    names = [item["name"] for item in response.json()["items"]]
+    assert names == ["Третий", "Второй", "Первый"]
+
+
+async def test_category_respects_the_limit_query_param(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "catown4")
+    await _create_product_via_http(
+        client, owner_token, name="Первый", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Второй", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Третий", category="Электроника"
+    )
+
+    response = await client.get("/products/category/Электроника", params={"limit": 1})
+
+    body = response.json()
+    assert len(body["items"]) == 1
+    assert body["page_info"]["has_more"] is True
+
+
+async def test_category_after_cursor_stays_within_category(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "catown5")
+    await _create_product_via_http(
+        client, owner_token, name="Товар А", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Товар Чужой", category="Книги"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Товар Б", category="Электроника"
+    )
+
+    first_page = (
+        await client.get("/products/category/Электроника", params={"limit": 1})
+    ).json()
+    assert [item["name"] for item in first_page["items"]] == ["Товар Б"]
+
+    second_page = (
+        await client.get(
+            "/products/category/Электроника",
+            params={"limit": 1, "after": first_page["page_info"]["next_cursor"]},
+        )
+    ).json()
+
+    # "Товар Чужой" из другой категории — не должен просочиться на вторую
+    # страницу, хотя и создан между А и Б по created_at.
+    assert [item["name"] for item in second_page["items"]] == ["Товар А"]
+    assert second_page["page_info"]["has_more"] is False
+
+
+async def test_category_before_cursor_returns_back_to_the_previous_page(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "catown6")
+    await _create_product_via_http(
+        client, owner_token, name="Первый", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Второй", category="Электроника"
+    )
+    await _create_product_via_http(
+        client, owner_token, name="Третий", category="Электроника"
+    )
+
+    first_page = (
+        await client.get("/products/category/Электроника", params={"limit": 2})
+    ).json()
+    second_page = (
+        await client.get(
+            "/products/category/Электроника",
+            params={"limit": 2, "after": first_page["page_info"]["next_cursor"]},
+        )
+    ).json()
+
+    back_to_first_page = (
+        await client.get(
+            "/products/category/Электроника",
+            params={"limit": 2, "before": second_page["page_info"]["prev_cursor"]},
+        )
+    ).json()
+
+    assert [item["name"] for item in back_to_first_page["items"]] == [
+        "Третий",
+        "Второй",
+    ]
+    assert back_to_first_page["page_info"]["has_prev"] is False
+    assert back_to_first_page["page_info"]["prev_cursor"] is None
+
+
+async def test_category_with_no_matches_returns_an_empty_envelope(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "catown7")
+    await _create_product_via_http(client, owner_token, name="Роман", category="Книги")
+
+    response = await client.get("/products/category/Электроника")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "page_info": {
+            "next_cursor": None,
+            "prev_cursor": None,
+            "has_more": False,
+            "has_prev": False,
+        },
+    }
+
+
+async def test_category_rejects_both_after_and_before_at_once(
+    client: AsyncClient,
+) -> None:
+    response = await client.get(
+        "/products/category/Электроника",
+        params={"after": "whatever", "before": "whatever"},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_category_rejects_a_malformed_cursor(client: AsyncClient) -> None:
+    response = await client.get(
+        "/products/category/Электроника", params={"after": "not-valid-base64!!!"}
+    )
+
+    assert response.status_code == 400
+
+
+async def test_category_hides_matches_of_a_deactivated_owner_for_anonymous_callers(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "catadm1")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "catown8")
+    await _create_product_via_http(
+        client, owner_token, name="Скрытый", category="Электроника"
+    )
+
+    deactivate_response = await client.patch(
+        f"/users/{owner_id}/deactivate", headers=_auth(admin_token)
+    )
+    assert deactivate_response.status_code == 200
+
+    response = await client.get("/products/category/Электроника")
+
+    assert response.json()["items"] == []
+
+
+async def test_category_hides_matches_of_a_deactivated_owner_for_regular_users(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "catadm2")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "catown9")
+    await _create_product_via_http(
+        client, owner_token, name="Скрытый", category="Электроника"
+    )
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    _, other_token = await _register_and_login(client, "catview1")
+    response = await client.get(
+        "/products/category/Электроника", headers=_auth(other_token)
+    )
+
+    assert response.json()["items"] == []
+
+
+async def test_category_shows_matches_of_a_deactivated_owner_to_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "catadm3")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "catown10")
+    await _create_product_via_http(
+        client, owner_token, name="Скрытый", category="Электроника"
+    )
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(
+        "/products/category/Электроника", headers=_auth(admin_token)
+    )
+
+    assert [item["name"] for item in response.json()["items"]] == ["Скрытый"]
+
+
+async def test_category_with_an_invalid_token_returns_401_not_anonymous(
+    client: AsyncClient,
+) -> None:
+    response = await client.get(
+        "/products/category/Электроника",
+        headers={"Authorization": "Bearer not-a-real-jwt"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_category_with_a_deactivated_callers_token_returns_403_not_anonymous(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "catadm4")
+    await _promote_to_admin(db_session, admin_id)
+
+    caller_id, caller_token = await _register_and_login(client, "catcall1")
+    await client.patch(f"/users/{caller_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(
+        "/products/category/Электроника", headers=_auth(caller_token)
+    )
+
+    assert response.status_code == 403

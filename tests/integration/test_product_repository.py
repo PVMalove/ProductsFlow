@@ -460,28 +460,110 @@ async def test_search_products_page_admin_sees_matches_of_deactivated_owners(
     assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
-async def test_get_products_by_category_matches_regardless_of_case(
+async def test_get_products_by_category_page_matches_regardless_of_case(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
     await _create_product(db_session, owner_id, category="Электроника")
     repository = ProductRepository(db_session)
 
-    lower = await repository.get_products_by_category("электроника")
-    upper = await repository.get_products_by_category("ЭЛЕКТРОНИКА")
+    lower = await repository.get_products_by_category_page(
+        "электроника", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+    upper = await repository.get_products_by_category_page(
+        "ЭЛЕКТРОНИКА", limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert len(lower) == 1
-    assert len(upper) == 1
+    assert len(lower.items) == 1
+    assert len(upper.items) == 1
 
 
-async def test_get_products_by_category_does_not_match_a_different_category(
+async def test_get_products_by_category_page_does_not_match_a_different_category(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
     await _create_product(db_session, owner_id, category="Электроника")
     repository = ProductRepository(db_session)
 
-    assert await repository.get_products_by_category("Книги") == []
+    found = await repository.get_products_by_category_page(
+        "Книги", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert found.items == []
+
+
+async def test_get_products_by_category_page_after_cursor_stays_within_category(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    a = await _create_product(
+        db_session, owner_id, name="Товар А", category="Электроника"
+    )
+    await _create_product(db_session, owner_id, name="Товар Чужой", category="Книги")
+    b = await _create_product(
+        db_session, owner_id, name="Товар Б", category="Электроника"
+    )
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_by_category_page(
+        "Электроника", limit=1, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [b.id]
+
+    second_page = await repository.get_products_by_category_page(
+        "Электроника",
+        limit=1,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    # "Товар Чужой" из другой категории — не должен просочиться на вторую
+    # страницу курсорной навигации, хотя и стоит между А и Б по created_at.
+    assert [product.id for product in second_page.items] == [a.id]
+    assert second_page.page_info.has_more is False
+
+
+async def test_category_page_hides_matches_of_deactivated_owners_by_default(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="cat_active_owner")
+    inactive_owner_id = await _create_owner(db_session, username="cat_inactive_owner")
+    visible = await _create_product(
+        db_session, active_owner_id, name="Видимый", category="Электроника"
+    )
+    await _create_product(
+        db_session, inactive_owner_id, name="Скрытый", category="Электроника"
+    )
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_category_page(
+        "Электроника", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_category_page_admin_sees_matches_of_deactivated_owners(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="cat_active_owner2")
+    inactive_owner_id = await _create_owner(db_session, username="cat_inactive_owner2")
+    visible = await _create_product(
+        db_session, active_owner_id, name="Видимый", category="Электроника"
+    )
+    hidden = await _create_product(
+        db_session, inactive_owner_id, name="Скрытый", category="Электроника"
+    )
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_category_page(
+        "Электроника", limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
 async def test_get_products_by_price_range_page_filters_by_both_bounds(
