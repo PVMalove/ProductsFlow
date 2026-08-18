@@ -54,14 +54,30 @@ async def get_products(
 
 @router.get(
     "/search",
-    response_model=list[ProductResponse],
+    response_model=ProductListResponse,
 )
 async def search_products(
     query: str,
     repository: ProductRepositoryDI,
-    _current_user: CurrentUser,
-) -> list[ProductResponse]:
-    return await repository.search_products(query)
+    viewer: OptionalUser,
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+) -> ProductListResponse:
+    if after is not None and before is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя одновременно указать after и before",
+        )
+
+    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    return await repository.search_products_page(
+        query,
+        limit=limit,
+        after=parse_cursor(after),
+        before=parse_cursor(before),
+        viewer_is_admin=viewer_is_admin,
+    )
 
 
 @router.get(
