@@ -53,9 +53,17 @@ class ProductRepository:
         stmt = select(exists().where(Product.id == product_id))
         return bool(await self.session.scalar(stmt))
 
-    async def get_product_by_id(self, product_id: ProductId) -> ProductResponse | None:
-        """Получаем продукт по ID"""
-        product = await self.session.get(Product, product_id)
+    async def get_product_by_id(
+        self, product_id: ProductId, viewer_is_admin: bool
+    ) -> ProductResponse | None:
+        """Получаем продукт по ID (видимость — только при viewer_is_admin=False)"""
+        stmt = select(Product).where(Product.id == product_id)
+        if not viewer_is_admin:
+            # Видимость деактивированных владельцев — ADR 0002/CONTEXT.md.
+            stmt = stmt.join(User, Product.user_id == User.id).where(
+                User.is_active.is_(True)
+            )
+        product = await self.session.scalar(stmt)
         return ProductResponse.model_validate(product) if product else None
 
     async def search_products_page(

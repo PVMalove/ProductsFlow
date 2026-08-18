@@ -1061,3 +1061,107 @@ async def test_category_with_a_deactivated_callers_token_returns_403_not_anonymo
     )
 
     assert response.status_code == 403
+
+
+async def test_get_product_returns_the_product_for_an_active_owner_anonymously(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "idown1")
+    product_id = await _create_product_via_http(client, owner_token, name="Ноутбук")
+
+    response = await client.get(f"/products/{product_id}")
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Ноутбук"
+
+
+async def test_get_product_hides_a_deactivated_owners_product_from_anonymous_callers(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "idadm1")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "idown2")
+    product_id = await _create_product_via_http(client, owner_token, name="Скрытый")
+
+    deactivate_response = await client.patch(
+        f"/users/{owner_id}/deactivate", headers=_auth(admin_token)
+    )
+    assert deactivate_response.status_code == 200
+
+    response = await client.get(f"/products/{product_id}")
+
+    assert response.status_code == 404
+
+
+async def test_get_product_hides_a_deactivated_owners_product_from_regular_users(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "idadm2")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "idown3")
+    product_id = await _create_product_via_http(client, owner_token, name="Скрытый")
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    _, other_token = await _register_and_login(client, "idview1")
+    response = await client.get(f"/products/{product_id}", headers=_auth(other_token))
+
+    assert response.status_code == 404
+
+
+async def test_get_product_shows_a_deactivated_owners_product_to_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "idadm3")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "idown4")
+    product_id = await _create_product_via_http(client, owner_token, name="Скрытый")
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(f"/products/{product_id}", headers=_auth(admin_token))
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Скрытый"
+
+
+async def test_get_product_for_a_nonexistent_id_still_returns_404(
+    client: AsyncClient,
+) -> None:
+    response = await client.get(f"/products/{999_999}")
+
+    assert response.status_code == 404
+
+
+async def test_get_product_with_an_invalid_token_returns_401_not_anonymous(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "idown5")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    response = await client.get(
+        f"/products/{product_id}",
+        headers={"Authorization": "Bearer not-a-real-jwt"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_get_product_with_a_deactivated_callers_token_returns_403_not_anonymous(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "idadm4")
+    await _promote_to_admin(db_session, admin_id)
+
+    _, owner_token2 = await _register_and_login(client, "idown6")
+    product_id = await _create_product_via_http(client, owner_token2)
+
+    caller_id, caller_token = await _register_and_login(client, "idcall1")
+    await client.patch(f"/users/{caller_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(f"/products/{product_id}", headers=_auth(caller_token))
+
+    assert response.status_code == 403
