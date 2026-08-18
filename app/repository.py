@@ -159,12 +159,6 @@ class ProductRepository:
         await self.session.commit()
         return snapshot
 
-    async def _fetch_products(
-        self, stmt: Select[Tuple[Product]]
-    ) -> list[ProductResponse]:
-        result = await self.session.scalars(stmt)
-        return [ProductResponse.model_validate(row) for row in result.all()]
-
     async def _overfetch(
         self, stmt: Select[Tuple[Product]], limit: int
     ) -> tuple[list[Product], bool]:
