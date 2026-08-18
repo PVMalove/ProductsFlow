@@ -111,6 +111,46 @@ async def test_get_product_by_id_returns_none_for_an_unknown_id(
     assert await repository.get_product_by_id(999_999) is None
 
 
+async def test_get_product_by_id_finds_an_active_owners_product_for_non_admin_viewer(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=False)
+
+    assert found is not None
+    assert found.id == product.id
+
+
+async def test_get_product_by_id_hides_a_deactivated_owners_product_from_non_admin(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="id_inactive_owner")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_owner(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=False)
+
+    assert found is None
+
+
+async def test_get_product_by_id_shows_a_deactivated_owners_product_to_admin_viewer(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="id_inactive_owner2")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_owner(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=True)
+
+    assert found is not None
+    assert found.id == product.id
+
+
 async def test_get_products_page_orders_newest_first(db_session: AsyncSession) -> None:
     owner_id = await _create_owner(db_session)
     first = await _create_product(db_session, owner_id, name="Первый")

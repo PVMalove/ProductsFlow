@@ -114,9 +114,12 @@ async def list_all_product_audit_logs(
     response_model=ProductResponse,
 )
 async def get_product(
-    product_id: ProductId, repository: ProductRepositoryDI
+    product_id: ProductId, repository: ProductRepositoryDI, viewer: OptionalUser
 ) -> ProductResponse:
-    return _ensure_product_exists(await repository.get_product_by_id(product_id))
+    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    return _ensure_product_exists(
+        await repository.get_product_by_id(product_id, viewer_is_admin=viewer_is_admin)
+    )
 
 
 @router.get(
