@@ -116,9 +116,10 @@ async def list_all_product_audit_logs(
 async def get_product(
     product_id: ProductId, repository: ProductRepositoryDI, viewer: OptionalUser
 ) -> ProductResponse:
-    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
     return _ensure_product_exists(
-        await repository.get_product_by_id(product_id, viewer_is_admin=viewer_is_admin)
+        await repository.get_product_by_id(
+            product_id, viewer_is_admin=_is_admin(viewer)
+        )
     )
 
 
@@ -171,7 +172,7 @@ async def update_product(
     current_user: CurrentUser,
 ) -> None:
     existing_product = _ensure_product_exists(
-        await repository.get_product_by_id(product_id)
+        await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
     await repository.update_product(product_id, product_update)
@@ -188,7 +189,7 @@ async def delete_product(
     current_user: CurrentUser,
 ) -> None:
     existing_product = _ensure_product_exists(
-        await repository.get_product_by_id(product_id)
+        await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
     await repository.delete_product(product_id)
@@ -204,7 +205,7 @@ async def get_product_audit_logs(
     audit_repository: ProductAuditLogRepositoryDI,
     current_user: CurrentUser,
 ) -> list[ProductAuditLogResponse]:
-    product = await repository.get_product_by_id(product_id)
+    product = await repository.get_product_by_id(product_id, viewer_is_admin=True)
     logs = await audit_repository.get_audit_logs_by_product(product_id)
 
     if product is not None:
@@ -267,5 +268,8 @@ def _resolve_page_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
-    return _parse_cursor(after), _parse_cursor(before), viewer_is_admin
+    return _parse_cursor(after), _parse_cursor(before), _is_admin(viewer)
+
+
+def _is_admin(viewer: User | None) -> bool:
+    return viewer is not None and viewer.role == UserRole.ADMIN

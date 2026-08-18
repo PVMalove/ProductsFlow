@@ -254,6 +254,64 @@ async def test_admin_can_update_and_delete_a_foreign_product(
     assert delete_response.status_code == 204
 
 
+async def test_admin_can_still_update_a_deactivated_owners_product(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # #19 скрывает GET /products/{id} деактивированного владельца от
+    # не-admin, но не должен затрагивать мутации — они по-прежнему решают
+    # доступ через _ensure_owner_or_admin, а не через фильтр видимости.
+    admin_id, admin_token = await _register_and_login(client, "admin5")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "owner7")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.put(
+        f"/products/{product_id}", json={"price": 1234.0}, headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 204
+
+
+async def test_admin_can_still_delete_a_deactivated_owners_product(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "admin6")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "owner8")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.delete(
+        f"/products/{product_id}", headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 204
+
+
+async def test_admin_can_still_read_audit_of_a_deactivated_owners_product(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "admin7")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "owner9")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(
+        f"/products/{product_id}/audit", headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 200
+    assert [entry["action"] for entry in response.json()] == ["created"]
+
+
 async def test_admin_can_list_product_audit(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

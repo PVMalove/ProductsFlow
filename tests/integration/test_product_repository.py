@@ -97,7 +97,7 @@ async def test_get_product_by_id_finds_the_created_product(
     product = await _create_product(db_session, owner_id)
     repository = ProductRepository(db_session)
 
-    found = await repository.get_product_by_id(product.id)
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=True)
 
     assert found is not None
     assert found.id == product.id
@@ -108,7 +108,7 @@ async def test_get_product_by_id_returns_none_for_an_unknown_id(
 ) -> None:
     repository = ProductRepository(db_session)
 
-    assert await repository.get_product_by_id(999_999) is None
+    assert await repository.get_product_by_id(999_999, viewer_is_admin=True) is None
 
 
 async def test_get_product_by_id_finds_an_active_owners_product_for_non_admin_viewer(

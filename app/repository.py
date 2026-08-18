@@ -54,7 +54,7 @@ class ProductRepository:
         return bool(await self.session.scalar(stmt))
 
     async def get_product_by_id(
-        self, product_id: ProductId, viewer_is_admin: bool = True
+        self, product_id: ProductId, viewer_is_admin: bool
     ) -> ProductResponse | None:
         """Получаем продукт по ID (видимость — только при viewer_is_admin=False)"""
         stmt = select(Product).where(Product.id == product_id)
