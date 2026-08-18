@@ -22,7 +22,8 @@ dependencies = [
 line-length = 88
 target-version = "py312"
 # Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
-extend-exclude = ["alembic/versions"]
+# whitelist.py — файл-whitelist для vulture, а не исполняемый/типизируемый код.
+extend-exclude = ["alembic/versions", "whitelist.py"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -40,12 +41,32 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.1",
     "testcontainers[postgres]>=4.15.0",
+    "vulture>=2.14",
 ]
 
 [project.optional-dependencies]
 dev = ["ruff"]
 
+[tool.mypy]
+exclude = ["^whitelist\\.py$"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+
+[tool.vulture]
+exclude = [
+    ".venv/",
+    "alembic/versions/",
+    ".git/",
+    ".idea/",
+    ".claude/",
+    ".agents/",
+    "docs/",
+    "__pycache__/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    ".pytest_cache/",
+]
+min_confidence = 80
