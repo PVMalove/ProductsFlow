@@ -82,14 +82,23 @@ class ProductRepository:
             base_stmt, limit=limit, after=after, before=before
         )
 
-    async def get_products_by_category(
-        self, category_name: str
-    ) -> list[ProductResponse]:
-        """Поиск по категории (без учёта регистра)"""
-        stmt: Select[Tuple[Product]] = select(Product).where(
-            Product.category.ilike(category_name)
+    async def get_products_by_category_page(
+        self,
+        category_name: str,
+        limit: int,
+        after: Cursor | None,
+        before: Cursor | None,
+        viewer_is_admin: bool,
+    ) -> ProductListResponse:
+        """Постраничный список по категории (без учёта регистра), новые сначала"""
+        base_stmt = select(Product).where(Product.category.ilike(category_name))
+        if not viewer_is_admin:
+            base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
+                User.is_active.is_(True)
+            )
+        return await self._fetch_page(
+            base_stmt, limit=limit, after=after, before=before
         )
-        return await self._fetch_products(stmt)
 
     async def get_products_by_price_range_page(
         self,
@@ -149,12 +158,6 @@ class ProductRepository:
         await self.session.delete(product)
         await self.session.commit()
         return snapshot
-
-    async def _fetch_products(
-        self, stmt: Select[Tuple[Product]]
-    ) -> list[ProductResponse]:
-        result = await self.session.scalars(stmt)
-        return [ProductResponse.model_validate(row) for row in result.all()]
 
     async def _overfetch(
         self, stmt: Select[Tuple[Product]], limit: int

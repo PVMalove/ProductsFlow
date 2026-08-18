@@ -41,13 +41,17 @@ async def _promote_to_admin(session: AsyncSession, user_id: int) -> None:
 
 
 async def _create_product_via_http(
-    client: AsyncClient, token: str, name: str = "Ноутбук", price: float = 1000.0
+    client: AsyncClient,
+    token: str,
+    name: str = "Ноутбук",
+    price: float = 1000.0,
+    category: str = "Электроника",
 ) -> int:
     response = await client.post(
         "/products/",
         json={
             "name": name,
-            "category": "Электроника",
+            "category": category,
             "price": price,
             "description": "Тестовый товар",
         },
