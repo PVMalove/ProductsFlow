@@ -14,9 +14,10 @@ from app.settings import settings
 def test_hash_password_returns_string_different_from_input():
     plain = "my-secret-password"
     hashed = hash_password(plain)
-    
+
     assert isinstance(hashed, str)
     assert hashed != plain
+
 
 def test_verify_password_accepts_the_password_it_was_hashed_from():
     hashed = hash_password("correct-horse-battery-staple")
@@ -38,6 +39,7 @@ def test_hash_password_does_not_return_the_plaintext():
     plaintext = "correct-horse-battery-staple"
 
     assert hash_password(plaintext) != plaintext
+
 
 def test_hash_password_produces_different_hashes_for_same_input():
     plain = "same-password"
@@ -62,7 +64,9 @@ def test_decode_access_token_rejects_an_expired_token(monkeypatch):
 
 
 def test_decode_access_token_rejects_a_token_signed_with_a_different_secret():
-    forged_token = jwt.encode({"sub": "42"}, "a-different-secret", algorithm=ALGORITHM)
+    forged_token = jwt.encode(
+        {"sub": "42"}, "a-different-secret-that-is-long-enough", algorithm=ALGORITHM
+    )
 
     with pytest.raises(jwt.InvalidSignatureError):
         decode_access_token(forged_token)
