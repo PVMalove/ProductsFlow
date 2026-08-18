@@ -7,12 +7,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.models import User, UserRole
-from app.repository import UserRepositoryDI
+from app.repository import UserRepository, UserRepositoryDI
 from app.settings import settings
 
 ALGORITHM = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# auto_error=False: без заголовка — None, а не 401 (см. ниже).
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def create_access_token(sub: int) -> str:
@@ -31,10 +33,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.secret_key, algorithms=ALGORITHM)
 
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    repo: UserRepositoryDI,
-) -> User:
+async def _authenticate(token: str, repo: UserRepository) -> User:
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Не удалось проверить токен",
@@ -60,6 +59,23 @@ async def get_current_user(
     return user
 
 
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    repo: UserRepositoryDI,
+) -> User:
+    return await _authenticate(token, repo)
+
+
+async def get_optional_current_user(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)],
+    repo: UserRepositoryDI,
+) -> User | None:
+    # Невалидный/чужой токен не откатывается на анонимный просмотр (ADR 0002).
+    if token is None:
+        return None
+    return await _authenticate(token, repo)
+
+
 def hash_password(plain_password: str) -> str:
     return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
@@ -76,6 +92,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+OptionalUser = Annotated[User | None, Depends(get_optional_current_user)]
 
 
 async def require_admin(user: CurrentUser) -> User:

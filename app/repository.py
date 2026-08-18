@@ -1,7 +1,7 @@
 from typing import Annotated, Tuple
 
 from fastapi import Depends
-from sqlalchemy import Select, exists, func, or_, select
+from sqlalchemy import Select, exists, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -12,10 +12,13 @@ from app.models import (
     UserAuditAction,
     UserAuditLog,
 )
+from app.pagination import Cursor, encode_cursor
 from app.schemas import (
+    PageInfo,
     ProductAuditLogResponse,
     ProductCreate,
     ProductId,
+    ProductListResponse,
     ProductResponse,
     ProductUpdate,
     UserAuditLogResponse,
@@ -29,9 +32,24 @@ class ProductRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_all_products(self) -> list[ProductResponse]:
-        """Получаем все продукты"""
-        return await self._fetch_products(select(Product))
+    async def get_products_page(
+        self,
+        *,
+        limit: int,
+        after: Cursor | None,
+        before: Cursor | None,
+        viewer_is_admin: bool,
+    ) -> ProductListResponse:
+        """Постраничный список продуктов, новые сначала"""
+        # Сортировка — ADR 0001, видимость деактивированных владельцев — CONTEXT.md.
+        base_stmt = select(Product)
+        if not viewer_is_admin:
+            base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
+                User.is_active.is_(True)
+            )
+        return await self._fetch_page(
+            base_stmt, limit=limit, after=after, before=before
+        )
 
     async def product_exists(self, product_id: ProductId) -> bool:
         stmt = select(exists().where(Product.id == product_id))
@@ -114,6 +132,67 @@ class ProductRepository:
     ) -> list[ProductResponse]:
         result = await self.session.scalars(stmt)
         return [ProductResponse.model_validate(row) for row in result.all()]
+
+    async def _overfetch(
+        self, stmt: Select[Tuple[Product]], limit: int
+    ) -> tuple[list[Product], bool]:
+        """Выполняет stmt с overfetch +1 (ADR 0001); True = за limit есть ещё строка"""
+        rows = list((await self.session.scalars(stmt.limit(limit + 1))).all())
+        return rows[:limit], len(rows) > limit
+
+    async def _fetch_page(
+        self,
+        base_stmt: Select[Tuple[Product]],
+        *,
+        limit: int,
+        after: Cursor | None,
+        before: Cursor | None,
+    ) -> ProductListResponse:
+        # Общий keyset-хелпер поверх base_stmt — переиспользуется для #16-18.
+        if before is not None:
+            stmt = base_stmt.where(
+                tuple_(Product.created_at, Product.id) > (before.created_at, before.id)
+            ).order_by(Product.created_at.asc(), Product.id.asc())
+            page, has_prev = await self._overfetch(stmt, limit)
+            page.reverse()
+            # before передан ⇒ есть страница вперёд, к более старым (Relay-style).
+            has_more = True
+        else:
+            stmt = base_stmt
+            if after is not None:
+                stmt = stmt.where(
+                    tuple_(Product.created_at, Product.id)
+                    < (after.created_at, after.id)
+                )
+            stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
+            page, has_more = await self._overfetch(stmt, limit)
+            # Relay-style: курсор передан ⇒ предыдущая страница есть.
+            has_prev = after is not None
+
+        if not page:
+            # Пустая страница: оба курсора и флага — контракт issue #14.
+            return ProductListResponse(
+                items=[],
+                page_info=PageInfo(
+                    next_cursor=None, prev_cursor=None, has_more=False, has_prev=False
+                ),
+            )
+
+        return ProductListResponse(
+            items=[ProductResponse.model_validate(row) for row in page],
+            page_info=PageInfo(
+                next_cursor=(
+                    encode_cursor(page[-1].created_at, page[-1].id)
+                    if has_more
+                    else None
+                ),
+                prev_cursor=(
+                    encode_cursor(page[0].created_at, page[0].id) if has_prev else None
+                ),
+                has_more=has_more,
+                has_prev=has_prev,
+            ),
+        )
 
 
 class UserRepository:
