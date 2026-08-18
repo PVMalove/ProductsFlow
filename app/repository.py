@@ -70,6 +70,7 @@ class ProductRepository:
         viewer_is_admin: bool,
     ) -> ProductListResponse:
         """Постраничный поиск по имени/описанию (без учёта регистра), новые сначала"""
+        # Сортировка — ADR 0001, видимость деактивированных владельцев — CONTEXT.md.
         needle = f"%{query}%"
         base_stmt = select(Product).where(
             or_(

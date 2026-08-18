@@ -390,6 +390,36 @@ async def test_search_products_page_does_not_match_unrelated_products(
     assert found.items == []
 
 
+async def test_search_products_page_after_cursor_returns_the_remaining_matching_rows(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    first = await _create_product(db_session, owner_id, name="Ноутбук Первый")
+    await _create_product(db_session, owner_id, name="Холодильник")
+    second = await _create_product(db_session, owner_id, name="Ноутбук Второй")
+    third = await _create_product(db_session, owner_id, name="Ноутбук Третий")
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.search_products_page(
+        "Ноутбук", limit=2, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [third.id, second.id]
+
+    second_page = await repository.search_products_page(
+        "Ноутбук",
+        limit=2,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    # "Холодильник" не подходит под query — не должен просочиться на вторую
+    # страницу курсорной навигации, хотя и стоит между двумя "Ноутбук" по
+    # created_at.
+    assert [product.id for product in second_page.items] == [first.id]
+    assert second_page.page_info.has_more is False
+
+
 async def test_search_products_page_hides_matches_of_deactivated_owners_by_default(
     db_session: AsyncSession,
 ) -> None:
