@@ -11,6 +11,13 @@ from app.security import (
 from app.settings import settings
 
 
+def test_hash_password_returns_string_different_from_input():
+    plain = "my-secret-password"
+    hashed = hash_password(plain)
+    
+    assert isinstance(hashed, str)
+    assert hashed != plain
+
 def test_verify_password_accepts_the_password_it_was_hashed_from():
     hashed = hash_password("correct-horse-battery-staple")
 
@@ -31,6 +38,11 @@ def test_hash_password_does_not_return_the_plaintext():
     plaintext = "correct-horse-battery-staple"
 
     assert hash_password(plaintext) != plaintext
+
+def test_hash_password_produces_different_hashes_for_same_input():
+    plain = "same-password"
+
+    assert hash_password(plain) != hash_password(plain)
 
 
 def test_decode_access_token_recovers_the_subject_of_a_freshly_created_token():
