@@ -507,3 +507,287 @@ async def test_search_with_a_deactivated_callers_token_returns_403_not_anonymous
     )
 
     assert response.status_code == 403
+
+
+async def test_price_range_without_a_token_returns_the_envelope_shape(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown1")
+    await _create_product_via_http(client, owner_token, name="Товар", price=500.0)
+
+    response = await client.get(
+        "/products/price-range", params={"min_price": 0, "max_price": 1000}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "items" in body
+    assert set(body["page_info"]) == {
+        "next_cursor",
+        "prev_cursor",
+        "has_more",
+        "has_prev",
+    }
+
+
+async def test_price_range_only_returns_items_within_bounds(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown2")
+    await _create_product_via_http(client, owner_token, name="Дешёвый", price=100.0)
+    await _create_product_via_http(client, owner_token, name="Средний", price=500.0)
+    await _create_product_via_http(client, owner_token, name="Дорогой", price=900.0)
+
+    response = await client.get(
+        "/products/price-range", params={"min_price": 200, "max_price": 800}
+    )
+
+    names = [item["name"] for item in response.json()["items"]]
+    assert names == ["Средний"]
+
+
+async def test_price_range_orders_newest_first(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "prcown3")
+    await _create_product_via_http(client, owner_token, name="Первый", price=100.0)
+    await _create_product_via_http(client, owner_token, name="Второй", price=200.0)
+    await _create_product_via_http(client, owner_token, name="Третий", price=300.0)
+
+    response = await client.get(
+        "/products/price-range", params={"min_price": 0, "max_price": 1000}
+    )
+
+    names = [item["name"] for item in response.json()["items"]]
+    assert names == ["Третий", "Второй", "Первый"]
+
+
+async def test_price_range_respects_the_limit_query_param(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown4")
+    await _create_product_via_http(client, owner_token, name="Первый", price=100.0)
+    await _create_product_via_http(client, owner_token, name="Второй", price=200.0)
+    await _create_product_via_http(client, owner_token, name="Третий", price=300.0)
+
+    response = await client.get(
+        "/products/price-range",
+        params={"min_price": 0, "max_price": 1000, "limit": 1},
+    )
+
+    body = response.json()
+    assert len(body["items"]) == 1
+    assert body["page_info"]["has_more"] is True
+
+
+async def test_price_range_after_cursor_stays_within_bounds(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown5")
+    await _create_product_via_http(client, owner_token, name="Товар А", price=200.0)
+    await _create_product_via_http(
+        client, owner_token, name="Товар Дорогой", price=900.0
+    )
+    await _create_product_via_http(client, owner_token, name="Товар Б", price=300.0)
+
+    first_page = (
+        await client.get(
+            "/products/price-range",
+            params={"min_price": 100, "max_price": 500, "limit": 1},
+        )
+    ).json()
+    assert [item["name"] for item in first_page["items"]] == ["Товар Б"]
+
+    second_page = (
+        await client.get(
+            "/products/price-range",
+            params={
+                "min_price": 100,
+                "max_price": 500,
+                "limit": 1,
+                "after": first_page["page_info"]["next_cursor"],
+            },
+        )
+    ).json()
+
+    # "Товар Дорогой" вне диапазона — не должен просочиться на вторую
+    # страницу, хотя и создан между двумя подходящими по created_at.
+    assert [item["name"] for item in second_page["items"]] == ["Товар А"]
+    assert second_page["page_info"]["has_more"] is False
+
+
+async def test_price_range_before_cursor_returns_back_to_the_previous_page(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown6")
+    await _create_product_via_http(client, owner_token, name="Первый", price=100.0)
+    await _create_product_via_http(client, owner_token, name="Второй", price=200.0)
+    await _create_product_via_http(client, owner_token, name="Третий", price=300.0)
+
+    first_page = (
+        await client.get(
+            "/products/price-range",
+            params={"min_price": 0, "max_price": 1000, "limit": 2},
+        )
+    ).json()
+    second_page = (
+        await client.get(
+            "/products/price-range",
+            params={
+                "min_price": 0,
+                "max_price": 1000,
+                "limit": 2,
+                "after": first_page["page_info"]["next_cursor"],
+            },
+        )
+    ).json()
+
+    back_to_first_page = (
+        await client.get(
+            "/products/price-range",
+            params={
+                "min_price": 0,
+                "max_price": 1000,
+                "limit": 2,
+                "before": second_page["page_info"]["prev_cursor"],
+            },
+        )
+    ).json()
+
+    assert [item["name"] for item in back_to_first_page["items"]] == [
+        "Третий",
+        "Второй",
+    ]
+    assert back_to_first_page["page_info"]["has_prev"] is False
+    assert back_to_first_page["page_info"]["prev_cursor"] is None
+
+
+async def test_price_range_with_no_matches_returns_an_empty_envelope(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "prcown7")
+    await _create_product_via_http(client, owner_token, name="Дорогой", price=900.0)
+
+    response = await client.get(
+        "/products/price-range", params={"min_price": 0, "max_price": 100}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "page_info": {
+            "next_cursor": None,
+            "prev_cursor": None,
+            "has_more": False,
+            "has_prev": False,
+        },
+    }
+
+
+async def test_price_range_rejects_both_after_and_before_at_once(
+    client: AsyncClient,
+) -> None:
+    response = await client.get(
+        "/products/price-range",
+        params={"after": "whatever", "before": "whatever"},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_price_range_rejects_a_malformed_cursor(client: AsyncClient) -> None:
+    response = await client.get(
+        "/products/price-range", params={"after": "not-valid-base64!!!"}
+    )
+
+    assert response.status_code == 400
+
+
+async def test_price_range_hides_matches_of_a_deactivated_owner_for_anonymous_callers(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "prcadm1")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "prcown8")
+    await _create_product_via_http(client, owner_token, name="Скрытый", price=500.0)
+
+    deactivate_response = await client.patch(
+        f"/users/{owner_id}/deactivate", headers=_auth(admin_token)
+    )
+    assert deactivate_response.status_code == 200
+
+    response = await client.get(
+        "/products/price-range", params={"min_price": 0, "max_price": 1000}
+    )
+
+    assert response.json()["items"] == []
+
+
+async def test_price_range_hides_matches_of_a_deactivated_owner_for_regular_users(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "prcadm2")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "prcown9")
+    await _create_product_via_http(client, owner_token, name="Скрытый", price=500.0)
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    _, other_token = await _register_and_login(client, "prcview1")
+    response = await client.get(
+        "/products/price-range",
+        params={"min_price": 0, "max_price": 1000},
+        headers=_auth(other_token),
+    )
+
+    assert response.json()["items"] == []
+
+
+async def test_price_range_shows_matches_of_a_deactivated_owner_to_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "prcadm3")
+    await _promote_to_admin(db_session, admin_id)
+
+    owner_id, owner_token = await _register_and_login(client, "prcown10")
+    await _create_product_via_http(client, owner_token, name="Скрытый", price=500.0)
+
+    await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(
+        "/products/price-range",
+        params={"min_price": 0, "max_price": 1000},
+        headers=_auth(admin_token),
+    )
+
+    assert [item["name"] for item in response.json()["items"]] == ["Скрытый"]
+
+
+async def test_price_range_with_an_invalid_token_returns_401_not_anonymous(
+    client: AsyncClient,
+) -> None:
+    response = await client.get(
+        "/products/price-range",
+        params={"min_price": 0, "max_price": 1000},
+        headers={"Authorization": "Bearer not-a-real-jwt"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_price_range_with_a_deactivated_callers_token_returns_403_not_anonymous(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "prcadm4")
+    await _promote_to_admin(db_session, admin_id)
+
+    caller_id, caller_token = await _register_and_login(client, "prccall1")
+    await client.patch(f"/users/{caller_id}/deactivate", headers=_auth(admin_token))
+
+    response = await client.get(
+        "/products/price-range",
+        params={"min_price": 0, "max_price": 1000},
+        headers=_auth(caller_token),
+    )
+
+    assert response.status_code == 403
