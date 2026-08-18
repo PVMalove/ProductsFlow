@@ -484,7 +484,7 @@ async def test_get_products_by_category_does_not_match_a_different_category(
     assert await repository.get_products_by_category("Книги") == []
 
 
-async def test_get_products_by_price_range_filters_by_both_bounds(
+async def test_get_products_by_price_range_page_filters_by_both_bounds(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
@@ -493,12 +493,14 @@ async def test_get_products_by_price_range_filters_by_both_bounds(
     await _create_product(db_session, owner_id, name="Дорогой", price=900.0)
     repository = ProductRepository(db_session)
 
-    found = await repository.get_products_by_price_range(200.0, 800.0)
+    found = await repository.get_products_by_price_range_page(
+        200.0, 800.0, limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert [product.name for product in found] == ["Средний"]
+    assert [product.name for product in found.items] == ["Средний"]
 
 
-async def test_get_products_by_price_range_with_only_min_price(
+async def test_get_products_by_price_range_page_with_only_min_price(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
@@ -506,12 +508,14 @@ async def test_get_products_by_price_range_with_only_min_price(
     await _create_product(db_session, owner_id, name="Дорогой", price=900.0)
     repository = ProductRepository(db_session)
 
-    found = await repository.get_products_by_price_range(500.0, None)
+    found = await repository.get_products_by_price_range_page(
+        500.0, None, limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert [product.name for product in found] == ["Дорогой"]
+    assert [product.name for product in found.items] == ["Дорогой"]
 
 
-async def test_get_products_by_price_range_with_only_max_price(
+async def test_get_products_by_price_range_page_with_only_max_price(
     db_session: AsyncSession,
 ) -> None:
     owner_id = await _create_owner(db_session)
@@ -519,9 +523,82 @@ async def test_get_products_by_price_range_with_only_max_price(
     await _create_product(db_session, owner_id, name="Дорогой", price=900.0)
     repository = ProductRepository(db_session)
 
-    found = await repository.get_products_by_price_range(None, 500.0)
+    found = await repository.get_products_by_price_range_page(
+        None, 500.0, limit=10, after=None, before=None, viewer_is_admin=False
+    )
 
-    assert [product.name for product in found] == ["Дешёвый"]
+    assert [product.name for product in found.items] == ["Дешёвый"]
+
+
+async def test_get_products_by_price_range_page_after_cursor_stays_within_bounds(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    a = await _create_product(db_session, owner_id, name="Товар А", price=200.0)
+    await _create_product(db_session, owner_id, name="Товар Дорогой", price=900.0)
+    b = await _create_product(db_session, owner_id, name="Товар Б", price=300.0)
+    repository = ProductRepository(db_session)
+
+    first_page = await repository.get_products_by_price_range_page(
+        100.0, 500.0, limit=1, after=None, before=None, viewer_is_admin=False
+    )
+    assert [product.id for product in first_page.items] == [b.id]
+
+    second_page = await repository.get_products_by_price_range_page(
+        100.0,
+        500.0,
+        limit=1,
+        after=_cursor_of(first_page.page_info.next_cursor),
+        before=None,
+        viewer_is_admin=False,
+    )
+
+    # "Товар Дорогой" вне диапазона — не должен просочиться на вторую
+    # страницу курсорной навигации, хотя и стоит между А и Б по created_at.
+    assert [product.id for product in second_page.items] == [a.id]
+    assert second_page.page_info.has_more is False
+
+
+async def test_price_range_page_hides_matches_of_deactivated_owners_by_default(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="price_active_owner")
+    inactive_owner_id = await _create_owner(db_session, username="price_inactive_owner")
+    visible = await _create_product(
+        db_session, active_owner_id, name="Видимый", price=500.0
+    )
+    await _create_product(db_session, inactive_owner_id, name="Скрытый", price=500.0)
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_price_range_page(
+        None, None, limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_price_range_page_admin_sees_matches_of_deactivated_owners(
+    db_session: AsyncSession,
+) -> None:
+    active_owner_id = await _create_owner(db_session, username="price_active_owner2")
+    inactive_owner_id = await _create_owner(
+        db_session, username="price_inactive_owner2"
+    )
+    visible = await _create_product(
+        db_session, active_owner_id, name="Видимый", price=500.0
+    )
+    hidden = await _create_product(
+        db_session, inactive_owner_id, name="Скрытый", price=500.0
+    )
+    await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_price_range_page(
+        None, None, limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
 async def test_update_product_changes_only_the_given_fields(

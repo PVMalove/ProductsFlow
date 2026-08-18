@@ -34,7 +34,6 @@ class ProductRepository:
 
     async def get_products_page(
         self,
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
@@ -62,7 +61,6 @@ class ProductRepository:
     async def search_products_page(
         self,
         query: str,
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
@@ -93,17 +91,29 @@ class ProductRepository:
         )
         return await self._fetch_products(stmt)
 
-    async def get_products_by_price_range(
-        self, min_price: float | None, max_price: float | None
-    ) -> list[ProductResponse]:
-        """Диапазон цен (границы опциональны)"""
-        stmt: Select[Tuple[Product]] = select(Product).where(
+    async def get_products_by_price_range_page(
+        self,
+        min_price: float | None,
+        max_price: float | None,
+        limit: int,
+        after: Cursor | None,
+        before: Cursor | None,
+        viewer_is_admin: bool,
+    ) -> ProductListResponse:
+        """Постраничный список продуктов в диапазоне цен, новые сначала"""
+        base_stmt = select(Product).where(
             Product.price.between(
                 func.coalesce(min_price, Product.price),
                 func.coalesce(max_price, Product.price),
             )
         )
-        return await self._fetch_products(stmt)
+        if not viewer_is_admin:
+            base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
+                User.is_active.is_(True)
+            )
+        return await self._fetch_page(
+            base_stmt, limit=limit, after=after, before=before
+        )
 
     async def create_product(
         self, request: ProductCreate, user_id: int
@@ -156,7 +166,6 @@ class ProductRepository:
     async def _fetch_page(
         self,
         base_stmt: Select[Tuple[Product]],
-        *,
         limit: int,
         after: Cursor | None,
         before: Cursor | None,

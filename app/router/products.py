@@ -37,17 +37,13 @@ async def get_products(
     after: str | None = Query(default=None),
     before: str | None = Query(default=None),
 ) -> ProductListResponse:
-    if after is not None and before is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя одновременно указать after и before",
-        )
-
-    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    after_cursor, before_cursor, viewer_is_admin = _resolve_page_request(
+        viewer, after, before
+    )
     return await repository.get_products_page(
         limit=limit,
-        after=_parse_cursor(after),
-        before=_parse_cursor(before),
+        after=after_cursor,
+        before=before_cursor,
         viewer_is_admin=viewer_is_admin,
     )
 
@@ -64,33 +60,42 @@ async def search_products(
     after: str | None = Query(default=None),
     before: str | None = Query(default=None),
 ) -> ProductListResponse:
-    if after is not None and before is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя одновременно указать after и before",
-        )
-
-    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    after_cursor, before_cursor, viewer_is_admin = _resolve_page_request(
+        viewer, after, before
+    )
     return await repository.search_products_page(
         query,
         limit=limit,
-        after=_parse_cursor(after),
-        before=_parse_cursor(before),
+        after=after_cursor,
+        before=before_cursor,
         viewer_is_admin=viewer_is_admin,
     )
 
 
 @router.get(
     "/price-range",
-    response_model=list[ProductResponse],
+    response_model=ProductListResponse,
 )
 async def get_products_by_price_range(
     repository: ProductRepositoryDI,
-    _current_user: CurrentUser,
+    viewer: OptionalUser,
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
-) -> list[ProductResponse]:
-    return await repository.get_products_by_price_range(min_price, max_price)
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+) -> ProductListResponse:
+    after_cursor, before_cursor, viewer_is_admin = _resolve_page_request(
+        viewer, after, before
+    )
+    return await repository.get_products_by_price_range_page(
+        min_price,
+        max_price,
+        limit=limit,
+        after=after_cursor,
+        before=before_cursor,
+        viewer_is_admin=viewer_is_admin,
+    )
 
 
 @router.get(
@@ -236,3 +241,16 @@ def _parse_cursor(raw: str | None) -> Cursor | None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Некорректный курсор пагинации",
         ) from exc
+
+
+def _resolve_page_request(
+    viewer: User | None, after: str | None, before: str | None
+) -> tuple[Cursor | None, Cursor | None, bool]:
+    """Общая часть параметров пагинации/видимости product-list-эндпоинтов"""
+    if after is not None and before is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя одновременно указать after и before",
+        )
+    viewer_is_admin = viewer is not None and viewer.role == UserRole.ADMIN
+    return _parse_cursor(after), _parse_cursor(before), viewer_is_admin
