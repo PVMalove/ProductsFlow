@@ -1134,3 +1134,34 @@ async def test_get_audit_logs_by_product_breaks_created_at_ties_by_id(
     tied_ids = {log.id for log in tied_logs}
     observed_order = [entry.id for entry in result if entry.id in tied_ids]
     assert observed_order == sorted(tied_ids)
+
+
+async def test_get_all_audit_logs_orders_newest_first(
+    db_session: AsyncSession,
+) -> None:
+    # Глобальный админский фид — в отличие от get_audit_logs_by_product
+    # (хронологический), здесь новые записи должны идти первыми.
+    owner_id = await _create_owner(db_session, username="all_logs_owner")
+    product = await _create_product(db_session, owner_id)
+    older = ProductAuditLog(
+        product_id=product.id,
+        actor_user_id=owner_id,
+        action=ProductAuditAction.UPDATED,
+        created_at=datetime(2024, 1, 1),
+    )
+    newer = ProductAuditLog(
+        product_id=product.id,
+        actor_user_id=owner_id,
+        action=ProductAuditAction.DEACTIVATED,
+        created_at=datetime(2024, 1, 2),
+    )
+    db_session.add_all([older, newer])
+    await db_session.commit()
+    for log in (older, newer):
+        await db_session.refresh(log)
+    repository = ProductAuditLogRepository(db_session)
+
+    result = await repository.get_all_audit_logs()
+
+    ids_in_order = [entry.id for entry in result]
+    assert ids_in_order.index(newer.id) < ids_in_order.index(older.id)

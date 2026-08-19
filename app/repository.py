@@ -296,10 +296,11 @@ class UserAuditLogRepository:
         self.session = session
 
     async def get_all_audit_logs(self) -> list[UserAuditLogResponse]:
-        # Хронологический порядок (старые сначала) — так же, как у
-        # get_audit_logs_by_user; id тут — tie-breaker, см. #29.
+        # Глобальный админский фид — новые записи сначала, в отличие от
+        # хронологического get_audit_logs_by_user ниже. id тут — tie-breaker
+        # для совпадающих created_at внутри одной транзакции, см. #29.
         stmt = select(UserAuditLog).order_by(
-            UserAuditLog.created_at.asc(), UserAuditLog.id.asc()
+            UserAuditLog.created_at.desc(), UserAuditLog.id.desc()
         )
         return await self._fetch_audit_logs(stmt)
 
@@ -341,10 +342,12 @@ class ProductAuditLogRepository:
         self.session = session
 
     async def get_all_audit_logs(self) -> list[ProductAuditLogResponse]:
-        # Хронологический порядок (старые сначала) — так же, как у
-        # get_audit_logs_by_product; id тут — tie-breaker, см. #29.
+        # Глобальный админский фид — новые записи сначала, в отличие от
+        # хронологического get_audit_logs_by_product ниже. id тут —
+        # tie-breaker для совпадающих created_at внутри одной транзакции,
+        # см. #29.
         stmt = select(ProductAuditLog).order_by(
-            ProductAuditLog.created_at.asc(), ProductAuditLog.id.asc()
+            ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc()
         )
         return await self._fetch_audit_logs(stmt)
 
