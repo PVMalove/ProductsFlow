@@ -43,6 +43,7 @@ def test_product_rejects_short_name():
             price=2990.0,
             description="",
             user_id=1,
+            is_active=True,
             created_at=datetime.datetime.now(),
         )
 
@@ -56,6 +57,7 @@ def test_product_rejects_negative_price():
             price=-100.0,  # ge=0
             description="",
             user_id=1,
+            is_active=True,
             created_at=datetime.datetime.now(),
         )
 
