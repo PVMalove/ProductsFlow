@@ -1,10 +1,12 @@
+from datetime import datetime
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Product, ProductAuditAction, ProductAuditLog, User
 from app.pagination import Cursor, decode_cursor
-from app.repository import ProductRepository
+from app.repository import ProductAuditLogRepository, ProductRepository
 from app.schemas import (
     ProductCreate,
     ProductListResponse,
@@ -1099,3 +1101,36 @@ async def test_delete_product_writes_a_deleted_audit_log_that_survives_the_produ
         ProductAuditAction.DELETED,
     ]
     assert logs[-1].actor_user_id == owner_id
+
+
+async def test_get_audit_logs_by_product_breaks_created_at_ties_by_id(
+    db_session: AsyncSession,
+) -> None:
+    # #29: created_at — server_default=func.now(), которая внутри одной
+    # транзакции фиксируется на её старте, а не на момент каждого INSERT, так
+    # что несколько audit-строк, вставленных в одной транзакции, могут
+    # получить одинаковый created_at. Сортировка обязана добавлять id как
+    # tie-breaker, иначе порядок между ними не определён.
+    owner_id = await _create_owner(db_session, username="tie_owner")
+    product = await _create_product(db_session, owner_id)
+    tied_created_at = datetime.now()
+    tied_logs = [
+        ProductAuditLog(
+            product_id=product.id,
+            actor_user_id=owner_id,
+            action=ProductAuditAction.UPDATED,
+            created_at=tied_created_at,
+        )
+        for _ in range(3)
+    ]
+    db_session.add_all(tied_logs)
+    await db_session.commit()
+    for log in tied_logs:
+        await db_session.refresh(log)
+    repository = ProductAuditLogRepository(db_session)
+
+    result = await repository.get_audit_logs_by_product(product.id)
+
+    tied_ids = {log.id for log in tied_logs}
+    observed_order = [entry.id for entry in result if entry.id in tied_ids]
+    assert observed_order == sorted(tied_ids)

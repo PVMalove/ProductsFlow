@@ -1,9 +1,11 @@
+from datetime import datetime
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserAuditAction, UserAuditLog, UserRole
-from app.repository import UserRepository
+from app.repository import UserAuditLogRepository, UserRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -160,3 +162,40 @@ async def test_deactivate_then_activate_writes_matching_audit_logs(
         UserAuditAction.ACTIVATED,
     ]
     assert all(log.actor_user_id == user.id for log in logs)
+
+
+async def test_get_audit_logs_by_user_breaks_created_at_ties_by_id(
+    db_session: AsyncSession,
+) -> None:
+    # #29: created_at — server_default=func.now(), которая внутри одной
+    # транзакции фиксируется на её старте, а не на момент каждого INSERT, так
+    # что несколько audit-строк, вставленных в одной транзакции, могут
+    # получить одинаковый created_at. Сортировка обязана добавлять id как
+    # tie-breaker, иначе порядок между ними не определён.
+    user = await _create_user(db_session, "tie_user")
+    # user.id захвачен до commit ниже: expire_on_commit=True в db_session
+    # истекает атрибуты user, и повторное обращение к user.id роняет тест
+    # с MissingGreenlet вне async-контекста (см. _create_owner в
+    # test_product_repository.py).
+    user_id = user.id
+    tied_created_at = datetime.now()
+    tied_logs = [
+        UserAuditLog(
+            user_id=user_id,
+            actor_user_id=user_id,
+            action=UserAuditAction.PASSWORD_CHANGED,
+            created_at=tied_created_at,
+        )
+        for _ in range(3)
+    ]
+    db_session.add_all(tied_logs)
+    await db_session.commit()
+    for log in tied_logs:
+        await db_session.refresh(log)
+    repository = UserAuditLogRepository(db_session)
+
+    result = await repository.get_audit_logs_by_user(user_id)
+
+    tied_ids = {log.id for log in tied_logs}
+    observed_order = [entry.id for entry in result if entry.id in tied_ids]
+    assert observed_order == sorted(tied_ids)

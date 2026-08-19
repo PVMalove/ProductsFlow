@@ -296,13 +296,18 @@ class UserAuditLogRepository:
         self.session = session
 
     async def get_all_audit_logs(self) -> list[UserAuditLogResponse]:
-        return await self._fetch_audit_logs(select(UserAuditLog))
+        # Хронологический порядок (старые сначала) — так же, как у
+        # get_audit_logs_by_user; id тут — tie-breaker, см. #29.
+        stmt = select(UserAuditLog).order_by(
+            UserAuditLog.created_at.asc(), UserAuditLog.id.asc()
+        )
+        return await self._fetch_audit_logs(stmt)
 
     async def get_audit_logs_by_user(self, user_id: int) -> list[UserAuditLogResponse]:
         stmt = (
             select(UserAuditLog)
             .where(UserAuditLog.user_id == user_id)
-            .order_by(UserAuditLog.created_at.desc())
+            .order_by(UserAuditLog.created_at.asc(), UserAuditLog.id.asc())
         )
         return await self._fetch_audit_logs(stmt)
 
@@ -336,7 +341,12 @@ class ProductAuditLogRepository:
         self.session = session
 
     async def get_all_audit_logs(self) -> list[ProductAuditLogResponse]:
-        return await self._fetch_audit_logs(select(ProductAuditLog))
+        # Хронологический порядок (старые сначала) — так же, как у
+        # get_audit_logs_by_product; id тут — tie-breaker, см. #29.
+        stmt = select(ProductAuditLog).order_by(
+            ProductAuditLog.created_at.asc(), ProductAuditLog.id.asc()
+        )
+        return await self._fetch_audit_logs(stmt)
 
     async def get_audit_logs_by_product(
         self, product_id: int
@@ -344,7 +354,7 @@ class ProductAuditLogRepository:
         stmt = (
             select(ProductAuditLog)
             .where(ProductAuditLog.product_id == product_id)
-            .order_by(ProductAuditLog.created_at.desc())
+            .order_by(ProductAuditLog.created_at.asc(), ProductAuditLog.id.asc())
         )
         return await self._fetch_audit_logs(stmt)
 
