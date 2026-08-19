@@ -118,7 +118,9 @@ async def get_product(
 ) -> ProductResponse:
     return _ensure_product_exists(
         await repository.get_product_by_id(
-            product_id, viewer_is_admin=_is_admin(viewer)
+            product_id,
+            viewer_is_admin=_is_admin(viewer),
+            viewer_id=viewer.id if viewer is not None else None,
         )
     )
 

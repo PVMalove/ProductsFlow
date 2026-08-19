@@ -478,6 +478,117 @@ async def test_put_cannot_change_is_active(client: AsyncClient) -> None:
     ]
 
 
+async def test_get_deactivated_product_returns_404_for_anonymous_viewer(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib1")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    response = await client.get(f"/products/{product_id}")
+
+    assert response.status_code == 404
+
+
+async def test_get_deactivated_product_returns_404_for_a_non_owner(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib2")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    _, other_token = await _register_and_login(client, "visib2b")
+    response = await client.get(f"/products/{product_id}", headers=_auth(other_token))
+
+    assert response.status_code == 404
+
+
+async def test_get_deactivated_product_returns_200_for_its_owner(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib3")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    response = await client.get(f"/products/{product_id}", headers=_auth(owner_token))
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+async def test_get_deactivated_product_returns_200_for_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib4")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    admin_id, admin_token = await _register_and_login(client, "visib4adm")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(f"/products/{product_id}", headers=_auth(admin_token))
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+async def test_owner_can_still_update_their_own_deactivated_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib5")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    response = await client.put(
+        f"/products/{product_id}", json={"price": 42.0}, headers=_auth(owner_token)
+    )
+
+    assert response.status_code == 204
+
+
+async def test_owner_can_still_delete_their_own_deactivated_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib6")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    response = await client.delete(
+        f"/products/{product_id}", headers=_auth(owner_token)
+    )
+
+    assert response.status_code == 204
+
+
+async def test_products_list_hides_a_deactivated_product_even_from_its_owner(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib7")
+    product_id = await _create_product_via_http(client, owner_token, name="Скрытый")
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    response = await client.get("/products/", headers=_auth(owner_token))
+
+    assert response.status_code == 200
+    assert product_id not in [item["id"] for item in response.json()["items"]]
+
+
+async def test_products_list_shows_a_deactivated_product_to_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "visib8")
+    product_id = await _create_product_via_http(client, owner_token, name="Скрытый")
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+
+    admin_id, admin_token = await _register_and_login(client, "visib8adm")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get("/products/", headers=_auth(admin_token))
+
+    assert response.status_code == 200
+    assert product_id in [item["id"] for item in response.json()["items"]]
+
+
 async def test_admin_can_list_product_audit(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

@@ -43,7 +43,7 @@ class ProductRepository:
         base_stmt = select(Product)
         if not viewer_is_admin:
             base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
-                User.is_active.is_(True)
+                User.is_active.is_(True), Product.is_active.is_(True)
             )
         return await self._fetch_page(
             base_stmt, limit=limit, after=after, before=before
@@ -54,14 +54,20 @@ class ProductRepository:
         return bool(await self.session.scalar(stmt))
 
     async def get_product_by_id(
-        self, product_id: ProductId, viewer_is_admin: bool
+        self,
+        product_id: ProductId,
+        viewer_is_admin: bool,
+        viewer_id: int | None = None,
     ) -> ProductResponse | None:
         """Получаем продукт по ID (видимость — только при viewer_is_admin=False)"""
         stmt = select(Product).where(Product.id == product_id)
         if not viewer_is_admin:
             # Видимость деактивированных владельцев — ADR 0002/CONTEXT.md.
+            # Видимость деактивированного товара — ADR 0003, с исключением
+            # для владельца, которое есть только при прямом доступе по ID.
             stmt = stmt.join(User, Product.user_id == User.id).where(
-                User.is_active.is_(True)
+                User.is_active.is_(True),
+                or_(Product.is_active.is_(True), Product.user_id == viewer_id),
             )
         product = await self.session.scalar(stmt)
         return ProductResponse.model_validate(product) if product else None
@@ -84,7 +90,7 @@ class ProductRepository:
         )
         if not viewer_is_admin:
             base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
-                User.is_active.is_(True)
+                User.is_active.is_(True), Product.is_active.is_(True)
             )
         return await self._fetch_page(
             base_stmt, limit=limit, after=after, before=before
@@ -102,7 +108,7 @@ class ProductRepository:
         base_stmt = select(Product).where(Product.category.ilike(category_name))
         if not viewer_is_admin:
             base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
-                User.is_active.is_(True)
+                User.is_active.is_(True), Product.is_active.is_(True)
             )
         return await self._fetch_page(
             base_stmt, limit=limit, after=after, before=before
@@ -126,7 +132,7 @@ class ProductRepository:
         )
         if not viewer_is_admin:
             base_stmt = base_stmt.join(User, Product.user_id == User.id).where(
-                User.is_active.is_(True)
+                User.is_active.is_(True), Product.is_active.is_(True)
             )
         return await self._fetch_page(
             base_stmt, limit=limit, after=after, before=before

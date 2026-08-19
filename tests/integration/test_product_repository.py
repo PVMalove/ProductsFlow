@@ -33,6 +33,13 @@ async def _deactivate_owner(session: AsyncSession, owner_id: int) -> None:
     await session.commit()
 
 
+async def _deactivate_product(session: AsyncSession, product_id: int) -> None:
+    product = await session.get(Product, product_id)
+    assert product is not None
+    product.is_active = False
+    await session.commit()
+
+
 def _cursor_of(raw: str | None) -> Cursor:
     assert raw is not None
     return decode_cursor(raw)
@@ -143,6 +150,102 @@ async def test_get_product_by_id_shows_a_deactivated_owners_product_to_admin_vie
 ) -> None:
     owner_id = await _create_owner(db_session, username="id_inactive_owner2")
     product = await _create_product(db_session, owner_id)
+    await _deactivate_owner(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=True)
+
+    assert found is not None
+    assert found.id == product.id
+
+
+async def test_get_product_by_id_hides_a_deactivated_product_from_non_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="deact_product_owner")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(
+        product.id, viewer_is_admin=False, viewer_id=999_999
+    )
+
+    assert found is None
+
+
+async def test_get_product_by_id_hides_a_deactivated_product_from_anonymous_viewer(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="deact_product_owner_anon")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(
+        product.id, viewer_is_admin=False, viewer_id=None
+    )
+
+    assert found is None
+
+
+async def test_get_product_by_id_shows_a_deactivated_product_to_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="deact_product_owner2")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(
+        product.id, viewer_is_admin=False, viewer_id=owner_id
+    )
+
+    assert found is not None
+    assert found.id == product.id
+
+
+async def test_get_product_by_id_shows_a_deactivated_product_to_admin_viewer(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="deact_product_owner3")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(product.id, viewer_is_admin=True)
+
+    assert found is not None
+    assert found.id == product.id
+
+
+async def test_get_product_by_id_hides_a_double_deactivated_product_from_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    # #28 AC: товар с деактивированными и товаром, и владельцем ведёт себя
+    # как деактивированный товар с активным владельцем — без owner-исключения.
+    # На практике деактивированный владелец не может аутентифицироваться и
+    # получить свой viewer_id вовсе (см. CONTEXT.md), но фильтр сам по себе
+    # не должен давать исключение, даже если viewer_id совпал бы с owner_id.
+    owner_id = await _create_owner(db_session, username="double_deact_owner")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    await _deactivate_owner(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_by_id(
+        product.id, viewer_is_admin=False, viewer_id=owner_id
+    )
+
+    assert found is None
+
+
+async def test_get_product_by_id_admin_sees_a_product_deactivated_with_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="double_deact_owner2")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
     await _deactivate_owner(db_session, owner_id)
     repository = ProductRepository(db_session)
 
@@ -359,6 +462,40 @@ async def test_get_products_page_admin_sees_products_of_deactivated_owners(
     assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
+async def test_get_products_page_hides_a_deactivated_product_even_from_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    # ADR 0003: списки не персонализированы — даже владелец не видит свой
+    # деактивированный товар в общей выдаче, только через прямой доступ по ID.
+    owner_id = await _create_owner(db_session, username="list_deact_owner")
+    visible = await _create_product(db_session, owner_id, name="Видимый")
+    hidden = await _create_product(db_session, owner_id, name="Скрытый")
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_get_products_page_admin_sees_a_deactivated_product(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="list_deact_owner2")
+    visible = await _create_product(db_session, owner_id, name="Видимый")
+    hidden = await _create_product(db_session, owner_id, name="Скрытый")
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_page(
+        limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
+
+
 async def test_get_products_page_returns_an_empty_page_when_there_are_no_products(
     db_session: AsyncSession,
 ) -> None:
@@ -501,6 +638,38 @@ async def test_search_products_page_admin_sees_matches_of_deactivated_owners(
     assert {product.id for product in page.items} == {visible.id, hidden.id}
 
 
+async def test_search_products_page_hides_a_deactivated_product_even_from_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="search_deact_owner")
+    visible = await _create_product(db_session, owner_id, name="Ноутбук Видимый")
+    hidden = await _create_product(db_session, owner_id, name="Ноутбук Скрытый")
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.search_products_page(
+        "Ноутбук", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_search_products_page_admin_sees_a_deactivated_product(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="search_deact_owner2")
+    visible = await _create_product(db_session, owner_id, name="Ноутбук Видимый")
+    hidden = await _create_product(db_session, owner_id, name="Ноутбук Скрытый")
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.search_products_page(
+        "Ноутбук", limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
+
+
 async def test_get_products_by_category_page_matches_regardless_of_case(
     db_session: AsyncSession,
 ) -> None:
@@ -598,6 +767,46 @@ async def test_category_page_admin_sees_matches_of_deactivated_owners(
         db_session, inactive_owner_id, name="Скрытый", category="Электроника"
     )
     await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_category_page(
+        "Электроника", limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
+
+
+async def test_category_page_hides_a_deactivated_product_even_from_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="cat_deact_owner")
+    visible = await _create_product(
+        db_session, owner_id, name="Видимый", category="Электроника"
+    )
+    hidden = await _create_product(
+        db_session, owner_id, name="Скрытый", category="Электроника"
+    )
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_category_page(
+        "Электроника", limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_category_page_admin_sees_a_deactivated_product(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="cat_deact_owner2")
+    visible = await _create_product(
+        db_session, owner_id, name="Видимый", category="Электроника"
+    )
+    hidden = await _create_product(
+        db_session, owner_id, name="Скрытый", category="Электроника"
+    )
+    await _deactivate_product(db_session, hidden.id)
     repository = ProductRepository(db_session)
 
     page = await repository.get_products_by_category_page(
@@ -715,6 +924,38 @@ async def test_price_range_page_admin_sees_matches_of_deactivated_owners(
         db_session, inactive_owner_id, name="Скрытый", price=500.0
     )
     await _deactivate_owner(db_session, inactive_owner_id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_price_range_page(
+        None, None, limit=10, after=None, before=None, viewer_is_admin=True
+    )
+
+    assert {product.id for product in page.items} == {visible.id, hidden.id}
+
+
+async def test_price_range_page_hides_a_deactivated_product_even_from_its_owner(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="price_deact_owner")
+    visible = await _create_product(db_session, owner_id, name="Видимый", price=500.0)
+    hidden = await _create_product(db_session, owner_id, name="Скрытый", price=500.0)
+    await _deactivate_product(db_session, hidden.id)
+    repository = ProductRepository(db_session)
+
+    page = await repository.get_products_by_price_range_page(
+        None, None, limit=10, after=None, before=None, viewer_is_admin=False
+    )
+
+    assert [product.id for product in page.items] == [visible.id]
+
+
+async def test_price_range_page_admin_sees_a_deactivated_product(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="price_deact_owner2")
+    visible = await _create_product(db_session, owner_id, name="Видимый", price=500.0)
+    hidden = await _create_product(db_session, owner_id, name="Скрытый", price=500.0)
+    await _deactivate_product(db_session, hidden.id)
     repository = ProductRepository(db_session)
 
     page = await repository.get_products_by_price_range_page(
