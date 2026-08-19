@@ -157,6 +157,18 @@ class ProductRepository:
         await self.session.refresh(product)
         return ProductResponse.model_validate(product)
 
+    async def set_active_product(
+        self, product_id: ProductId, active: bool
+    ) -> ProductResponse | None:
+        """Переключаем видимость продукта (True, если продукт найден)"""
+        product = await self.session.get(Product, product_id)
+        if product is None:
+            return None
+        product.is_active = active
+        await self.session.commit()
+        await self.session.refresh(product)
+        return ProductResponse.model_validate(product)
+
     async def delete_product(self, product_id: ProductId) -> ProductResponse | None:
         """Удаляем продукт (True, если удаление прошло)"""
         product = await self.session.get(Product, product_id)

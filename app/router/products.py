@@ -195,6 +195,40 @@ async def delete_product(
     await repository.delete_product(product_id)
 
 
+@router.patch(
+    "/{product_id}/activate",
+    response_model=ProductResponse,
+)
+async def activate_product(
+    product_id: ProductId,
+    repository: ProductRepositoryDI,
+    current_user: CurrentUser,
+) -> ProductResponse:
+    existing_product = _ensure_product_exists(
+        await repository.get_product_by_id(product_id, viewer_is_admin=True)
+    )
+    _ensure_owner_or_admin(existing_product, current_user)
+    return _ensure_product_exists(await repository.set_active_product(product_id, True))
+
+
+@router.patch(
+    "/{product_id}/deactivate",
+    response_model=ProductResponse,
+)
+async def deactivate_product(
+    product_id: ProductId,
+    repository: ProductRepositoryDI,
+    current_user: CurrentUser,
+) -> ProductResponse:
+    existing_product = _ensure_product_exists(
+        await repository.get_product_by_id(product_id, viewer_is_admin=True)
+    )
+    _ensure_owner_or_admin(existing_product, current_user)
+    return _ensure_product_exists(
+        await repository.set_active_product(product_id, False)
+    )
+
+
 @router.get(
     "/{product_id}/audit",
     response_model=list[ProductAuditLogResponse],

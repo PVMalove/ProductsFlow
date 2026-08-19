@@ -73,6 +73,7 @@ async def test_create_product_persists_and_returns_the_created_product(
     assert product.category == "Электроника"
     assert product.price == 1000.0
     assert product.user_id == owner_id
+    assert product.is_active is True
 
 
 async def test_create_product_writes_a_created_audit_log(
@@ -762,6 +763,62 @@ async def test_update_product_writes_an_updated_audit_log(
         ProductAuditAction.UPDATED,
     ]
     assert logs[-1].actor_user_id == owner_id
+
+
+async def test_set_active_product_deactivates_and_reactivates(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    deactivated = await repository.set_active_product(product.id, False)
+    assert deactivated is not None
+    assert deactivated.is_active is False
+
+    reactivated = await repository.set_active_product(product.id, True)
+    assert reactivated is not None
+    assert reactivated.is_active is True
+
+
+async def test_set_active_product_returns_none_for_an_unknown_id(
+    db_session: AsyncSession,
+) -> None:
+    repository = ProductRepository(db_session)
+
+    assert await repository.set_active_product(999_999, False) is None
+
+
+async def test_deactivate_then_activate_writes_matching_audit_logs(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    await repository.set_active_product(product.id, False)
+    await repository.set_active_product(product.id, True)
+
+    logs = await _audit_logs(db_session, product.id)
+    assert [log.action for log in logs] == [
+        ProductAuditAction.CREATED,
+        ProductAuditAction.DEACTIVATED,
+        ProductAuditAction.ACTIVATED,
+    ]
+    assert all(log.actor_user_id == owner_id for log in logs)
+
+
+async def test_set_active_product_to_the_current_state_does_not_duplicate_audit_log(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session)
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    await repository.set_active_product(product.id, True)
+
+    logs = await _audit_logs(db_session, product.id)
+    assert [log.action for log in logs] == [ProductAuditAction.CREATED]
 
 
 async def test_delete_product_removes_the_product_and_returns_a_snapshot(

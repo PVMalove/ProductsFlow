@@ -15,6 +15,7 @@ def sample_product() -> ProductResponse:
         price=2990.0,
         description="Электрический чайник",
         user_id=1,
+        is_active=True,
         created_at=datetime.datetime.now(),
     )
 
