@@ -90,6 +90,7 @@ def _on_product_update(
     _mapper: Mapper[Product], connection: Connection, target: Product
 ) -> None:
     state = inspect(target)
+    actor = _resolve_product_actor(target)
     changes: list[str] = []
 
     for attr in ("name", "category", "price", "description"):
@@ -99,17 +100,34 @@ def _on_product_update(
         old_value = history.deleted[0] if history.deleted else None
         changes.append(f"{attr}: {old_value!r} -> {getattr(target, attr)!r}")
 
-    if not changes:
-        return
-
-    connection.execute(
-        insert(ProductAuditLog).values(
-            action=ProductAuditAction.UPDATED,
-            product_id=target.id,
-            actor_user_id=_resolve_product_actor(target),
-            description=f'Изменён продукт "{target.name}": ' + "; ".join(changes),
+    if changes:
+        connection.execute(
+            insert(ProductAuditLog).values(
+                action=ProductAuditAction.UPDATED,
+                product_id=target.id,
+                actor_user_id=actor,
+                description=f'Изменён продукт "{target.name}": ' + "; ".join(changes),
+            )
         )
-    )
+
+    if state.attrs.is_active.history.has_changes():
+        action = (
+            ProductAuditAction.ACTIVATED
+            if target.is_active
+            else ProductAuditAction.DEACTIVATED
+        )
+        connection.execute(
+            insert(ProductAuditLog).values(
+                action=action,
+                product_id=target.id,
+                actor_user_id=actor,
+                description=(
+                    f'Товар "{target.name}" активирован'
+                    if target.is_active
+                    else f'Товар "{target.name}" деактивирован'
+                ),
+            )
+        )
 
 
 @event.listens_for(Product, "before_delete")

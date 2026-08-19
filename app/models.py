@@ -37,6 +37,7 @@ class Product(Base):
     price: Mapped[float]
     description: Mapped[str] = mapped_column(default="", server_default="")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
@@ -61,6 +62,8 @@ class ProductAuditAction(enum.StrEnum):
     CREATED = "created"
     UPDATED = "updated"
     DELETED = "deleted"
+    ACTIVATED = "activated"
+    DEACTIVATED = "deactivated"
 
 
 class ProductAuditLog(Base):

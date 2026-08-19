@@ -67,6 +67,24 @@ async def _audit_actions(client: AsyncClient, token: str, product_id: int) -> li
     return [entry["action"] for entry in response.json()]
 
 
+async def test_new_product_is_active_by_default(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "defactive1")
+
+    response = await client.post(
+        "/products/",
+        json={
+            "name": "Ноутбук",
+            "category": "Электроника",
+            "price": 1000.0,
+            "description": "Тестовый товар",
+        },
+        headers=_auth(owner_token),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["is_active"] is True
+
+
 async def test_full_product_lifecycle_reflects_in_get_and_audit(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -310,6 +328,154 @@ async def test_admin_can_still_read_audit_of_a_deactivated_owners_product(
 
     assert response.status_code == 200
     assert [entry["action"] for entry in response.json()] == ["created"]
+
+
+async def test_owner_can_deactivate_and_reactivate_their_own_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    deactivate_response = await client.patch(
+        f"/products/{product_id}/deactivate", headers=_auth(owner_token)
+    )
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+
+    activate_response = await client.patch(
+        f"/products/{product_id}/activate", headers=_auth(owner_token)
+    )
+    assert activate_response.status_code == 200
+    assert activate_response.json()["is_active"] is True
+
+
+async def test_admin_can_deactivate_a_foreign_product(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle2")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    admin_id, admin_token = await _register_and_login(client, "tadmin1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.patch(
+        f"/products/{product_id}/deactivate", headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+async def test_non_owner_without_admin_cannot_deactivate_a_foreign_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle3")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    _, intruder_token = await _register_and_login(client, "tintr1")
+
+    response = await client.patch(
+        f"/products/{product_id}/deactivate", headers=_auth(intruder_token)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_non_owner_without_admin_cannot_activate_a_foreign_product(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle4")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    _, intruder_token = await _register_and_login(client, "tintr2")
+
+    response = await client.patch(
+        f"/products/{product_id}/activate", headers=_auth(intruder_token)
+    )
+
+    assert response.status_code == 403
+
+
+async def test_deactivate_a_nonexistent_product_returns_404(
+    client: AsyncClient,
+) -> None:
+    _, token = await _register_and_login(client, "toggle5")
+
+    response = await client.patch(
+        f"/products/{999_999}/deactivate", headers=_auth(token)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_activate_a_nonexistent_product_returns_404(
+    client: AsyncClient,
+) -> None:
+    _, token = await _register_and_login(client, "toggle6")
+
+    response = await client.patch(f"/products/{999_999}/activate", headers=_auth(token))
+
+    assert response.status_code == 404
+
+
+async def test_repeated_deactivate_call_is_idempotent_in_the_audit_log(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle7")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    first = await client.patch(
+        f"/products/{product_id}/deactivate", headers=_auth(owner_token)
+    )
+    second = await client.patch(
+        f"/products/{product_id}/deactivate", headers=_auth(owner_token)
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert await _audit_actions(client, owner_token, product_id) == [
+        "created",
+        "deactivated",
+    ]
+
+
+async def test_deactivate_and_reactivate_appear_in_audit_log_in_order(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "toggle8")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    await client.put(
+        f"/products/{product_id}", json={"price": 1500.0}, headers=_auth(owner_token)
+    )
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+    await client.patch(f"/products/{product_id}/activate", headers=_auth(owner_token))
+
+    assert await _audit_actions(client, owner_token, product_id) == [
+        "created",
+        "updated",
+        "deactivated",
+        "activated",
+    ]
+
+
+async def test_put_cannot_change_is_active(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "toggle9")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    update_response = await client.put(
+        f"/products/{product_id}",
+        json={"price": 1500.0, "is_active": False},
+        headers=_auth(owner_token),
+    )
+    assert update_response.status_code == 204
+
+    get_response = await client.get(f"/products/{product_id}")
+    assert get_response.json()["is_active"] is True
+    assert await _audit_actions(client, owner_token, product_id) == [
+        "created",
+        "updated",
+    ]
 
 
 async def test_admin_can_list_product_audit(
