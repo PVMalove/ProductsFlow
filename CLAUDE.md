@@ -34,16 +34,26 @@ Package/dependency management is via `uv` (see `uv.lock`). Requires Python 3.14 
 Single-service FastAPI app (`app/`), layered `router → repository → SQLAlchemy model`, with Pydantic schemas (`app/schemas.py`) as the response/validation boundary.
 
 - **Routers** (`app/router/auth.py`, `products.py`, `users.py`) depend on repositories and on the `CurrentUser` / `AdminUser` typed dependencies from `app/security.py` for auth gating; they raise `HTTPException` directly for domain errors (not-found, forbidden).
-- **Repositories** (`app/repository.py`) are the only place that touches SQLAlchemy sessions/queries. Note the mixed return convention: `ProductRepository` and the audit-log repositories return Pydantic `*Response` schemas (already validated from ORM rows), while `UserRepository` returns raw `User` ORM instances — because `app/security.py` needs `password_hash` off the returned object. Match whichever convention the repository you're editing already uses.
-- **Auth**: JWT bearer tokens (PyJWT, `HS256`), issued from `/auth/login` (`app/router/auth.py`) and read via `OAuth2PasswordBearer` in `app/security.py`. `get_current_user` rejects a deactivated account (`User.is_active is False`) with 403 *before* any role/ownership check runs — deactivation is an authentication-layer concept, not authorization (see `CONTEXT.md`). `require_admin`/`AdminUser` layers role checks on top of `CurrentUser`.
-- **Audit logging** (`app/audit.py`) is implemented as SQLAlchemy ORM event listeners (`after_insert`/`before_update`/`before_delete` on `User` and `Product`), not as explicit calls in routers/repositories — any ORM-level mutation of these models produces an audit row automatically; raw SQL or bulk operations would bypass it. Listeners have no access to the request, so the acting user id is threaded through a `ContextVar` (`current_actor_id`), set per-request by `actor_context_middleware` in `app/main.py`, which decodes the bearer token independently of the `get_current_user` dependency.
-- `ProductAuditLog.product_id` deliberately has no `ForeignKey` to `products` — deleting a product is a hard delete, and the audit trail must survive the row it references (see `CONTEXT.md` and the comment in `app/models.py`).
-- **Startup lifecycle** (`lifespan` in `app/main.py`): runs Alembic migrations programmatically (`app/db.py:run_migrations`, via a sync `_run_upgrade` callback executed inside the async engine connection) and then seeds an admin user + demo products (`app/db.py:seed_db`) before the app starts serving. `conftest.py` reuses `_run_upgrade` directly against its testcontainers Postgres rather than duplicating migration setup.
-- **Error handling** is centralized in `app/errors.py`: exception handlers translate Pydantic `RequestValidationError` and SQLAlchemy `IntegrityError` into Russian-language JSON error bodies, driven by the `FIELD_NAMES` / `ERROR_TEMPLATES` lookup tables. Extend those tables for new fields/error types rather than raising ad hoc `HTTPException`s for validation failures.
 - **Config** (`app/settings.py`) is `pydantic-settings` reading `.env`; see `.env.example` for the full variable list (`DATABASE_URL`, `SECRET_KEY`, `ACCESS_TOKEN_TTL_HOURS`, `ADMIN_PASSWORD`, Postgres compose vars).
-- **Tests**: root `conftest.py` provides a session-scoped real Postgres (testcontainers), one connection+SAVEPOINT transaction per test for isolation, and an `httpx.AsyncClient` wired to the app via `ASGITransport` with `get_session` overridden to the test session. Integration tests exercise real HTTP + DB round trips; unit tests cover pure logic (schema validators, security helpers, error-message formatting) without a DB.
+
+Everything else architecture-specific lives in `.claude/rules/architecture/*.md` and lazy-loads by path (YAML `paths:` frontmatter) instead of always sitting in this file:
+
+| Rule | Triggers on |
+|---|---|
+| [repository.md](.claude/rules/architecture/repository.md) | `app/repository.py` |
+| [auth.md](.claude/rules/architecture/auth.md) | `app/security.py`, `app/router/auth.py` |
+| [audit.md](.claude/rules/architecture/audit.md) | `app/audit.py`, `app/models.py`, `app/main.py` |
+| [errors.md](.claude/rules/architecture/errors.md) | `app/errors.py` |
+| [startup.md](.claude/rules/architecture/startup.md) | `app/main.py`, `app/db.py` |
+| [testing.md](.claude/rules/architecture/testing.md) | `tests/**`, `conftest.py` |
+
+[.claude/rules/karpathy-guidelines.md](.claude/rules/karpathy-guidelines.md) is unscoped (no `paths:`) — general coding behavior, loads every session like this file.
+
+Domain-doc consumer rules (read `CONTEXT.md`/`docs/adr/` before touching source) similarly lazy-load from [.claude/rules/domain/domain.md](.claude/rules/domain/domain.md) (`app/**`, `tests/**`) — same content as `docs/agents/domain.md`, kept in sync manually.
 
 ## Agent skills
+
+Full command/skill reference (all 25 `.harness/` skills + project-specific `qa-gate`/`pr-composer`, the 6 locally-customized skills, hooks): `docs/agents/harness-guide.md`.
 
 ### Issue tracker
 
@@ -60,6 +70,10 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs
 ### Git workflow
 
 Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`; after the PR is open, the agent pauses for the developer's review-or-changes decision and never merges it itself. See `docs/agents/git-workflow.md`.
+
+### Parallel work (worktrees)
+
+Only when explicitly asked: use the native `EnterWorktree`/`ExitWorktree` tools (or `isolation: "worktree"` on a subagent), not manual `git worktree` + `tmux`. See `docs/agents/worktrees.md`.
 
 ### Communication language
 

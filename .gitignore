@@ -224,8 +224,10 @@ __marimo__/
 .vscode
 .claude
 .agents
+.harness
 
 skills-lock.json
+/AGENTS.md
 /CONTEXT.md
 /SPEC.md
 /docs/
