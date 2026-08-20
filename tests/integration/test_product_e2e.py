@@ -850,3 +850,51 @@ async def test_product_audit_rejects_an_invalid_sort_by_value(
     )
 
     assert response.status_code == 422
+
+
+async def test_product_audit_pagination_totals_stay_correct_with_a_custom_sort(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # AC #36: page_index/page_size/total/total_pages должны продолжать
+    # корректно работать в комбинации с любым sort_by/sort_desc, а не только
+    # с дефолтной сортировкой по created_at.
+    _, owner_token = await _register_and_login(client, "srtpgown1")
+    admin_id, admin_token = await _register_and_login(client, "srtpgadm1")
+    await _promote_to_admin(db_session, admin_id)
+    first_id = await _create_product_via_http(client, owner_token, name="Товар А")
+    second_id = await _create_product_via_http(client, owner_token, name="Товар Б")
+    third_id = await _create_product_via_http(client, owner_token, name="Товар В")
+
+    first_page = await client.get(
+        "/products/audit",
+        params={
+            "sort_by": "product_id",
+            "sort_desc": False,
+            "page_index": 1,
+            "page_size": 2,
+        },
+        headers=_auth(admin_token),
+    )
+    second_page = await client.get(
+        "/products/audit",
+        params={
+            "sort_by": "product_id",
+            "sort_desc": False,
+            "page_index": 2,
+            "page_size": 2,
+        },
+        headers=_auth(admin_token),
+    )
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    first_body, second_body = first_page.json(), second_page.json()
+    assert first_body["total"] == 3
+    assert first_body["total_pages"] == 2
+    assert second_body["total"] == 3
+    assert second_body["total_pages"] == 2
+    assert [item["product_id"] for item in first_body["items"]] == [
+        first_id,
+        second_id,
+    ]
+    assert [item["product_id"] for item in second_body["items"]] == [third_id]
