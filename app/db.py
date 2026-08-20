@@ -16,7 +16,9 @@ from alembic import command
 from app.models import Product, User, UserRole
 from app.settings import settings
 
-engine: AsyncEngine = create_async_engine(settings.database_url, echo=True)
+engine: AsyncEngine = create_async_engine(
+    settings.database_url, echo=settings.app_env == "dev"
+)
 SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine, expire_on_commit=False
 )
