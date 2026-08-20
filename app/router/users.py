@@ -1,13 +1,9 @@
-from typing import TypeVar
-
 from fastapi import APIRouter, HTTPException, status
 
 from app.models import User
 from app.repository import UserAuditLogRepositoryDI, UserRepositoryDI
 from app.schemas import PasswordChange, UserAuditLogResponse, UserId, UserResponse
 from app.security import AdminUser, CurrentUser, hash_password, verify_password
-
-T = TypeVar("T")
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -94,7 +90,7 @@ async def read_user_audit_logs(
     return await repository.get_audit_logs_by_user(user_id)
 
 
-def ensure_user_exists(entity: T | None) -> T:
+def ensure_user_exists[T](entity: T | None) -> T:
     if not entity:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

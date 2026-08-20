@@ -50,9 +50,9 @@ async def seed_db() -> None:
 
 
 async def _ensure_admin_seeded(session: AsyncSession) -> User:
+    """Возвращает существующего или создаёт нового seed-админа."""
     from app.security import hash_password
 
-    """Возвращает существующего или создаёт нового seed-админа."""
     existing = await session.scalar(
         select(User).where(User.username == _SEED_ADMIN["username"])
     )

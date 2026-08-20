@@ -1,5 +1,3 @@
-from typing import TypeVar
-
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.models import Product, User, UserRole
@@ -22,8 +20,6 @@ from app.schemas import (
     ProductUpdate,
 )
 from app.security import AdminUser, CurrentUser, OptionalUser
-
-T = TypeVar("T")
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -273,7 +269,7 @@ async def get_product_audit_logs(
     return logs
 
 
-def _ensure_product_exists(entity: T | None) -> T:
+def _ensure_product_exists[T](entity: T | None) -> T:
     if not entity:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
