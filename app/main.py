@@ -52,7 +52,7 @@ async def actor_context_middleware(
             sub_raw: Any | None = payload.get("sub")
             if sub_raw is not None:
                 actor_id = int(sub_raw)
-        except (jwt.PyJWTError, ValueError):
+        except jwt.PyJWTError, ValueError:
             pass
 
     reset_token: Token[int | None] | None = (

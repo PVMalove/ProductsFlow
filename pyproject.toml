@@ -20,7 +20,7 @@ dependencies = [
 ]
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py314"
 # Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
 # whitelist.py — файл-whitelist для vulture, а не исполняемый/типизируемый код.
 extend-exclude = ["alembic/versions", "whitelist.py"]

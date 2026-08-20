@@ -1,5 +1,5 @@
 from math import ceil
-from typing import Annotated, Tuple
+from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy import Select, asc, desc, exists, func, or_, select, tuple_
@@ -198,7 +198,7 @@ class ProductRepository:
         return snapshot
 
     async def _overfetch(
-        self, stmt: Select[Tuple[Product]], limit: int
+        self, stmt: Select[tuple[Product]], limit: int
     ) -> tuple[list[Product], bool]:
         """Выполняет stmt с overfetch +1 (ADR 0001); True = за limit есть ещё строка"""
         rows = list((await self.session.scalars(stmt.limit(limit + 1))).all())
@@ -206,7 +206,7 @@ class ProductRepository:
 
     async def _fetch_page(
         self,
-        base_stmt: Select[Tuple[Product]],
+        base_stmt: Select[tuple[Product]],
         limit: int,
         after: Cursor | None,
         before: Cursor | None,
@@ -343,7 +343,7 @@ class UserAuditLogRepository:
         return log
 
     async def _fetch_audit_logs(
-        self, stmt: Select[Tuple[UserAuditLog]]
+        self, stmt: Select[tuple[UserAuditLog]]
     ) -> list[UserAuditLogResponse]:
         result = await self.session.scalars(stmt)
         return [UserAuditLogResponse.model_validate(row) for row in result.all()]
@@ -398,7 +398,7 @@ class ProductAuditLogRepository:
         return await self._fetch_audit_logs(stmt)
 
     async def _fetch_audit_logs(
-        self, stmt: Select[Tuple[ProductAuditLog]]
+        self, stmt: Select[tuple[ProductAuditLog]]
     ) -> list[ProductAuditLogResponse]:
         result = await self.session.scalars(stmt)
         return [ProductAuditLogResponse.model_validate(row) for row in result.all()]

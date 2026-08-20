@@ -143,7 +143,7 @@ class ProductAuditLogPage(BaseModel):
     total_pages: int
 
 
-def _validate_password(value):
+def _validate_password(value: str) -> str:
     if len(value) < 8:
         raise ValueError("Пароль должен содержать минимум 8 символов")
     if not any(ch.islower() for ch in value):

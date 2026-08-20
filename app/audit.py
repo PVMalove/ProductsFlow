@@ -54,7 +54,7 @@ def _on_user_update(
         )
 
     if state.attrs.is_active.history.has_changes():
-        action: UserAuditAction | UserAuditAction = (
+        action: UserAuditAction = (
             UserAuditAction.ACTIVATED
             if target.is_active
             else UserAuditAction.DEACTIVATED
