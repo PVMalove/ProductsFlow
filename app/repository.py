@@ -360,8 +360,7 @@ class ProductAuditLogRepository:
             .limit(page_size)
             .offset((page_index - 1) * page_size)
         )
-        result = await self.session.scalars(stmt)
-        items = [ProductAuditLogResponse.model_validate(row) for row in result.all()]
+        items = await self._fetch_audit_logs(stmt)
         return ProductAuditLogPage(
             items=items,
             page_index=page_index,

@@ -619,8 +619,10 @@ async def test_admin_can_paginate_product_audit_across_pages(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     _, owner_token = await _register_and_login(client, "audpgowner")
-    for i in range(3):
+    product_ids = [
         await _create_product_via_http(client, owner_token, name=f"Товар {i}")
+        for i in range(3)
+    ]
 
     admin_id, admin_token = await _register_and_login(client, "audpgadmin")
     await _promote_to_admin(db_session, admin_id)
@@ -646,6 +648,11 @@ async def test_admin_can_paginate_product_audit_across_pages(
     first_ids = {item["id"] for item in first_body["items"]}
     second_ids = {item["id"] for item in second_body["items"]}
     assert first_ids.isdisjoint(second_ids)
+    # Новые записи первыми: товар, созданный последним, идёт первым в items.
+    product_ids_in_order = [
+        item["product_id"] for item in first_body["items"] + second_body["items"]
+    ]
+    assert product_ids_in_order == list(reversed(product_ids))
 
 
 async def test_product_audit_page_beyond_range_returns_empty_items(

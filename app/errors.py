@@ -20,6 +20,8 @@ FIELD_NAMES: dict[str, str] = {
     "price": "Цена продукта",
     "product_id": "ID продукта",
     "limit": "Лимит выборки",
+    "page_index": "Номер страницы",
+    "page_size": "Размер страницы",
 }
 
 # Шаблоны сообщений по типу ошибки Pydantic v2 (error["type"]).
