@@ -3,7 +3,7 @@ import datetime
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import PasswordChange, ProductResponse, UserCreate
+from app.schemas import PasswordChange, ProductResponse, ProductUpdate, UserCreate
 
 
 @pytest.fixture
@@ -60,6 +60,14 @@ def test_product_rejects_negative_price():
             is_active=True,
             created_at=datetime.datetime.now(),
         )
+
+
+def test_product_update_description_is_symmetric_with_other_optional_fields():
+    update = ProductUpdate(price=1200.0)
+
+    assert update.description is None
+    assert "description" not in update.model_dump(exclude_unset=True)
+    assert update.model_dump(exclude_unset=True) == {"price": 1200.0}
 
 
 def test_user_create_accepts_a_password_with_lowercase_letter_and_digit():

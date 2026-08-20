@@ -165,7 +165,7 @@ class ProductRepository:
         product_id: ProductId,
         request: ProductUpdate,
     ) -> ProductResponse | None:
-        """Обновляем продукт (True, если обновление прошло)"""
+        """Обновляем продукт; None, если продукт с таким id не найден"""
         product = await self.session.get(Product, product_id)
         if not product:
             return None

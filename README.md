@@ -94,7 +94,7 @@ make up_prod
 | GET    | `/products/category/{name}`     | публичный (опц. auth)  | Список товаров по категории                          |
 | GET    | `/products/{id}`                 | публичный (опц. auth)  | Товар по ID (с owner-исключением для деактивированных) |
 | POST   | `/products/`                    | авторизован             | Создать товар                                        |
-| PUT    | `/products/{id}`                 | владелец/admin           | Изменить товар                                        |
+| PATCH  | `/products/{id}`                 | владелец/admin           | Частично изменить товар                               |
 | DELETE | `/products/{id}`                 | владелец/admin           | Удалить товар безвозвратно                            |
 | PATCH  | `/products/{id}/activate`        | владелец/admin           | Активировать товар                                    |
 | PATCH  | `/products/{id}/deactivate`      | владелец/admin           | Деактивировать товар                                  |

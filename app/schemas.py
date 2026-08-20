@@ -43,7 +43,7 @@ class ProductUpdate(BaseModel):
         default=None, min_length=3, max_length=100, description="Категория продукта"
     )
     price: float | None = Field(default=None, ge=0, description="Цена продукта")
-    description: str = ""
+    description: str | None = Field(default=None, description="Описание продукта")
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [

@@ -173,7 +173,7 @@ async def create_product(
     return await repository.create_product(request, current_user.id)
 
 
-@router.put(
+@router.patch(
     "/{product_id}",
     response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
