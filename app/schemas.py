@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from app.models import ProductAuditAction, UserAuditAction, UserRole
 
@@ -44,6 +45,20 @@ class ProductUpdate(BaseModel):
     )
     price: float | None = Field(default=None, ge=0, description="Цена продукта")
     description: str | None = Field(default=None, description="Описание продукта")
+
+    @field_validator("name", "category", "price", "description")
+    @classmethod
+    def _reject_explicit_null(cls, value: str | float | None) -> str | float | None:
+        # В БД эти поля NOT NULL. Отсутствие поля в запросе (unset) сюда не
+        # попадает — валидаторы по умолчанию не запускаются на default-значениях,
+        # так что "не менять" по-прежнему работает. А явный null должен упасть
+        # тут 422-м, а не долететь до IntegrityError и стать невнятным 409.
+        if value is None:
+            raise PydanticCustomError(
+                "null_not_allowed", "это поле нельзя явно сбросить в null"
+            )
+        return value
+
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [

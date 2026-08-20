@@ -70,6 +70,20 @@ def test_product_update_description_is_symmetric_with_other_optional_fields():
     assert update.model_dump(exclude_unset=True) == {"price": 1200.0}
 
 
+@pytest.mark.parametrize("field", ["name", "category", "price", "description"])
+def test_product_update_rejects_an_explicit_null_on_not_null_fields(field: str):
+    with pytest.raises(ValidationError):
+        ProductUpdate(**{field: None})
+
+
+def test_product_update_omitting_a_field_still_means_leave_it_unchanged():
+    update = ProductUpdate(price=1200.0)
+
+    assert "name" not in update.model_dump(exclude_unset=True)
+    assert "category" not in update.model_dump(exclude_unset=True)
+    assert "description" not in update.model_dump(exclude_unset=True)
+
+
 def test_user_create_accepts_a_password_with_lowercase_letter_and_digit():
     user = UserCreate(username="alice", password="secret12")
 
