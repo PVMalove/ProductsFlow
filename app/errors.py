@@ -18,6 +18,7 @@ FIELD_NAMES: dict[str, str] = {
     "name": "Название продукта",
     "category": "Категория продукта",
     "price": "Цена продукта",
+    "description": "Описание продукта",
     "product_id": "ID продукта",
     "limit": "Лимит выборки",
     "page_index": "Номер страницы",

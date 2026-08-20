@@ -44,6 +44,21 @@ class ProductUpdate(BaseModel):
     )
     price: float | None = Field(default=None, ge=0, description="Цена продукта")
     description: str | None = Field(default=None, description="Описание продукта")
+
+    @field_validator("name", "category", "price", "description")
+    @classmethod
+    def _reject_explicit_null(cls, value: str | float | None) -> str | float | None:
+        # В БД эти поля NOT NULL. Отсутствие поля в запросе (unset) сюда не
+        # попадает — валидаторы по умолчанию не запускаются на default-значениях,
+        # так что "не менять" по-прежнему работает. А явный null должен упасть
+        # тут 422-м, а не долететь до IntegrityError и стать невнятным 409.
+        if value is None:
+            raise ValueError(
+                "нельзя явно сбросить в null; чтобы оставить прежнее значение, "
+                "не передавайте это поле"
+            )
+        return value
+
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [

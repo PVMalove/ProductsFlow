@@ -263,6 +263,26 @@ async def test_patch_updates_only_the_description_when_thats_all_thats_sent(
     assert body["name"] == "Ноутбук"
 
 
+@pytest.mark.parametrize("field", ["name", "category", "price", "description"])
+async def test_patch_with_an_explicit_null_on_a_not_null_field_returns_422(
+    client: AsyncClient, field: str
+) -> None:
+    _, owner_token = await _register_and_login(client, f"pnull{field[0]}1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    update_response = await client.patch(
+        f"/products/{product_id}", json={field: None}, headers=_auth(owner_token)
+    )
+
+    assert update_response.status_code == 422
+    errors = update_response.json()["detail"]
+    assert any(error["field"] == field for error in errors)
+    assert all(error["message"] for error in errors)
+
+    get_response = await client.get(f"/products/{product_id}")
+    assert get_response.json()["price"] == 1000.0
+
+
 async def test_non_owner_without_admin_cannot_update_a_foreign_product(
     client: AsyncClient,
 ) -> None:
