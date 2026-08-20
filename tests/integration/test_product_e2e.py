@@ -247,7 +247,11 @@ async def test_non_owner_without_admin_cannot_delete_a_foreign_product(
 async def test_regular_user_cannot_list_product_audit(client: AsyncClient) -> None:
     _, token = await _register_and_login(client, "regular1")
 
-    response = await client.get("/products/audit", headers=_auth(token))
+    response = await client.get(
+        "/products/audit",
+        params={"page_index": 2, "page_size": 5},
+        headers=_auth(token),
+    )
 
     assert response.status_code == 403
 
@@ -601,6 +605,99 @@ async def test_admin_can_list_product_audit(
     response = await client.get("/products/audit", headers=_auth(admin_token))
 
     assert response.status_code == 200
+    body = response.json()
     # db_session изолирует каждый тест отдельной транзакцией с откатом
     # (см. conftest.py), поэтому в этой БД ровно одна audit-запись.
-    assert len(response.json()) == 1
+    assert body["total"] == 1
+    assert body["page_index"] == 1
+    assert body["page_size"] == 10
+    assert body["total_pages"] == 1
+    assert [entry["action"] for entry in body["items"]] == ["created"]
+
+
+async def test_admin_can_paginate_product_audit_across_pages(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "audpgowner")
+    product_ids = [
+        await _create_product_via_http(client, owner_token, name=f"Товар {i}")
+        for i in range(3)
+    ]
+
+    admin_id, admin_token = await _register_and_login(client, "audpgadmin")
+    await _promote_to_admin(db_session, admin_id)
+
+    first_page = await client.get(
+        "/products/audit",
+        params={"page_index": 1, "page_size": 2},
+        headers=_auth(admin_token),
+    )
+    second_page = await client.get(
+        "/products/audit",
+        params={"page_index": 2, "page_size": 2},
+        headers=_auth(admin_token),
+    )
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    first_body, second_body = first_page.json(), second_page.json()
+    assert len(first_body["items"]) == 2
+    assert len(second_body["items"]) == 1
+    assert first_body["total"] == 3
+    assert first_body["total_pages"] == 2
+    first_ids = {item["id"] for item in first_body["items"]}
+    second_ids = {item["id"] for item in second_body["items"]}
+    assert first_ids.isdisjoint(second_ids)
+    # Новые записи первыми: товар, созданный последним, идёт первым в items.
+    product_ids_in_order = [
+        item["product_id"] for item in first_body["items"] + second_body["items"]
+    ]
+    assert product_ids_in_order == list(reversed(product_ids))
+
+
+async def test_product_audit_page_beyond_range_returns_empty_items(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "audrgowner")
+    await _create_product_via_http(client, owner_token)
+
+    admin_id, admin_token = await _register_and_login(client, "audrgadmin")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit",
+        params={"page_index": 999, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 1
+    assert body["total_pages"] == 1
+
+
+async def test_product_audit_page_rejects_page_index_below_one(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "audbadidx1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit", params={"page_index": 0}, headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 422
+
+
+async def test_product_audit_page_rejects_page_size_below_one(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "audbadsiz1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit", params={"page_size": 0}, headers=_auth(admin_token)
+    )
+
+    assert response.status_code == 422

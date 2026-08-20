@@ -1,3 +1,4 @@
+from math import ceil
 from typing import Annotated, Tuple
 
 from fastapi import Depends
@@ -15,6 +16,7 @@ from app.models import (
 from app.pagination import Cursor, encode_cursor
 from app.schemas import (
     PageInfo,
+    ProductAuditLogPage,
     ProductAuditLogResponse,
     ProductCreate,
     ProductId,
@@ -341,15 +343,31 @@ class ProductAuditLogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_all_audit_logs(self) -> list[ProductAuditLogResponse]:
+    async def get_all_audit_logs_page(
+        self, page_index: int, page_size: int
+    ) -> ProductAuditLogPage:
         # Глобальный админский фид — новые записи сначала, в отличие от
         # хронологического get_audit_logs_by_product ниже. id тут —
         # tie-breaker для совпадающих created_at внутри одной транзакции,
-        # см. #29.
-        stmt = select(ProductAuditLog).order_by(
-            ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc()
+        # см. #29. Offset вместо cursor — обоснование в ADR 0005.
+        total = await self.session.scalar(
+            select(func.count()).select_from(ProductAuditLog)
         )
-        return await self._fetch_audit_logs(stmt)
+        total = total or 0
+        stmt = (
+            select(ProductAuditLog)
+            .order_by(ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc())
+            .limit(page_size)
+            .offset((page_index - 1) * page_size)
+        )
+        items = await self._fetch_audit_logs(stmt)
+        return ProductAuditLogPage(
+            items=items,
+            page_index=page_index,
+            page_size=page_size,
+            total=total,
+            total_pages=ceil(total / page_size) if total else 0,
+        )
 
     async def get_audit_logs_by_product(
         self, product_id: int

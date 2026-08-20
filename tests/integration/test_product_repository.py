@@ -1161,7 +1161,80 @@ async def test_get_all_audit_logs_orders_newest_first(
         await db_session.refresh(log)
     repository = ProductAuditLogRepository(db_session)
 
-    result = await repository.get_all_audit_logs()
+    result = await repository.get_all_audit_logs_page(page_index=1, page_size=10)
 
-    ids_in_order = [entry.id for entry in result]
+    ids_in_order = [entry.id for entry in result.items]
     assert ids_in_order.index(newer.id) < ids_in_order.index(older.id)
+
+
+async def test_get_all_audit_logs_page_breaks_created_at_ties_by_id(
+    db_session: AsyncSession,
+) -> None:
+    # Тот же #29-сценарий, что и у get_audit_logs_by_product, но для
+    # пагинированного глобального фида: он сортирует по убыванию (desc),
+    # поэтому tie-breaker по id тоже должен быть по убыванию.
+    owner_id = await _create_owner(db_session, username="page_tie_owner")
+    product = await _create_product(db_session, owner_id)
+    tied_created_at = datetime.now()
+    tied_logs = [
+        ProductAuditLog(
+            product_id=product.id,
+            actor_user_id=owner_id,
+            action=ProductAuditAction.UPDATED,
+            created_at=tied_created_at,
+        )
+        for _ in range(3)
+    ]
+    db_session.add_all(tied_logs)
+    await db_session.commit()
+    for log in tied_logs:
+        await db_session.refresh(log)
+    repository = ProductAuditLogRepository(db_session)
+
+    page = await repository.get_all_audit_logs_page(page_index=1, page_size=10)
+
+    tied_ids = {log.id for log in tied_logs}
+    observed_order = [entry.id for entry in page.items if entry.id in tied_ids]
+    assert observed_order == sorted(tied_ids, reverse=True)
+
+
+async def test_get_all_audit_logs_page_reports_total_and_total_pages(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="page_math_owner")
+    product = await _create_product(db_session, owner_id)
+    # Создание продукта уже даёт 1 audit-запись (CREATED) — добавляем ещё 4,
+    # итого 5 записей, чтобы page_size=2 давал 3 страницы.
+    extra_logs = [
+        ProductAuditLog(
+            product_id=product.id,
+            actor_user_id=owner_id,
+            action=ProductAuditAction.UPDATED,
+        )
+        for _ in range(4)
+    ]
+    db_session.add_all(extra_logs)
+    await db_session.commit()
+    repository = ProductAuditLogRepository(db_session)
+
+    first_page = await repository.get_all_audit_logs_page(page_index=1, page_size=2)
+
+    assert first_page.total == 5
+    assert first_page.total_pages == 3
+    assert len(first_page.items) == 2
+    assert first_page.page_index == 1
+    assert first_page.page_size == 2
+
+
+async def test_get_all_audit_logs_page_beyond_last_page_returns_empty_items(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="page_range_owner")
+    await _create_product(db_session, owner_id)
+    repository = ProductAuditLogRepository(db_session)
+
+    page = await repository.get_all_audit_logs_page(page_index=999, page_size=10)
+
+    assert page.items == []
+    assert page.total == 1
+    assert page.total_pages == 1
