@@ -178,7 +178,7 @@ class ProductRepository:
     async def set_active_product(
         self, product_id: ProductId, active: bool
     ) -> ProductResponse | None:
-        """Переключаем видимость продукта (True, если продукт найден)"""
+        """Переключаем видимость продукта; None, если продукт с таким id не найден"""
         product = await self.session.get(Product, product_id)
         if product is None:
             return None
@@ -188,7 +188,7 @@ class ProductRepository:
         return ProductResponse.model_validate(product)
 
     async def delete_product(self, product_id: ProductId) -> ProductResponse | None:
-        """Удаляем продукт (True, если удаление прошло)"""
+        """Удаляем продукт; None, если продукт с таким id не найден"""
         product = await self.session.get(Product, product_id)
         if not product:
             return None
