@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from app.models import ProductAuditAction, UserAuditAction, UserRole
 
@@ -53,9 +54,8 @@ class ProductUpdate(BaseModel):
         # так что "не менять" по-прежнему работает. А явный null должен упасть
         # тут 422-м, а не долететь до IntegrityError и стать невнятным 409.
         if value is None:
-            raise ValueError(
-                "нельзя явно сбросить в null; чтобы оставить прежнее значение, "
-                "не передавайте это поле"
+            raise PydanticCustomError(
+                "null_not_allowed", "это поле нельзя явно сбросить в null"
             )
         return value
 
