@@ -2,7 +2,7 @@ from math import ceil
 from typing import Annotated, Tuple
 
 from fastapi import Depends
-from sqlalchemy import Select, exists, func, or_, select, tuple_
+from sqlalchemy import Select, asc, desc, exists, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
@@ -18,6 +18,7 @@ from app.schemas import (
     PageInfo,
     ProductAuditLogPage,
     ProductAuditLogResponse,
+    ProductAuditSortField,
     ProductCreate,
     ProductId,
     ProductListResponse,
@@ -26,6 +27,15 @@ from app.schemas import (
     UserAuditLogResponse,
     UserResponse,
 )
+
+# Whitelist sort_by -> реальная колонка (#36): защищает от произвольных имён
+# полей, попадающих в ORDER BY.
+_AUDIT_SORT_COLUMNS = {
+    "created_at": ProductAuditLog.created_at,
+    "action": ProductAuditLog.action,
+    "actor_user_id": ProductAuditLog.actor_user_id,
+    "product_id": ProductAuditLog.product_id,
+}
 
 
 class ProductRepository:
@@ -344,19 +354,27 @@ class ProductAuditLogRepository:
         self.session = session
 
     async def get_all_audit_logs_page(
-        self, page_index: int, page_size: int
+        self,
+        page_index: int,
+        page_size: int,
+        sort_by: ProductAuditSortField = "created_at",
+        sort_desc: bool = True,
     ) -> ProductAuditLogPage:
-        # Глобальный админский фид — новые записи сначала, в отличие от
-        # хронологического get_audit_logs_by_product ниже. id тут —
-        # tie-breaker для совпадающих created_at внутри одной транзакции,
-        # см. #29. Offset вместо cursor — обоснование в ADR 0005.
+        # Глобальный админский фид — новые записи сначала по умолчанию, в
+        # отличие от хронологического get_audit_logs_by_product ниже. id
+        # тут — tie-breaker для совпадающих значений sort_by (в т.ч.
+        # created_at внутри одной транзакции, см. #29), в том же
+        # направлении, что и sort_by, см. #36. Offset вместо cursor —
+        # обоснование в ADR 0005.
         total = await self.session.scalar(
             select(func.count()).select_from(ProductAuditLog)
         )
         total = total or 0
+        direction = desc if sort_desc else asc
+        sort_column = _AUDIT_SORT_COLUMNS[sort_by]
         stmt = (
             select(ProductAuditLog)
-            .order_by(ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc())
+            .order_by(direction(sort_column), direction(ProductAuditLog.id))
             .limit(page_size)
             .offset((page_index - 1) * page_size)
         )
