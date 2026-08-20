@@ -14,6 +14,7 @@ from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
 from app.schemas import (
     ProductAuditLogPage,
     ProductAuditLogResponse,
+    ProductAuditSortField,
     ProductCreate,
     ProductId,
     ProductListResponse,
@@ -108,9 +109,14 @@ async def list_all_product_audit_logs(
     repository: ProductAuditLogRepositoryDI,
     page_index: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1),
+    sort_by: ProductAuditSortField = Query(default="created_at"),
+    sort_desc: bool = Query(default=True),
 ) -> ProductAuditLogPage:
     return await repository.get_all_audit_logs_page(
-        page_index=page_index, page_size=page_size
+        page_index=page_index,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_desc=sort_desc,
     )
 
 

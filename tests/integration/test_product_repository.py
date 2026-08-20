@@ -1238,3 +1238,134 @@ async def test_get_all_audit_logs_page_beyond_last_page_returns_empty_items(
     assert page.items == []
     assert page.total == 1
     assert page.total_pages == 1
+
+
+async def test_get_all_audit_logs_page_sort_by_action_uses_the_action_column(
+    db_session: AsyncSession,
+) -> None:
+    # #36: action — нативный Postgres ENUM (см. миграции), сортируется по
+    # порядковому номеру объявления значения в типе (CREATED, UPDATED,
+    # DELETED, ACTIVATED, DEACTIVATED), а не по алфавиту строки. created_at
+    # ниже растёт в порядке вставки (updated, deactivated, activated), что
+    # отличается и от enum-порядка (updated, activated, deactivated), и от
+    # алфавитного — расхождение ловит и ошибочный маппинг на другую колонку,
+    # и молчаливое игнорирование sort_by.
+    owner_id = await _create_owner(db_session, username="sort_action_owner")
+    rows = [
+        ProductAuditLog(
+            product_id=1,
+            actor_user_id=owner_id,
+            action=action,
+            created_at=datetime(2024, 1, index + 1),
+        )
+        for index, action in enumerate(
+            [
+                ProductAuditAction.UPDATED,
+                ProductAuditAction.DEACTIVATED,
+                ProductAuditAction.ACTIVATED,
+            ]
+        )
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+    repository = ProductAuditLogRepository(db_session)
+
+    page = await repository.get_all_audit_logs_page(
+        page_index=1, page_size=10, sort_by="action", sort_desc=False
+    )
+
+    assert [entry.action for entry in page.items] == [
+        ProductAuditAction.UPDATED,
+        ProductAuditAction.ACTIVATED,
+        ProductAuditAction.DEACTIVATED,
+    ]
+
+
+async def test_get_all_audit_logs_page_sort_by_actor_user_id_uses_the_actor_column(
+    db_session: AsyncSession,
+) -> None:
+    # owner_c < owner_b < owner_a по id, но created_at ниже задан в обратном
+    # порядке — расхождение ловит ошибочный маппинг на created_at вместо
+    # actor_user_id.
+    owner_a = await _create_owner(db_session, username="sort_actor_a")
+    owner_b = await _create_owner(db_session, username="sort_actor_b")
+    owner_c = await _create_owner(db_session, username="sort_actor_c")
+    rows = [
+        ProductAuditLog(
+            product_id=1,
+            actor_user_id=actor_id,
+            action=ProductAuditAction.UPDATED,
+            created_at=datetime(2024, 1, index + 1),
+        )
+        for index, actor_id in enumerate([owner_c, owner_b, owner_a])
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+    repository = ProductAuditLogRepository(db_session)
+
+    page = await repository.get_all_audit_logs_page(
+        page_index=1, page_size=10, sort_by="actor_user_id", sort_desc=False
+    )
+
+    assert [entry.actor_user_id for entry in page.items] == [
+        owner_a,
+        owner_b,
+        owner_c,
+    ]
+
+
+async def test_get_all_audit_logs_page_sort_by_product_id_uses_the_product_id_column(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="sort_product_owner")
+    rows = [
+        ProductAuditLog(
+            product_id=product_id,
+            actor_user_id=owner_id,
+            action=ProductAuditAction.UPDATED,
+            created_at=datetime(2024, 1, index + 1),
+        )
+        for index, product_id in enumerate([30, 20, 10])
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+    repository = ProductAuditLogRepository(db_session)
+
+    page = await repository.get_all_audit_logs_page(
+        page_index=1, page_size=10, sort_by="product_id", sort_desc=False
+    )
+
+    assert [entry.product_id for entry in page.items] == [10, 20, 30]
+
+
+async def test_get_all_audit_logs_page_ties_on_a_non_created_at_field_break_by_id(
+    db_session: AsyncSession,
+) -> None:
+    # Аналог test_get_all_audit_logs_page_breaks_created_at_ties_by_id (#29),
+    # но для произвольного sort_by (#36): id — tie-breaker для любого поля,
+    # в том же направлении, что и выбранная сортировка.
+    owner_id = await _create_owner(db_session, username="sort_tie_owner")
+    tied_logs = [
+        ProductAuditLog(
+            product_id=1,
+            actor_user_id=owner_id,
+            action=ProductAuditAction.UPDATED,
+        )
+        for _ in range(3)
+    ]
+    db_session.add_all(tied_logs)
+    await db_session.commit()
+    for log in tied_logs:
+        await db_session.refresh(log)
+    repository = ProductAuditLogRepository(db_session)
+    tied_ids = sorted(log.id for log in tied_logs)
+
+    ascending = await repository.get_all_audit_logs_page(
+        page_index=1, page_size=10, sort_by="action", sort_desc=False
+    )
+    descending = await repository.get_all_audit_logs_page(
+        page_index=1, page_size=10, sort_by="action", sort_desc=True
+    )
+
+    assert [entry.id for entry in ascending.items] == tied_ids
+    assert [entry.id for entry in descending.items] == list(reversed(tied_ids))

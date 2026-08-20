@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,6 +8,7 @@ from app.models import ProductAuditAction, UserAuditAction, UserRole
 
 ProductId = Annotated[int, Path(gt=0)]
 UserId = Annotated[int, Path(gt=0)]
+ProductAuditSortField = Literal["created_at", "action", "actor_user_id", "product_id"]
 
 
 class ProductBase(BaseModel):

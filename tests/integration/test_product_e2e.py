@@ -701,3 +701,200 @@ async def test_product_audit_page_rejects_page_size_below_one(
     )
 
     assert response.status_code == 422
+
+
+async def test_product_audit_sort_by_created_at_ascending_orders_oldest_first(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "srtcaown1")
+    admin_id, admin_token = await _register_and_login(client, "srtcaadm1")
+    await _promote_to_admin(db_session, admin_id)
+    first_id = await _create_product_via_http(client, owner_token, name="Товар А")
+    second_id = await _create_product_via_http(client, owner_token, name="Товар Б")
+
+    response = await client.get(
+        "/products/audit",
+        params={"sort_by": "created_at", "sort_desc": False, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert [item["product_id"] for item in response.json()["items"]] == [
+        first_id,
+        second_id,
+    ]
+
+
+async def test_product_audit_sort_by_action_orders_by_the_action_column(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # action — нативный Postgres ENUM, сортируется по порядковому номеру
+    # объявления значения в типе (CREATED, UPDATED, DELETED, ACTIVATED,
+    # DEACTIVATED, см. alembic/versions), а не по алфавиту строки: отсюда
+    # created < updated < activated < deactivated, а не алфавитный порядок.
+    _, owner_token = await _register_and_login(client, "srtacown1")
+    product_id = await _create_product_via_http(client, owner_token)
+    await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
+    await client.patch(f"/products/{product_id}/activate", headers=_auth(owner_token))
+    await client.put(
+        f"/products/{product_id}", json={"price": 1234.0}, headers=_auth(owner_token)
+    )
+    admin_id, admin_token = await _register_and_login(client, "srtacadm1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit",
+        params={"sort_by": "action", "sort_desc": False, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert [item["action"] for item in response.json()["items"]] == [
+        "created",
+        "updated",
+        "activated",
+        "deactivated",
+    ]
+
+
+async def test_product_audit_sort_by_actor_user_id_orders_by_actor(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # Регистрируем lo раньше hi (lo_id < hi_id), но hi создаёт товар первым —
+    # actor_user_id и created_at идут в противоположных порядках, так что
+    # тест ловит и ситуацию, когда sort_by молча игнорируется в пользу
+    # дефолтной сортировки по created_at.
+    lo_id, lo_token = await _register_and_login(client, "srtaulo1")
+    hi_id, hi_token = await _register_and_login(client, "srtauhi1")
+    assert lo_id < hi_id
+    await _create_product_via_http(client, hi_token, name="Товар Hi")
+    await _create_product_via_http(client, lo_token, name="Товар Lo")
+    admin_id, admin_token = await _register_and_login(client, "srtauadm1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit",
+        params={"sort_by": "actor_user_id", "sort_desc": False, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert [item["actor_user_id"] for item in response.json()["items"]] == [
+        lo_id,
+        hi_id,
+    ]
+
+
+async def test_product_audit_sort_by_product_id_orders_by_product_id(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "srtpiown1")
+    admin_id, admin_token = await _register_and_login(client, "srtpiadm1")
+    await _promote_to_admin(db_session, admin_id)
+    first_id = await _create_product_via_http(client, owner_token, name="Товар А")
+    second_id = await _create_product_via_http(client, owner_token, name="Товар Б")
+
+    response = await client.get(
+        "/products/audit",
+        params={"sort_by": "product_id", "sort_desc": True, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 200
+    assert [item["product_id"] for item in response.json()["items"]] == [
+        second_id,
+        first_id,
+    ]
+
+
+async def test_product_audit_sort_desc_false_reverses_the_default_order(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "srtdsown1")
+    admin_id, admin_token = await _register_and_login(client, "srtdsadm1")
+    await _promote_to_admin(db_session, admin_id)
+    first_id = await _create_product_via_http(client, owner_token, name="Товар А")
+    second_id = await _create_product_via_http(client, owner_token, name="Товар Б")
+
+    descending = await client.get(
+        "/products/audit", params={"page_size": 10}, headers=_auth(admin_token)
+    )
+    ascending = await client.get(
+        "/products/audit",
+        params={"sort_desc": False, "page_size": 10},
+        headers=_auth(admin_token),
+    )
+
+    assert descending.status_code == 200
+    assert ascending.status_code == 200
+    assert [item["product_id"] for item in descending.json()["items"]] == [
+        second_id,
+        first_id,
+    ]
+    assert [item["product_id"] for item in ascending.json()["items"]] == [
+        first_id,
+        second_id,
+    ]
+
+
+async def test_product_audit_rejects_an_invalid_sort_by_value(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_id, admin_token = await _register_and_login(client, "srtbadfl1")
+    await _promote_to_admin(db_session, admin_id)
+
+    response = await client.get(
+        "/products/audit",
+        params={"sort_by": "description"},
+        headers=_auth(admin_token),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_product_audit_pagination_totals_stay_correct_with_a_custom_sort(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # AC #36: page_index/page_size/total/total_pages должны продолжать
+    # корректно работать в комбинации с любым sort_by/sort_desc, а не только
+    # с дефолтной сортировкой по created_at.
+    _, owner_token = await _register_and_login(client, "srtpgown1")
+    admin_id, admin_token = await _register_and_login(client, "srtpgadm1")
+    await _promote_to_admin(db_session, admin_id)
+    first_id = await _create_product_via_http(client, owner_token, name="Товар А")
+    second_id = await _create_product_via_http(client, owner_token, name="Товар Б")
+    third_id = await _create_product_via_http(client, owner_token, name="Товар В")
+
+    first_page = await client.get(
+        "/products/audit",
+        params={
+            "sort_by": "product_id",
+            "sort_desc": False,
+            "page_index": 1,
+            "page_size": 2,
+        },
+        headers=_auth(admin_token),
+    )
+    second_page = await client.get(
+        "/products/audit",
+        params={
+            "sort_by": "product_id",
+            "sort_desc": False,
+            "page_index": 2,
+            "page_size": 2,
+        },
+        headers=_auth(admin_token),
+    )
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    first_body, second_body = first_page.json(), second_page.json()
+    assert first_body["total"] == 3
+    assert first_body["total_pages"] == 2
+    assert second_body["total"] == 3
+    assert second_body["total_pages"] == 2
+    assert [item["product_id"] for item in first_body["items"]] == [
+        first_id,
+        second_id,
+    ]
+    assert [item["product_id"] for item in second_body["items"]] == [third_id]
