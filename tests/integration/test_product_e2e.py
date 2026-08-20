@@ -97,7 +97,7 @@ async def test_full_product_lifecycle_reflects_in_get_and_audit(
     assert get_response.json()["name"] == "Ноутбук"
     assert await _audit_actions(client, owner_token, product_id) == ["created"]
 
-    update_response = await client.put(
+    update_response = await client.patch(
         f"/products/{product_id}", json={"price": 1200.0}, headers=_auth(owner_token)
     )
     assert update_response.status_code == 204
@@ -214,6 +214,55 @@ async def test_reading_audit_for_a_product_that_never_existed_returns_404(
     assert admin_response.status_code == 404
 
 
+async def test_put_on_product_returns_405(client: AsyncClient) -> None:
+    _, owner_token = await _register_and_login(client, "putgone1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    response = await client.put(
+        f"/products/{product_id}", json={"price": 1.0}, headers=_auth(owner_token)
+    )
+
+    assert response.status_code == 405
+
+
+async def test_patch_with_partial_body_leaves_omitted_fields_untouched(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "patchpart1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    update_response = await client.patch(
+        f"/products/{product_id}", json={"price": 1500.0}, headers=_auth(owner_token)
+    )
+    assert update_response.status_code == 204
+
+    get_response = await client.get(f"/products/{product_id}")
+    body = get_response.json()
+    assert body["price"] == 1500.0
+    assert body["name"] == "Ноутбук"
+    assert body["description"] == "Тестовый товар"
+
+
+async def test_patch_updates_only_the_description_when_thats_all_thats_sent(
+    client: AsyncClient,
+) -> None:
+    _, owner_token = await _register_and_login(client, "patchdesc1")
+    product_id = await _create_product_via_http(client, owner_token)
+
+    update_response = await client.patch(
+        f"/products/{product_id}",
+        json={"description": "Обновлённое описание"},
+        headers=_auth(owner_token),
+    )
+    assert update_response.status_code == 204
+
+    get_response = await client.get(f"/products/{product_id}")
+    body = get_response.json()
+    assert body["description"] == "Обновлённое описание"
+    assert body["price"] == 1000.0
+    assert body["name"] == "Ноутбук"
+
+
 async def test_non_owner_without_admin_cannot_update_a_foreign_product(
     client: AsyncClient,
 ) -> None:
@@ -222,7 +271,7 @@ async def test_non_owner_without_admin_cannot_update_a_foreign_product(
 
     _, intruder_token = await _register_and_login(client, "intruder1")
 
-    response = await client.put(
+    response = await client.patch(
         f"/products/{product_id}", json={"price": 1.0}, headers=_auth(intruder_token)
     )
 
@@ -265,7 +314,7 @@ async def test_admin_can_update_and_delete_a_foreign_product(
     admin_id, admin_token = await _register_and_login(client, "admin2")
     await _promote_to_admin(db_session, admin_id)
 
-    update_response = await client.put(
+    update_response = await client.patch(
         f"/products/{product_id}", json={"price": 42.0}, headers=_auth(admin_token)
     )
     assert update_response.status_code == 204
@@ -290,7 +339,7 @@ async def test_admin_can_still_update_a_deactivated_owners_product(
 
     await client.patch(f"/users/{owner_id}/deactivate", headers=_auth(admin_token))
 
-    response = await client.put(
+    response = await client.patch(
         f"/products/{product_id}", json={"price": 1234.0}, headers=_auth(admin_token)
     )
 
@@ -449,7 +498,7 @@ async def test_deactivate_and_reactivate_appear_in_audit_log_in_order(
     _, owner_token = await _register_and_login(client, "toggle8")
     product_id = await _create_product_via_http(client, owner_token)
 
-    await client.put(
+    await client.patch(
         f"/products/{product_id}", json={"price": 1500.0}, headers=_auth(owner_token)
     )
     await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
@@ -463,11 +512,11 @@ async def test_deactivate_and_reactivate_appear_in_audit_log_in_order(
     ]
 
 
-async def test_put_cannot_change_is_active(client: AsyncClient) -> None:
+async def test_patch_cannot_change_is_active(client: AsyncClient) -> None:
     _, owner_token = await _register_and_login(client, "toggle9")
     product_id = await _create_product_via_http(client, owner_token)
 
-    update_response = await client.put(
+    update_response = await client.patch(
         f"/products/{product_id}",
         json={"price": 1500.0, "is_active": False},
         headers=_auth(owner_token),
@@ -543,7 +592,7 @@ async def test_owner_can_still_update_their_own_deactivated_product(
     product_id = await _create_product_via_http(client, owner_token)
     await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
 
-    response = await client.put(
+    response = await client.patch(
         f"/products/{product_id}", json={"price": 42.0}, headers=_auth(owner_token)
     )
 
@@ -736,7 +785,7 @@ async def test_product_audit_sort_by_action_orders_by_the_action_column(
     product_id = await _create_product_via_http(client, owner_token)
     await client.patch(f"/products/{product_id}/deactivate", headers=_auth(owner_token))
     await client.patch(f"/products/{product_id}/activate", headers=_auth(owner_token))
-    await client.put(
+    await client.patch(
         f"/products/{product_id}", json={"price": 1234.0}, headers=_auth(owner_token)
     )
     admin_id, admin_token = await _register_and_login(client, "srtacadm1")
