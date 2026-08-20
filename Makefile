@@ -21,14 +21,14 @@ message    ?= "auto"
 msg        ?= "auto"
 
 check: ## Прогнать все линтеры (ruff, mypy, ruff format --check, vulture)
-	ruff check $(path)
-	mypy --explicit-package-bases $(path)
-	ruff format --check $(path)
-	vulture ./whitelist.py $(path)
+	uv run ruff check $(path)
+	uv run mypy --explicit-package-bases $(path)
+	uv run ruff format --check $(path)
+	uv run vulture ./whitelist.py $(path)
 
 format: ## Автоформатирование кода (ruff format + ruff check --fix)
-	ruff format $(path)
-	ruff check --fix $(path)
+	uv run ruff format $(path)
+	uv run ruff check --fix $(path)
 
 lint: format check ## Сначала отформатировать, затем проверить (format + check)
 
