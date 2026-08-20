@@ -12,6 +12,7 @@ from app.pagination import (
 )
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
 from app.schemas import (
+    ProductAuditLogPage,
     ProductAuditLogResponse,
     ProductCreate,
     ProductId,
@@ -100,13 +101,17 @@ async def get_products_by_price_range(
 
 @router.get(
     "/audit",
-    response_model=list[ProductAuditLogResponse],
+    response_model=ProductAuditLogPage,
 )
 async def list_all_product_audit_logs(
     _admin: AdminUser,
     repository: ProductAuditLogRepositoryDI,
-) -> list[ProductAuditLogResponse]:
-    return await repository.get_all_audit_logs()
+    page_index: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1),
+) -> ProductAuditLogPage:
+    return await repository.get_all_audit_logs_page(
+        page_index=page_index, page_size=page_size
+    )
 
 
 @router.get(

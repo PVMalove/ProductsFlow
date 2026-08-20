@@ -134,6 +134,14 @@ class ProductAuditLogResponse(BaseModel):
     created_at: datetime
 
 
+class ProductAuditLogPage(BaseModel):
+    items: list[ProductAuditLogResponse]
+    page_index: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
 def _validate_password(value):
     if len(value) < 8:
         raise ValueError("Пароль должен содержать минимум 8 символов")
