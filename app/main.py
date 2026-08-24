@@ -1,10 +1,12 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import Token
+from sys import prefix
 from typing import Any
 
 import jwt
-from fastapi import FastAPI, Request, Response
+from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi.routing import APIRoute
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app.audit import current_actor_id
@@ -31,9 +33,11 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
-app.include_router(auth.router)
-app.include_router(products.router)
-app.include_router(users.router)
+app_v1 = APIRouter(prefix="/api/v1")
+app.include_router(app_v1)
+app_v1.include_router(auth.router)
+app_v1.include_router(products.router)
+app_v1.include_router(users.router)
 
 register_exception_handlers(app)
 
