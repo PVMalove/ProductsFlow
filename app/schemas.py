@@ -81,6 +81,20 @@ class ProductResponse(ProductBase):
     created_at: datetime
 
 
+class ProductImageRecord(BaseModel):
+    """Валидированная из ORM запись картинки товара — то, что читает
+    репозиторий; из неё роутер строит публичную ссылку (ProductImageResponse)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    s3_key: str
+    updated_at: datetime
+
+
+class ProductImageResponse(BaseModel):
+    image_url: str
+    updated_at: datetime
+
+
 class PageInfo(BaseModel):
     next_cursor: str | None
     prev_cursor: str | None

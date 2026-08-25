@@ -9,6 +9,7 @@ from app.db import Session
 from app.models import (
     Product,
     ProductAuditLog,
+    ProductImage,
     User,
     UserAuditAction,
     UserAuditLog,
@@ -21,6 +22,7 @@ from app.schemas import (
     ProductAuditSortField,
     ProductCreate,
     ProductId,
+    ProductImageRecord,
     ProductListResponse,
     ProductResponse,
     ProductUpdate,
@@ -83,6 +85,16 @@ class ProductRepository:
             )
         product = await self.session.scalar(stmt)
         return ProductResponse.model_validate(product) if product else None
+
+    async def get_product_image_by_id(
+        self, product_id: ProductId
+    ) -> ProductImageRecord | None:
+        """Картинка товара по id товара, без логики видимости — она уже
+        проверена раньше, тем же способом, что и для прямого получения
+        товара (ADR 0007)."""
+        stmt = select(ProductImage).where(ProductImage.product_id == product_id)
+        image = await self.session.scalar(stmt)
+        return ProductImageRecord.model_validate(image) if image else None
 
     async def search_products_page(
         self,
