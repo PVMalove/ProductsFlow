@@ -9,7 +9,7 @@ from app.pagination import (
     decode_cursor,
 )
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
-from app.router._shared import _ensure_product_exists, _is_admin
+from app.router.product_visibility import ensure_product_exists, is_admin
 from app.schemas import (
     ProductAuditLogPage,
     ProductAuditLogResponse,
@@ -124,10 +124,10 @@ async def list_all_product_audit_logs(
 async def get_product(
     product_id: ProductId, repository: ProductRepositoryDI, viewer: OptionalUser
 ) -> ProductResponse:
-    return _ensure_product_exists(
+    return ensure_product_exists(
         await repository.get_product_by_id(
             product_id,
-            viewer_is_admin=_is_admin(viewer),
+            viewer_is_admin=is_admin(viewer),
             viewer_id=viewer.id if viewer is not None else None,
         )
     )
@@ -181,7 +181,7 @@ async def update_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> None:
-    existing_product = _ensure_product_exists(
+    existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
@@ -198,7 +198,7 @@ async def delete_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> None:
-    existing_product = _ensure_product_exists(
+    existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
@@ -214,11 +214,11 @@ async def activate_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> ProductResponse:
-    existing_product = _ensure_product_exists(
+    existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
-    return _ensure_product_exists(await repository.set_active_product(product_id, True))
+    return ensure_product_exists(await repository.set_active_product(product_id, True))
 
 
 @router.patch(
@@ -230,13 +230,11 @@ async def deactivate_product(
     repository: ProductRepositoryDI,
     current_user: CurrentUser,
 ) -> ProductResponse:
-    existing_product = _ensure_product_exists(
+    existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
     _ensure_owner_or_admin(existing_product, current_user)
-    return _ensure_product_exists(
-        await repository.set_active_product(product_id, False)
-    )
+    return ensure_product_exists(await repository.set_active_product(product_id, False))
 
 
 @router.get(
@@ -274,8 +272,8 @@ def _ensure_owner_or_admin(
     product: Product | ProductResponse, current_user: User
 ) -> None:
     is_owner = product.user_id == current_user.id
-    is_admin = current_user.role == UserRole.ADMIN
-    if not (is_owner or is_admin):
+    caller_is_admin = current_user.role == UserRole.ADMIN
+    if not (is_owner or caller_is_admin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Нет прав на этот продукт!",
@@ -303,4 +301,4 @@ def _resolve_page_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    return _parse_cursor(after), _parse_cursor(before), _is_admin(viewer)
+    return _parse_cursor(after), _parse_cursor(before), is_admin(viewer)
