@@ -1,4 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Annotated, Any
 
 from alembic.config import Config
@@ -13,9 +15,13 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from alembic import command
-from app.models import Product, User, UserRole
+from app.models import Product, ProductImage, User, UserRole
 from app.seed_factories import generate_products
 from app.settings import settings
+from app.storage import get_storage
+
+SEED_PLACEHOLDER_KEY = "seed/placeholder.jpg"
+SEED_PLACEHOLDER_PATH = Path(__file__).parent / "assets" / "placeholder.jpg"
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url, echo=settings.app_env.lower() == "dev"
@@ -70,17 +76,46 @@ async def _ensure_admin_seeded(session: AsyncSession) -> User:
     return admin
 
 
-async def _ensure_products_seeded(session: AsyncSession, owner_id: int) -> None:
-    result = await session.execute(select(func.count()).select_from(Product))
-    count = result.scalar_one()
-    if count > 0:
+async def _ensure_products_seeded(session: "AsyncSession", owner_id: int) -> None:
+    # Оптимизация SQLAlchemy: использование scalar()
+    count = await session.scalar(select(func.count()).select_from(Product))
+    if count and count > 0:
         return
 
+    # Асинхронное чтение файла (защита от блокировки event loop)
+    placeholder_bytes = await asyncio.to_thread(SEED_PLACEHOLDER_PATH.read_bytes)
+
+    # Загружаем картинку в S3 через класс S3Storage
+    storage = get_storage()
+    await storage.ensure_object_exists(
+        bucket_name=settings.minio_bucket_name_product,  # Не забудьте передать бакет
+        key=SEED_PLACEHOLDER_KEY,
+        body=placeholder_bytes,
+        content_type="image/jpeg",
+    )
+
+    # Генерация продуктов
     products = [
         Product(**product_data, user_id=owner_id)
         for product_data in generate_products(360)
     ]
     session.add_all(products)
+
+    await session.flush()
+
+    # Создаем изображения продуктов
+    size_bytes = len(placeholder_bytes)
+    images = [
+        ProductImage(
+            product_id=p.id,
+            s3_key=SEED_PLACEHOLDER_KEY,
+            content_type="image/jpeg",
+            size_bytes=size_bytes,
+        )
+        for p in products
+    ]
+    session.add_all(images)
+
     await session.commit()
 
 

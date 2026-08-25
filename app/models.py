@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -39,6 +39,32 @@ class Product(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    image: Mapped["ProductImage | None"] = relationship(
+        back_populates="product",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class ProductImage(Base):
+    __tablename__ = "product_image"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    s3_key: Mapped[str]
+    content_type: Mapped[str]
+    size_bytes: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    product: Mapped["Product"] = relationship(back_populates="image")
 
 
 class UserAuditAction(enum.StrEnum):

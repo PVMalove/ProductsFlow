@@ -32,6 +32,34 @@ class S3Storage:
         ) as client:
             yield cast("S3Client", client)
 
+    async def ensure_object_exists(
+        self,
+        bucket_name: str,
+        key: str,
+        body: bytes,
+        content_type: str,
+    ) -> None:
+        """Проверяет наличие объекта в S3 и загружает его, если он отсутствует."""
+        async with self.client() as client:
+            try:
+                await client.head_object(Bucket=bucket_name, Key=key)
+                logger.debug(
+                    "Объект '%s' уже существует в бакете '%s'.", key, bucket_name
+                )
+                return
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code", "")
+                if error_code not in {"404", "NoSuchKey", "NotFound"}:
+                    raise
+
+            await client.put_object(
+                Bucket=bucket_name,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+            )
+            logger.info("Объект '%s' загружен в бакет '%s'.", key, bucket_name)
+
     async def ensure_bucket_exists(self, bucket_name: str) -> None:
         async with self.client() as client:
             try:

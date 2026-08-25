@@ -11,7 +11,7 @@ from app.settings import settings
 from app.storage import S3Storage, ensure_minio_buckets, get_storage
 
 
-@asynccontextmanager # type: ignore
+@asynccontextmanager  # type: ignore
 async def _client_cm(mock_client: AsyncMock) -> Any:
     yield mock_client
 
@@ -26,6 +26,50 @@ def _storage_with_client(mock_client: AsyncMock) -> S3Storage:
 
 def _not_found_error(code: str = "404") -> ClientError:
     return ClientError({"Error": {"Code": code}}, "HeadBucket")
+
+
+async def test_upload_object_if_missing_uploads_absent_object():
+    mock_client = AsyncMock()
+    mock_client.head_object.side_effect = _not_found_error()
+    storage = _storage_with_client(mock_client)
+
+    await storage.ensure_object_exists(
+        "product-chunks", "image.jpg", b"data", "image/jpeg"
+    )
+
+    mock_client.put_object.assert_awaited_once_with(
+        Bucket="product-chunks",
+        Key="image.jpg",
+        Body=b"data",
+        ContentType="image/jpeg",
+    )
+
+
+async def test_upload_object_if_missing_skips_existing_object():
+    mock_client = AsyncMock()
+    storage = _storage_with_client(mock_client)
+
+    await storage.ensure_object_exists(
+        "product-chunks", "image.jpg", b"data", "image/jpeg"
+    )
+
+    mock_client.head_object.assert_awaited_once_with(
+        Bucket="product-chunks", Key="image.jpg"
+    )
+    mock_client.put_object.assert_not_awaited()
+
+
+async def test_upload_object_if_missing_reraises_unexpected_error():
+    mock_client = AsyncMock()
+    mock_client.head_object.side_effect = _not_found_error(code="403")
+    storage = _storage_with_client(mock_client)
+
+    with pytest.raises(ClientError):
+        await storage.ensure_object_exists(
+            "product-chunks", "image.jpg", b"data", "image/jpeg"
+        )
+
+    mock_client.put_object.assert_not_awaited()
 
 
 async def test_ensure_bucket_exists_creates_bucket_when_missing():
