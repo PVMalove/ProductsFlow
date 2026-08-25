@@ -67,7 +67,22 @@ async def test_get_product_image_returns_200_with_url_and_updated_at_for_anonymo
         image.s3_key,
         int(image.updated_at.timestamp()),
     )
-    assert body["url"] == expected_url
+    assert body["image_url"] == expected_url
+
+
+async def test_get_product_image_returns_200_for_a_regular_authenticated_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, owner_token = await _register_and_login(client, "imgowner9")
+    product_id = await _create_product_via_http(client, owner_token)
+    await _attach_image(db_session, product_id)
+
+    _, viewer_token = await _register_and_login(client, "imgviewer9")
+    response = await client.get(
+        IMAGE_PATH.format(product_id=product_id), headers=_auth(viewer_token)
+    )
+
+    assert response.status_code == 200
 
 
 async def test_get_product_image_404_message_matches_direct_get_for_nonexistent_product(

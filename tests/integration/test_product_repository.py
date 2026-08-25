@@ -285,10 +285,8 @@ async def test_get_product_image_by_id_returns_the_image_row(
     found = await repository.get_product_image_by_id(product.id)
 
     assert found is not None
-    assert found.product_id == product.id
     assert found.s3_key == "products/1/image.jpg"
-    assert found.content_type == "image/jpeg"
-    assert found.size_bytes == 123
+    assert found.updated_at is not None
 
 
 async def test_get_product_image_by_id_ignores_visibility_of_a_deactivated_product(
@@ -312,7 +310,7 @@ async def test_get_product_image_by_id_ignores_visibility_of_a_deactivated_produ
     found = await repository.get_product_image_by_id(product.id)
 
     assert found is not None
-    assert found.product_id == product.id
+    assert found.s3_key == "products/2/image.jpg"
 
 
 async def test_get_products_page_orders_newest_first(db_session: AsyncSession) -> None:

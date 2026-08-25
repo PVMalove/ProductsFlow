@@ -34,7 +34,7 @@ async def get_product_image(
             detail="У товара нет картинки!",
         )
     return ProductImageResponse(
-        url=storage.build_public_url(
+        image_url=storage.build_public_url(
             settings.minio_bucket_name_product,
             image.s3_key,
             int(image.updated_at.timestamp()),

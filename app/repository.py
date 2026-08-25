@@ -22,6 +22,7 @@ from app.schemas import (
     ProductAuditSortField,
     ProductCreate,
     ProductId,
+    ProductImageRecord,
     ProductListResponse,
     ProductResponse,
     ProductUpdate,
@@ -87,12 +88,13 @@ class ProductRepository:
 
     async def get_product_image_by_id(
         self, product_id: ProductId
-    ) -> ProductImage | None:
+    ) -> ProductImageRecord | None:
         """Картинка товара по id товара, без логики видимости — она уже
         проверена раньше, тем же способом, что и для прямого получения
         товара (ADR 0007)."""
         stmt = select(ProductImage).where(ProductImage.product_id == product_id)
-        return await self.session.scalar(stmt)
+        image = await self.session.scalar(stmt)
+        return ProductImageRecord.model_validate(image) if image else None
 
     async def search_products_page(
         self,
