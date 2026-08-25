@@ -90,6 +90,8 @@ class ProductAuditAction(enum.StrEnum):
     DELETED = "deleted"
     ACTIVATED = "activated"
     DEACTIVATED = "deactivated"
+    IMAGE_UPDATED = "image_updated"
+    IMAGE_DELETED = "image_deleted"
 
 
 class ProductAuditLog(Base):
