@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.models import Product, User, UserRole
+from app.models import User, UserRole
 from app.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -9,7 +9,11 @@ from app.pagination import (
     decode_cursor,
 )
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
-from app.router.product_visibility import ensure_product_exists, is_admin
+from app.router.product_visibility import (
+    ensure_owner_or_admin,
+    ensure_product_exists,
+    is_admin,
+)
 from app.schemas import (
     ProductAuditLogPage,
     ProductAuditLogResponse,
@@ -184,7 +188,7 @@ async def update_product(
     existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
-    _ensure_owner_or_admin(existing_product, current_user)
+    ensure_owner_or_admin(existing_product, current_user)
     await repository.update_product(product_id, product_update)
 
 
@@ -201,7 +205,7 @@ async def delete_product(
     existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
-    _ensure_owner_or_admin(existing_product, current_user)
+    ensure_owner_or_admin(existing_product, current_user)
     await repository.delete_product(product_id)
 
 
@@ -217,7 +221,7 @@ async def activate_product(
     existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
-    _ensure_owner_or_admin(existing_product, current_user)
+    ensure_owner_or_admin(existing_product, current_user)
     return ensure_product_exists(await repository.set_active_product(product_id, True))
 
 
@@ -233,7 +237,7 @@ async def deactivate_product(
     existing_product = ensure_product_exists(
         await repository.get_product_by_id(product_id, viewer_is_admin=True)
     )
-    _ensure_owner_or_admin(existing_product, current_user)
+    ensure_owner_or_admin(existing_product, current_user)
     return ensure_product_exists(await repository.set_active_product(product_id, False))
 
 
@@ -251,7 +255,7 @@ async def get_product_audit_logs(
     logs = await audit_repository.get_audit_logs_by_product(product_id)
 
     if product is not None:
-        _ensure_owner_or_admin(product, current_user)
+        ensure_owner_or_admin(product, current_user)
     elif logs:
         # Продукт удалён — владельца проверить уже не по чему, доступ только админу.
         if current_user.role != UserRole.ADMIN:
@@ -266,18 +270,6 @@ async def get_product_audit_logs(
         )
 
     return logs
-
-
-def _ensure_owner_or_admin(
-    product: Product | ProductResponse, current_user: User
-) -> None:
-    is_owner = product.user_id == current_user.id
-    is_admin_owner = current_user.role == UserRole.ADMIN
-    if not (is_owner or is_admin_owner):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Нет прав на этот продукт!",
-        )
 
 
 def _parse_cursor(raw: str | None) -> Cursor | None:

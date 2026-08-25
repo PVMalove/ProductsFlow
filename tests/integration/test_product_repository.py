@@ -313,6 +313,105 @@ async def test_get_product_image_by_id_ignores_visibility_of_a_deactivated_produ
     assert found.s3_key == "products/2/image.jpg"
 
 
+async def _get_image_row(session: AsyncSession, product_id: int) -> ProductImage | None:
+    return await session.scalar(
+        select(ProductImage).where(ProductImage.product_id == product_id)
+    )
+
+
+async def test_upsert_product_image_creates_a_new_row_and_writes_audit_log(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="upsert_owner_new")
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    record = await repository.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id}/image",
+        content_type="image/jpeg",
+        size_bytes=123,
+        actor_user_id=owner_id,
+    )
+
+    assert record.s3_key == f"products/{product.id}/image"
+    assert record.updated_at is not None
+    row = await _get_image_row(db_session, product.id)
+    assert row is not None
+    assert row.content_type == "image/jpeg"
+    assert row.size_bytes == 123
+    logs = await _audit_logs(db_session, product.id)
+    assert [log.action for log in logs] == [
+        ProductAuditAction.CREATED,
+        ProductAuditAction.IMAGE_UPDATED,
+    ]
+    assert logs[-1].actor_user_id == owner_id
+
+
+async def test_upsert_product_image_replaces_an_existing_row_in_place(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="upsert_owner_replace")
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+    await repository.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id}/image",
+        content_type="image/jpeg",
+        size_bytes=100,
+        actor_user_id=owner_id,
+    )
+
+    await repository.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id}/image",
+        content_type="image/png",
+        size_bytes=200,
+        actor_user_id=owner_id,
+    )
+
+    rows = (
+        await db_session.scalars(
+            select(ProductImage).where(ProductImage.product_id == product.id)
+        )
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].content_type == "image/png"
+    assert rows[0].size_bytes == 200
+    logs = await _audit_logs(db_session, product.id)
+    assert [log.action for log in logs] == [
+        ProductAuditAction.CREATED,
+        ProductAuditAction.IMAGE_UPDATED,
+        ProductAuditAction.IMAGE_UPDATED,
+    ]
+
+
+async def test_delete_product_image_removes_the_row_and_writes_audit_log(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="delete_image_owner")
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+    await repository.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id}/image",
+        content_type="image/jpeg",
+        size_bytes=123,
+        actor_user_id=owner_id,
+    )
+
+    await repository.delete_product_image(product.id, actor_user_id=owner_id)
+
+    assert await _get_image_row(db_session, product.id) is None
+    logs = await _audit_logs(db_session, product.id)
+    assert [log.action for log in logs] == [
+        ProductAuditAction.CREATED,
+        ProductAuditAction.IMAGE_UPDATED,
+        ProductAuditAction.IMAGE_DELETED,
+    ]
+    assert logs[-1].actor_user_id == owner_id
+
+
 async def test_get_products_page_orders_newest_first(db_session: AsyncSession) -> None:
     owner_id = await _create_owner(db_session)
     first = await _create_product(db_session, owner_id, name="Первый")

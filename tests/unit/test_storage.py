@@ -75,6 +75,55 @@ async def test_upload_object_if_missing_reraises_unexpected_error():
     mock_client.put_object.assert_not_awaited()
 
 
+async def test_put_object_uploads_unconditionally():
+    mock_client = AsyncMock()
+    storage = _storage_with_client(mock_client)
+
+    await storage.put_object(
+        "product-chunks", "products/1/image", b"data", "image/jpeg"
+    )
+
+    mock_client.head_object.assert_not_awaited()
+    mock_client.put_object.assert_awaited_once_with(
+        Bucket="product-chunks",
+        Key="products/1/image",
+        Body=b"data",
+        ContentType="image/jpeg",
+    )
+
+
+async def test_delete_object_deletes_existing_object():
+    mock_client = AsyncMock()
+    storage = _storage_with_client(mock_client)
+
+    await storage.delete_object("product-chunks", "products/1/image")
+
+    mock_client.delete_object.assert_awaited_once_with(
+        Bucket="product-chunks", Key="products/1/image"
+    )
+
+
+async def test_delete_object_tolerates_already_missing_object():
+    mock_client = AsyncMock()
+    mock_client.delete_object.side_effect = _not_found_error()
+    storage = _storage_with_client(mock_client)
+
+    await storage.delete_object("product-chunks", "products/1/image")
+
+    mock_client.delete_object.assert_awaited_once_with(
+        Bucket="product-chunks", Key="products/1/image"
+    )
+
+
+async def test_delete_object_reraises_unexpected_error():
+    mock_client = AsyncMock()
+    mock_client.delete_object.side_effect = _not_found_error(code="403")
+    storage = _storage_with_client(mock_client)
+
+    with pytest.raises(ClientError):
+        await storage.delete_object("product-chunks", "products/1/image")
+
+
 async def test_ensure_bucket_exists_creates_bucket_when_missing():
     mock_client = AsyncMock()
     mock_client.head_bucket.side_effect = _not_found_error()

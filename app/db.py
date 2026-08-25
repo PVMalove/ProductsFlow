@@ -20,7 +20,8 @@ from app.seed_factories import generate_products
 from app.settings import settings
 from app.storage import get_storage
 
-SEED_PLACEHOLDER_KEY = "seed/placeholder.jpg"
+SEED_KEY_PREFIX = "seed/"
+SEED_PLACEHOLDER_KEY = f"{SEED_KEY_PREFIX}placeholder.jpg"
 SEED_PLACEHOLDER_PATH = Path(__file__).parent / "assets" / "placeholder.jpg"
 
 engine: AsyncEngine = create_async_engine(

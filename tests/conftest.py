@@ -6,13 +6,24 @@ import pytest_asyncio
 from httpx import URL, ASGITransport, AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import HttpWaitStrategy
 
 from app.db import _run_upgrade, get_session
 from app.main import app
+from app.settings import settings
+from app.storage import get_storage
 
 POSTGRES_IMAGE = "postgres:18.0"
 API_PREFIX = "/api/v1"
 API_ROUTE_PREFIXES = ("/auth", "/products", "/users")
+
+# Тот же тег, что у minio_dev/minio_prod в docker-compose.yml.
+MINIO_IMAGE = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
+MINIO_PORT = 9000
+MINIO_TEST_USER = "test-minio-admin"
+MINIO_TEST_PASSWORD = "test-minio-secret"
+MINIO_TEST_BUCKET = "product-chunks-test"
 
 
 class ApiClient(AsyncClient):
@@ -37,6 +48,36 @@ class ApiClient(AsyncClient):
 def postgres_container() -> Iterator[PostgresContainer]:
     with PostgresContainer(POSTGRES_IMAGE, driver="asyncpg") as container:
         yield container
+
+
+@pytest.fixture(scope="session")
+def minio_container() -> Iterator[DockerContainer]:
+    container = (
+        DockerContainer(MINIO_IMAGE)
+        .with_exposed_ports(MINIO_PORT)
+        .with_env("MINIO_ROOT_USER", MINIO_TEST_USER)
+        .with_env("MINIO_ROOT_PASSWORD", MINIO_TEST_PASSWORD)
+        .with_command(f"server /data --address :{MINIO_PORT}")
+        .waiting_for(HttpWaitStrategy(MINIO_PORT, "/minio/health/live"))
+    )
+    with container as started:
+        yield started
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def minio_ready(minio_container: DockerContainer) -> None:
+    """Настраивает settings на контейнерный MinIO и создаёт бакет картинок
+    товара — образы, реально пишущие/удаляющие объекты в S3 (в отличие от
+    GET, который только собирает URL-строку), просят эту фикстуру явно."""
+    host = minio_container.get_container_host_ip()
+    port = minio_container.get_exposed_port(MINIO_PORT)
+    endpoint = f"http://{host}:{port}"
+    settings.minio_endpoint = endpoint
+    settings.minio_public_endpoint = endpoint
+    settings.minio_root_user = MINIO_TEST_USER
+    settings.minio_root_password = MINIO_TEST_PASSWORD
+    settings.minio_bucket_name_product = MINIO_TEST_BUCKET
+    await get_storage().ensure_bucket_exists(MINIO_TEST_BUCKET)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

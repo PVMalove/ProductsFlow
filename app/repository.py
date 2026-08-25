@@ -2,12 +2,14 @@ from math import ceil
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy import Select, asc, desc, exists, func, or_, select, tuple_
+from sqlalchemy import Select, asc, delete, desc, exists, func, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Session
 from app.models import (
     Product,
+    ProductAuditAction,
     ProductAuditLog,
     ProductImage,
     User,
@@ -95,6 +97,69 @@ class ProductRepository:
         stmt = select(ProductImage).where(ProductImage.product_id == product_id)
         image = await self.session.scalar(stmt)
         return ProductImageRecord.model_validate(image) if image else None
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: int,
+    ) -> ProductImageRecord:
+        """Создаёт или заменяет картинку товара одним SQL-запросом (upsert по
+        ProductImage.product_id). Выполняется в обход ORM unit-of-work, поэтому
+        не запускает ORM-события app/audit.py — audit-запись пишется здесь же,
+        явно, в той же транзакции (см. ADR 0009)."""
+        insert_stmt = pg_insert(ProductImage).values(
+            product_id=product_id,
+            s3_key=s3_key,
+            content_type=content_type,
+            size_bytes=size_bytes,
+        )
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[ProductImage.product_id],
+            set_={
+                "s3_key": insert_stmt.excluded.s3_key,
+                "content_type": insert_stmt.excluded.content_type,
+                "size_bytes": insert_stmt.excluded.size_bytes,
+                "updated_at": func.now(),
+            },
+        ).returning(ProductImage)
+        image = (await self.session.execute(upsert_stmt)).scalar_one()
+        # Захватываем результат до commit(): expire_on_commit сделает атрибуты
+        # ORM-объекта недоступными без нового (синхронного) обращения к БД.
+        record = ProductImageRecord.model_validate(image)
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_UPDATED,
+                product_id=product_id,
+                actor_user_id=actor_user_id,
+                description=(
+                    f"Загружена картинка товара (content_type={content_type}, "
+                    f"size_bytes={size_bytes})"
+                ),
+            )
+        )
+        await self.session.commit()
+        return record
+
+    async def delete_product_image(
+        self, product_id: ProductId, actor_user_id: int
+    ) -> None:
+        """Удаляет картинку товара; предполагает, что она существует (проверка
+        — забота вызывающей стороны, см. ProductRepository.get_product_image_by_id)."""
+        await self.session.execute(
+            delete(ProductImage).where(ProductImage.product_id == product_id)
+        )
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_DELETED,
+                product_id=product_id,
+                actor_user_id=actor_user_id,
+                description="Удалена картинка товара",
+            )
+        )
+        await self.session.commit()
 
     async def search_products_page(
         self,
