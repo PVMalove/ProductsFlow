@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     access_token_ttl_hours: int = 1
     admin_password: str = ""
     minio_endpoint: str = ""
+    minio_public_endpoint: str = ""
     minio_root_user: str = ""
     minio_root_password: str = ""
     minio_bucket_name_product: str = ""

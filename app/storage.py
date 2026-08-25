@@ -2,10 +2,11 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Annotated, cast
 
 import aioboto3
 from botocore.exceptions import ClientError
+from fastapi import Depends
 
 from app.settings import settings
 
@@ -16,8 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 class S3Storage:
-    def __init__(self, endpoint_url: str, access_key: str, secret_key: str) -> None:
+    def __init__(
+        self,
+        endpoint_url: str,
+        public_endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+    ) -> None:
         self._endpoint_url = endpoint_url
+        self._public_endpoint_url = public_endpoint_url
         self._access_key = access_key
         self._secret_key = secret_key
         self._session: aioboto3.Session = aioboto3.Session()
@@ -78,6 +86,11 @@ class S3Storage:
                 await client.create_bucket(Bucket=bucket_name)
                 logger.info("Бакет '%s' успешно создан.", bucket_name)
 
+    def build_public_url(self, bucket_name: str, key: str, version: int) -> str:
+        """Собирает публичную, достижимую клиентом ссылку на объект хранилища."""
+        base_url = self._public_endpoint_url.rstrip("/")
+        return f"{base_url}/{bucket_name}/{key}?v={version}"
+
     async def set_public_read_policy(self, bucket_name: str) -> None:
         policy = {
             "Version": "2012-10-17",
@@ -102,9 +115,13 @@ class S3Storage:
 def get_storage() -> S3Storage:
     return S3Storage(
         endpoint_url=settings.minio_endpoint,
+        public_endpoint_url=settings.minio_public_endpoint,
         access_key=settings.minio_root_user,
         secret_key=settings.minio_root_password,
     )
+
+
+StorageDI = Annotated[S3Storage, Depends(get_storage)]
 
 
 async def ensure_minio_buckets() -> None:

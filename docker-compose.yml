@@ -93,7 +93,7 @@ services:
       MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
       MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
     ports:
-      - "${MINIO_API_PORT_PROD:-9000}:9000" # API
+      - "${MINIO_API_PORT_PROD:-9004}:9000" # API
       - "${MINIO_CONSOLE_PORT_PROD:-9001}:9001" # Web-консоль
     volumes:
       - minio_data_prod:/data/minio
@@ -118,6 +118,7 @@ services:
       APP_ENV: prod
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@products_db_prod:5432/${POSTGRES_DB}
       MINIO_ENDPOINT: http://minio_prod:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_PORT_PROD:-9004}
     ports:
       - "9000:8000"
     depends_on:
