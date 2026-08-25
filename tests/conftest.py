@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient, Response
+from httpx import URL, ASGITransport, AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
@@ -17,10 +17,11 @@ API_ROUTE_PREFIXES = ("/auth", "/products", "/users")
 
 class ApiClient(AsyncClient):
     async def request(
-        self, method: str, url: str, *args: Any, **kwargs: Any
+        self, method: str, url: URL | str, *args: Any, **kwargs: Any
     ) -> Response:
-        if not url.startswith(("http://", "https://")):
-            normalized_url = url if url.startswith("/") else f"/{url}"
+        url_str = str(url)
+        if not url_str.startswith(("http://", "https://")):
+            normalized_url = url_str if url_str.startswith("/") else f"/{url_str}"
             is_api_route = any(
                 normalized_url == route_prefix
                 or normalized_url.startswith(f"{route_prefix}/")
@@ -28,8 +29,8 @@ class ApiClient(AsyncClient):
             )
             if is_api_route and not normalized_url.startswith(f"{API_PREFIX}/"):
                 normalized_url = f"{API_PREFIX}{normalized_url}"
-            url = normalized_url
-        return await super().request(method, url, *args, **kwargs)
+            url_str = normalized_url
+        return await super().request(method, url_str, *args, **kwargs)
 
 
 @pytest.fixture(scope="session")

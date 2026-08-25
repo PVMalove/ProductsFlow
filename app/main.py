@@ -13,11 +13,13 @@ from app.errors import register_exception_handlers
 from app.router import auth, products, users
 from app.security import decode_access_token
 from app.settings import settings
+from app.storage import ensure_minio_buckets
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await run_migrations()
+    await ensure_minio_buckets()
     await seed_db()
     yield
     await engine.dispose()

@@ -9,7 +9,7 @@ SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
 .PHONY: check format lint test test_sec_image coverage renovate \
-        make_migration migrate downgrade shell logs up_dev up_prod down_dev down_prod build \
+        make_migration migrate downgrade shell logs up_dev up_prod down_dev down_prod down_dev_v down_prod_v build \
         db-revision db-upgrade db-downgrade db-current db-history \
         clean install help
 
@@ -57,6 +57,12 @@ down_dev: ## Остановить и удалить контейнеры dev-п�
 
 down_prod: ## Остановить и удалить контейнеры prod-профиля (volume с данными сохраняется)
 	docker compose --profile prod down
+
+down_dev_v: ## Остановить контейнеры dev-профиля и УДАЛИТЬ volume с данными (необратимо)
+	docker compose --profile dev down -v
+
+down_prod_v: ## Остановить контейнеры prod-профиля и УДАЛИТЬ volume с данными (необратимо)
+	docker compose --profile prod down -v
 
 build: ## Пересобрать образы docker compose
 	docker compose build $(service)
@@ -110,6 +116,8 @@ help: ## Показать список команд с описанием
 	@echo   up_prod         - Поднять prod-профиль (БД + API в докере)
 	@echo   down_dev        - Остановить контейнеры dev-профиля
 	@echo   down_prod       - Остановить контейнеры prod-профиля
+	@echo   down_dev_v      - Остановить dev-профиль и удалить volume с данными (необратимо)
+	@echo   down_prod_v     - Остановить prod-профиль и удалить volume с данными (необратимо)
 	@echo   build           - Пересобрать образы docker compose
 	@echo   shell           - Зайти в shell контейнера сервиса
 	@echo   logs            - Смотреть логи сервиса

@@ -2,4 +2,7 @@
 # `cls` is required by the @field_validator classmethod signature (pydantic v2)
 # even though the validators below don't reference it in their body.
 cls = None
-__all__ = ["cls"]
+# S3Client (app/storage.py) is a TYPE_CHECKING-only import referenced solely
+# inside string type annotations (`AsyncGenerator["S3Client"]`, `cast("S3Client", ...)`).
+S3Client = None
+__all__ = ["cls", "S3Client"]
