@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import Token
@@ -10,14 +11,19 @@ from starlette.middleware.base import RequestResponseEndpoint
 from app.audit import current_actor_id
 from app.db import engine, run_migrations, seed_db
 from app.errors import register_exception_handlers
+from app.logging_config import configure_logging
 from app.router import auth, products, users
 from app.security import decode_access_token
 from app.settings import settings
 from app.storage import ensure_minio_buckets
 
+configure_logging()
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    logger.info("Запуск ProductsFlow API")
     await run_migrations()
     await ensure_minio_buckets()
     await seed_db()

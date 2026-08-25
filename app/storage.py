@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -49,6 +50,26 @@ class S3Storage:
                 await client.create_bucket(Bucket=bucket_name)
                 logger.info("Бакет '%s' успешно создан.", bucket_name)
 
+    async def set_public_read_policy(self, bucket_name: str) -> None:
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": "*"},
+                    "Action": "s3:GetObject",
+                    "Resource": f"arn:aws:s3:::{bucket_name}/*",
+                }
+            ],
+        }
+        async with self.client() as client:
+            await client.put_bucket_policy(
+                Bucket=bucket_name, Policy=json.dumps(policy)
+            )
+            logger.info(
+                "Публичный доступ на чтение установлен для бакета '%s'.", bucket_name
+            )
+
 
 def get_storage() -> S3Storage:
     return S3Storage(
@@ -62,3 +83,4 @@ async def ensure_minio_buckets() -> None:
     storage: S3Storage = get_storage()
     for bucket_name in settings.minio_bucket_names:
         await storage.ensure_bucket_exists(bucket_name)
+    await storage.set_public_read_policy(settings.minio_bucket_name_product)
