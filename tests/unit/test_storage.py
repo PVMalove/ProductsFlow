@@ -18,7 +18,10 @@ async def _client_cm(mock_client: AsyncMock) -> Any:
 
 def _storage_with_client(mock_client: AsyncMock) -> S3Storage:
     storage = S3Storage(
-        endpoint_url="http://minio:9000", access_key="key", secret_key="secret"
+        endpoint_url="http://minio:9000",
+        public_endpoint_url="http://localhost:9000",
+        access_key="key",
+        secret_key="secret",
     )
     storage.client = lambda: _client_cm(mock_client)  # type: ignore[method-assign]
     return storage
@@ -127,14 +130,46 @@ async def test_set_public_read_policy_grants_public_get_object():
 
 def test_get_storage_builds_from_settings(monkeypatch):
     monkeypatch.setattr(settings, "minio_endpoint", "http://minio:9000")
+    monkeypatch.setattr(settings, "minio_public_endpoint", "http://localhost:9000")
     monkeypatch.setattr(settings, "minio_root_user", "root-user")
     monkeypatch.setattr(settings, "minio_root_password", "root-pass")
 
     storage = get_storage()
 
     assert storage._endpoint_url == "http://minio:9000"
+    assert storage._public_endpoint_url == "http://localhost:9000"
     assert storage._access_key == "root-user"
     assert storage._secret_key == "root-pass"
+
+
+def test_build_public_url_orders_bucket_key_and_version():
+    storage = S3Storage(
+        endpoint_url="http://minio:9000",
+        public_endpoint_url="http://localhost:9000",
+        access_key="key",
+        secret_key="secret",
+    )
+
+    url = storage.build_public_url("product-chunks", "products/1/image.jpg", 1700000000)
+
+    assert (
+        url == "http://localhost:9000/product-chunks/products/1/image.jpg?v=1700000000"
+    )
+
+
+def test_build_public_url_strips_trailing_slash_from_endpoint():
+    storage = S3Storage(
+        endpoint_url="http://minio:9000",
+        public_endpoint_url="http://localhost:9000/",
+        access_key="key",
+        secret_key="secret",
+    )
+
+    url = storage.build_public_url("product-chunks", "products/1/image.jpg", 1700000000)
+
+    assert (
+        url == "http://localhost:9000/product-chunks/products/1/image.jpg?v=1700000000"
+    )
 
 
 async def test_ensure_minio_buckets_creates_all_and_grants_public_read_to_product(
