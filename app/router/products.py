@@ -272,8 +272,8 @@ def _ensure_owner_or_admin(
     product: Product | ProductResponse, current_user: User
 ) -> None:
     is_owner = product.user_id == current_user.id
-    caller_is_admin = current_user.role == UserRole.ADMIN
-    if not (is_owner or caller_is_admin):
+    is_admin_owner = current_user.role == UserRole.ADMIN
+    if not (is_owner or is_admin_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Нет прав на этот продукт!",
