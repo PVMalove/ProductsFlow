@@ -68,6 +68,34 @@ class S3Storage:
             )
             logger.info("Объект '%s' загружен в бакет '%s'.", key, bucket_name)
 
+    async def put_object(
+        self,
+        bucket_name: str,
+        key: str,
+        body: bytes,
+        content_type: str,
+    ) -> None:
+        """Безусловно загружает объект, перезаписывая уже существующий по ключу."""
+        async with self.client() as client:
+            await client.put_object(
+                Bucket=bucket_name,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+            )
+            logger.info("Объект '%s' записан в бакет '%s'.", key, bucket_name)
+
+    async def delete_object(self, bucket_name: str, key: str) -> None:
+        """Удаляет объект; толерантен к его отсутствию (уже удалён/не существовал)."""
+        async with self.client() as client:
+            try:
+                await client.delete_object(Bucket=bucket_name, Key=key)
+                logger.info("Объект '%s' удалён из бакета '%s'.", key, bucket_name)
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code", "")
+                if error_code not in {"404", "NoSuchKey", "NotFound"}:
+                    raise
+
     async def ensure_bucket_exists(self, bucket_name: str) -> None:
         async with self.client() as client:
             try:
