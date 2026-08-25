@@ -1,12 +1,10 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import Token
-from sys import prefix
 from typing import Any
 
 import jwt
 from fastapi import APIRouter, FastAPI, Request, Response
-from fastapi.routing import APIRoute
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app.audit import current_actor_id

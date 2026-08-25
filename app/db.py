@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 
 from alembic import command
 from app.models import Product, User, UserRole
+from app.seed_factories import generate_products
 from app.settings import settings
 
 engine: AsyncEngine = create_async_engine(
@@ -45,7 +46,7 @@ async def run_migrations() -> None:
 
 async def seed_db() -> None:
     async with SessionLocal() as session, session.begin():
-        admin = await _ensure_admin_seeded(session)
+        admin: User = await _ensure_admin_seeded(session)
         await _ensure_products_seeded(session, owner_id=admin.id)
 
 
@@ -76,49 +77,11 @@ async def _ensure_products_seeded(session: AsyncSession, owner_id: int) -> None:
         return
 
     products = [
-        Product(**product_data, user_id=owner_id) for product_data in _SEED_PRODUCTS
+        Product(**product_data, user_id=owner_id)
+        for product_data in generate_products(360)
     ]
     session.add_all(products)
-
-
-_SEED_PRODUCTS: list[dict[str, Any]] = [
-    {
-        "name": "Ноутбук",
-        "category": "Электроника",
-        "price": 89990.0,
-        "description": "Лёгкий ноутбук для работы и учёбы",
-    },
-    {
-        "name": "Смартфон",
-        "category": "Электроника",
-        "price": 54990.0,
-        "description": "Смартфон с хорошей камерой",
-    },
-    {
-        "name": "Кофеварка",
-        "category": "Бытовая техника",
-        "price": 12990.0,
-        "description": "Капельная кофеварка для дома",
-    },
-    {
-        "name": "Чайник",
-        "category": "Бытовая техника",
-        "price": 2990.0,
-        "description": "Электрический чайник, объём 1.7 л",
-    },
-    {
-        "name": "Книга по Python",
-        "category": "Книги",
-        "price": 1490.0,
-        "description": "Введение в язык программирования Python",
-    },
-    {
-        "name": "Книга по FastAPI",
-        "category": "Книги",
-        "price": 1990.0,
-        "description": "Практическое руководство по фреймворку FastAPI",
-    },
-]
+    await session.commit()
 
 
 _SEED_ADMIN: dict[str, Any] = {
