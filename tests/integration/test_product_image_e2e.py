@@ -219,7 +219,7 @@ def _file(content_type: str = "image/jpeg", body: bytes = b"fake-bytes") -> dict
 
 
 async def test_post_product_image_201_on_first_upload(
-    client: AsyncClient,
+    client: AsyncClient, minio_ready: None
 ) -> None:
     _, owner_token = await _register_and_login(client, "postowner1")
     product_id = await _create_product_via_http(client, owner_token)
@@ -237,7 +237,7 @@ async def test_post_product_image_201_on_first_upload(
 
 
 async def test_post_product_image_200_on_replace_with_stable_key(
-    client: AsyncClient,
+    client: AsyncClient, minio_ready: None
 ) -> None:
     _, owner_token = await _register_and_login(client, "postowner2")
     product_id = await _create_product_via_http(client, owner_token)
@@ -291,7 +291,7 @@ async def test_post_product_image_415_for_disallowed_content_type(
 
 
 async def test_post_product_image_does_not_delete_shared_seed_placeholder(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, minio_ready: None
 ) -> None:
     storage = get_storage()
     await storage.put_object(
@@ -343,7 +343,7 @@ async def test_delete_product_image_404_when_no_image(
 
 
 async def test_delete_product_image_204_removes_row_and_s3_object(
-    client: AsyncClient,
+    client: AsyncClient, minio_ready: None
 ) -> None:
     _, owner_token = await _register_and_login(client, "delowner2")
     product_id = await _create_product_via_http(client, owner_token)
@@ -386,7 +386,7 @@ async def test_delete_product_image_403_for_non_owner_non_admin(
 
 
 async def test_delete_product_image_does_not_delete_shared_seed_placeholder(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, minio_ready: None
 ) -> None:
     storage = get_storage()
     await storage.put_object(
@@ -411,7 +411,7 @@ async def test_delete_product_image_does_not_delete_shared_seed_placeholder(
 
 
 async def test_post_and_delete_product_image_write_audit_log_entries(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, minio_ready: None
 ) -> None:
     owner_id, owner_token = await _register_and_login(client, "auditown1")
     product_id = await _create_product_via_http(client, owner_token)

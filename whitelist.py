@@ -5,4 +5,8 @@ cls = None
 # S3Client (app/storage.py) is a TYPE_CHECKING-only import referenced solely
 # inside string type annotations (`AsyncGenerator["S3Client"]`, `cast("S3Client", ...)`).
 S3Client = None
-__all__ = ["cls", "S3Client"]
+# minio_ready (tests/integration/test_product_image_e2e.py) is a pytest fixture
+# parameter requested only for its setup side effect (configures a real MinIO
+# testcontainer) — its tests never reference the value itself.
+minio_ready = None
+__all__ = ["cls", "S3Client", "minio_ready"]
