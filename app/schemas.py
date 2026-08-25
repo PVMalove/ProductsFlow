@@ -81,6 +81,11 @@ class ProductResponse(ProductBase):
     created_at: datetime
 
 
+class ProductImageResponse(BaseModel):
+    url: str
+    updated_at: datetime
+
+
 class PageInfo(BaseModel):
     next_cursor: str | None
     prev_cursor: str | None

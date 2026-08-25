@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Product, ProductAuditAction, ProductAuditLog, User
+from app.models import Product, ProductAuditAction, ProductAuditLog, ProductImage, User
 from app.pagination import Cursor, decode_cursor
 from app.repository import ProductAuditLogRepository, ProductRepository
 from app.schemas import (
@@ -255,6 +255,64 @@ async def test_get_product_by_id_admin_sees_a_product_deactivated_with_its_owner
 
     assert found is not None
     assert found.id == product.id
+
+
+async def test_get_product_image_by_id_returns_none_when_product_has_no_image(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="image_owner_none")
+    product = await _create_product(db_session, owner_id)
+    repository = ProductRepository(db_session)
+
+    assert await repository.get_product_image_by_id(product.id) is None
+
+
+async def test_get_product_image_by_id_returns_the_image_row(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = await _create_owner(db_session, username="image_owner_found")
+    product = await _create_product(db_session, owner_id)
+    image = ProductImage(
+        product_id=product.id,
+        s3_key="products/1/image.jpg",
+        content_type="image/jpeg",
+        size_bytes=123,
+    )
+    db_session.add(image)
+    await db_session.commit()
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_image_by_id(product.id)
+
+    assert found is not None
+    assert found.product_id == product.id
+    assert found.s3_key == "products/1/image.jpg"
+    assert found.content_type == "image/jpeg"
+    assert found.size_bytes == 123
+
+
+async def test_get_product_image_by_id_ignores_visibility_of_a_deactivated_product(
+    db_session: AsyncSession,
+) -> None:
+    # Метод сам не проверяет видимость (см. ADR 0007) — она проверена раньше,
+    # тем же способом, что и для прямого получения товара.
+    owner_id = await _create_owner(db_session, username="image_owner_hidden")
+    product = await _create_product(db_session, owner_id)
+    await _deactivate_product(db_session, product.id)
+    image = ProductImage(
+        product_id=product.id,
+        s3_key="products/2/image.jpg",
+        content_type="image/jpeg",
+        size_bytes=456,
+    )
+    db_session.add(image)
+    await db_session.commit()
+    repository = ProductRepository(db_session)
+
+    found = await repository.get_product_image_by_id(product.id)
+
+    assert found is not None
+    assert found.product_id == product.id
 
 
 async def test_get_products_page_orders_newest_first(db_session: AsyncSession) -> None:
