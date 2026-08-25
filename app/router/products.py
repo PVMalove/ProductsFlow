@@ -9,6 +9,7 @@ from app.pagination import (
     decode_cursor,
 )
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
+from app.router._shared import _ensure_product_exists, _is_admin
 from app.schemas import (
     ProductAuditLogPage,
     ProductAuditLogResponse,
@@ -269,15 +270,6 @@ async def get_product_audit_logs(
     return logs
 
 
-def _ensure_product_exists[T](entity: T | None) -> T:
-    if not entity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Продукт не найден!",
-        )
-    return entity
-
-
 def _ensure_owner_or_admin(
     product: Product | ProductResponse, current_user: User
 ) -> None:
@@ -312,7 +304,3 @@ def _resolve_page_request(
             detail="Нельзя одновременно указать after и before",
         )
     return _parse_cursor(after), _parse_cursor(before), _is_admin(viewer)
-
-
-def _is_admin(viewer: User | None) -> bool:
-    return viewer is not None and viewer.role == UserRole.ADMIN
