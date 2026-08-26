@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from typing import Annotated
 
+from fastapi import Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -186,3 +188,6 @@ class SupportRepository:
 
 def get_support_repository(session: Session) -> SupportRepository:
     return SupportRepository(session)
+
+
+SupportRepositoryDI = Annotated[SupportRepository, Depends(get_support_repository)]
