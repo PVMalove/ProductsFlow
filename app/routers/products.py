@@ -9,7 +9,7 @@ from app.pagination import (
     decode_cursor,
 )
 from app.repository import ProductAuditLogRepositoryDI, ProductRepositoryDI
-from app.router.product_visibility import (
+from app.routers.product_visibility import (
     ensure_owner_or_admin,
     ensure_product_exists,
     is_admin,

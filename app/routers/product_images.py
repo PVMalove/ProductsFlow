@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
 from app.db import SEED_KEY_PREFIX
 from app.repository import ProductRepositoryDI
-from app.router.product_visibility import (
+from app.routers.product_visibility import (
     ensure_owner_or_admin,
     ensure_product_exists,
     is_admin,

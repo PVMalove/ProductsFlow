@@ -12,7 +12,7 @@ from app.audit import current_actor_id
 from app.db import engine, run_migrations, seed_db
 from app.errors import register_exception_handlers
 from app.logging_config import configure_logging
-from app.router import auth, product_images, products, users
+from app.routers import auth, product_images, products, users
 from app.security import decode_access_token
 from app.settings import settings
 from app.storage import ensure_minio_buckets
