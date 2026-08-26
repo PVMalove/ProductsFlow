@@ -1,8 +1,10 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from app.support.models import Conversation, ConversationMessage
 
 
 class Base(DeclarativeBase):
@@ -18,15 +20,29 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(unique=True)
-    password_hash: Mapped[str]
+    username: Mapped[str] = mapped_column(String(50), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(default=UserRole.USER)
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    created_conversations: Mapped[list["Conversation"]] = relationship(
+            foreign_keys="[Conversation.created_by_user_id]",
+            back_populates="creator",
+        )
 
+    assigned_conversations: Mapped[list["Conversation"]] = relationship(
+            foreign_keys="[Conversation.assigned_admin_id]",
+            back_populates="assignee",
+        )
+
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+            back_populates="sender",
+        )
 
 class Product(Base):
     __tablename__ = "products"
