@@ -3,13 +3,23 @@ from fastapi import APIRouter, Depends, Query
 from app.security import require_admin
 from app.support.models import SupportStatus
 from app.support.repository import SupportRepositoryDI
-from app.support.schemas import ConversationResponse
+from app.support.schemas import ConversationResponse, SupportCounts
 
 router = APIRouter(
     prefix="/admin/support",
     tags=["admin-support"],
     dependencies=[Depends(require_admin)],
 )
+
+
+@router.get(
+    "/conversations/count",
+    response_model=SupportCounts,
+)
+async def get_conversation_counts(
+    repository: SupportRepositoryDI,
+) -> SupportCounts:
+    return await repository.get_support_counts()
 
 
 @router.get(
