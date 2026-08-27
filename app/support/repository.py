@@ -106,6 +106,8 @@ class SupportRepository:
             and conversation.first_admin_reply_at is None
         ):
             conversation.first_admin_reply_at = func.now()
+            conversation.assigned_admin_id = sender_user_id
+            conversation.status = SupportStatus.IN_PROGRESS
 
         await self.session.commit()
         await self.session.refresh(new_message)
