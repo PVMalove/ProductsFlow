@@ -65,7 +65,7 @@ async def _audit_logs(session: AsyncSession, product_id: int) -> list[ProductAud
     result = await session.scalars(
         select(ProductAuditLog)
         .where(ProductAuditLog.product_id == product_id)
-        .order_by(ProductAuditLog.created_at)
+        .order_by(ProductAuditLog.created_at, ProductAuditLog.id)
     )
     return list(result.all())
 
