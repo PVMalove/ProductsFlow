@@ -28,15 +28,20 @@ class SupportRepository:
         self, conversation_id: int
     ) -> ConversationResponse | None:
         """Загружает обращение вместе с назначенным администратором."""
+        conversation = await self.get_conversation_orm_by_id(conversation_id)
+        return (
+            ConversationResponse.model_validate(conversation) if conversation else None
+        )
+
+    async def get_conversation_orm_by_id(
+        self, conversation_id: int
+    ) -> Conversation | None:
         stmt = (
             select(Conversation)
             .options(joinedload(Conversation.assignee))
             .where(Conversation.id == conversation_id)
         )
-        conversation = await self.session.scalar(stmt)
-        return (
-            ConversationResponse.model_validate(conversation) if conversation else None
-        )
+        return await self.session.scalar(stmt)
 
     async def get_user_conversations(
         self, user_id: int, limit: int, offset: int
@@ -101,8 +106,6 @@ class SupportRepository:
             and conversation.first_admin_reply_at is None
         ):
             conversation.first_admin_reply_at = func.now()
-        if conversation.status is SupportStatus.NEW:
-            conversation.status = SupportStatus.IN_PROGRESS
 
         await self.session.commit()
         await self.session.refresh(new_message)
