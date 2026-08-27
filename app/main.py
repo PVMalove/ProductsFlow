@@ -16,6 +16,7 @@ from app.routers import auth, product_images, products, users
 from app.security import decode_access_token
 from app.settings import settings
 from app.storage import ensure_minio_buckets
+from app.support import router_admin as support_admin
 from app.support import router_user as support_user
 
 configure_logging()
@@ -46,6 +47,7 @@ app_v1.include_router(auth.router)
 app_v1.include_router(products.router)
 app_v1.include_router(users.router)
 app_v1.include_router(support_user.router)
+app_v1.include_router(support_admin.router)
 
 app_v2 = APIRouter(prefix="/api/v2")
 app.include_router(app_v2)

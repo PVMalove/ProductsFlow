@@ -160,13 +160,18 @@ class SupportRepository:
         return SupportCounts(new=counts.new, in_progress=counts.in_progress)
 
     async def get_admin_conversations(
-        self, limit: int, offset: int
+        self,
+        limit: int,
+        offset: int,
+        status: SupportStatus | None = None,
     ) -> list[ConversationResponse]:
         """Возвращает обращения для админского списка."""
+        stmt = select(Conversation).options(joinedload(Conversation.assignee))
+        if status is not None:
+            stmt = stmt.where(Conversation.status == status)
         stmt = (
-            select(Conversation)
+            stmt.order_by(Conversation.last_message_at.desc(), Conversation.id.desc())
             .options(joinedload(Conversation.assignee))
-            .order_by(Conversation.last_message_at.desc(), Conversation.id.desc())
             .limit(limit)
             .offset(offset)
         )
