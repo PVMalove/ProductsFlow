@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     secret_key: str = ""
     access_token_ttl_hours: int = 1
     admin_password: str = ""
+    cors_allow_origins: list[str] = [
+        "http://localhost:5501",
+        "http://localhost:7500",
+        "http://localhost:8000",
+    ]
     minio_endpoint: str = ""
     minio_public_endpoint: str = ""
     minio_root_user: str = ""

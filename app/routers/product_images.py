@@ -33,7 +33,7 @@ async def get_featured_products(
     products = await repository.get_featured(count)
     return [
         FeaturedProduct(
-            **FeaturedProduct.model_validate(product).model_dump(),
+            **FeaturedProduct.model_validate(product).model_dump(exclude={"image_url"}),
             image_url=(
                 storage.build_public_url(
                     settings.minio_bucket_name_product,

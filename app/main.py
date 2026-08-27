@@ -6,6 +6,7 @@ from typing import Any
 
 import jwt
 from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app.audit import current_actor_id
@@ -41,6 +42,14 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app_v1 = APIRouter(prefix="/api/v1")
 app.include_router(app_v1)
 app_v1.include_router(auth.router)
