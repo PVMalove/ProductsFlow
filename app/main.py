@@ -12,7 +12,7 @@ from app.audit import current_actor_id
 from app.db import engine, run_migrations, seed_db
 from app.errors import register_exception_handlers
 from app.logging_config import configure_logging
-from app.routers import auth, product_images, products, users
+from app.routers import auth, categories, product_images, products, users
 from app.security import decode_access_token
 from app.settings import settings
 from app.storage import ensure_minio_buckets
@@ -52,6 +52,7 @@ app_v1.include_router(support_admin.router)
 app_v2 = APIRouter(prefix="/api/v2")
 app.include_router(app_v2)
 app_v2.include_router(product_images.router)
+app_v2.include_router(categories.router)
 
 register_exception_handlers(app)
 

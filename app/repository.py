@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.pagination import Cursor, encode_cursor
 from app.schemas import (
+    CategoryWithCount,
     PageInfo,
     ProductAuditLogPage,
     ProductAuditLogResponse,
@@ -94,6 +95,18 @@ class ProductRepository:
             products.extend(list((await self.session.scalars(fallback_stmt)).all()))
 
         return products
+
+    async def get_categories_with_count(self) -> list[CategoryWithCount]:
+        """Возвращает категории с числом товаров, от большей к меньшей."""
+        category_count = func.count(Product.id)
+        result = await self.session.execute(
+            select(Product.category, category_count)
+            .group_by(Product.category)
+            .order_by(category_count.desc())
+        )
+        return [
+            CategoryWithCount(category=row[0], count=row[1]) for row in result.all()
+        ]
 
     async def product_exists(self, product_id: ProductId) -> bool:
         stmt = select(exists().where(Product.id == product_id))

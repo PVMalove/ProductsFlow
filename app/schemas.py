@@ -86,6 +86,11 @@ class FeaturedProduct(ProductResponse):
     image_url: str | None = None
 
 
+class CategoryWithCount(BaseModel):
+    category: str
+    count: int = Field(ge=0)
+
+
 class ProductImageRecord(BaseModel):
     """Валидированная из ORM запись картинки товара — то, что читает
     репозиторий; из неё роутер строит публичную ссылку (ProductImageResponse)."""
