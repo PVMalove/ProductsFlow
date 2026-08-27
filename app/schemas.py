@@ -19,6 +19,7 @@ class ProductBase(BaseModel):
     )
     price: float = Field(..., ge=0, description="Цена продукта")
     description: str = ""
+    is_featured: bool = False
 
 
 class ProductCreate(ProductBase):
@@ -79,6 +80,10 @@ class ProductResponse(ProductBase):
     user_id: int
     is_active: bool
     created_at: datetime
+
+
+class FeaturedProduct(ProductResponse):
+    image_url: str | None = None
 
 
 class ProductImageRecord(BaseModel):

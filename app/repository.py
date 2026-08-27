@@ -5,6 +5,7 @@ from fastapi import Depends
 from sqlalchemy import Select, asc, delete, desc, exists, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db import Session
 from app.models import (
@@ -64,6 +65,35 @@ class ProductRepository:
         return await self._fetch_page(
             base_stmt, limit=limit, after=after, before=before
         )
+
+    async def get_featured(self, count: int) -> list[Product]:
+        """Возвращает случайную подборку: избранные товары идут первыми."""
+        featured_stmt = (
+            select(Product)
+            .options(selectinload(Product.image))
+            .where(Product.is_active.is_(True), Product.is_featured.is_(True))
+            .order_by(func.random())
+            .limit(count)
+        )
+        featured = list((await self.session.scalars(featured_stmt)).all())
+        products = featured
+
+        if len(products) < count:
+            excluded_ids = [product.id for product in products]
+            fallback_stmt = (
+                select(Product)
+                .options(selectinload(Product.image))
+                .where(
+                    Product.is_active.is_(True),
+                    Product.is_featured.is_(False),
+                    Product.id.not_in(excluded_ids),
+                )
+                .order_by(func.random())
+                .limit(count - len(products))
+            )
+            products.extend(list((await self.session.scalars(fallback_stmt)).all()))
+
+        return products
 
     async def product_exists(self, product_id: ProductId) -> bool:
         stmt = select(exists().where(Product.id == product_id))

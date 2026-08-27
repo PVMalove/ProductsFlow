@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
 
 from app.db import SEED_KEY_PREFIX
 from app.repository import ProductRepositoryDI
@@ -9,7 +9,7 @@ from app.routers.product_visibility import (
     ensure_product_exists,
     is_admin,
 )
-from app.schemas import ProductId, ProductImageResponse
+from app.schemas import FeaturedProduct, ProductId, ProductImageResponse
 from app.security import CurrentUser, OptionalUser
 from app.settings import settings
 from app.storage import StorageDI
@@ -19,6 +19,33 @@ router = APIRouter(prefix="/products", tags=["products"])
 _NO_IMAGE_DETAIL = "У товара нет картинки!"
 _ALLOWED_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _MAX_IMAGE_SIZE = 1024 * 1024 * 5
+
+
+@router.get(
+    "/featured",
+    response_model=list[FeaturedProduct],
+)
+async def get_featured_products(
+    repository: ProductRepositoryDI,
+    storage: StorageDI,
+    count: int = Query(default=5, ge=1, le=12),
+) -> list[FeaturedProduct]:
+    products = await repository.get_featured(count)
+    return [
+        FeaturedProduct(
+            **FeaturedProduct.model_validate(product).model_dump(),
+            image_url=(
+                storage.build_public_url(
+                    settings.minio_bucket_name_product,
+                    product.image.s3_key,
+                    int(product.image.updated_at.timestamp()),
+                )
+                if product.image is not None
+                else None
+            ),
+        )
+        for product in products
+    ]
 
 
 @router.get(

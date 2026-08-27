@@ -59,6 +59,7 @@ class Product(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    is_featured: Mapped[bool] = mapped_column(default=False, server_default="false")
 
     image: Mapped["ProductImage | None"] = relationship(
         back_populates="product",
