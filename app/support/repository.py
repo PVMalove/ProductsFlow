@@ -126,8 +126,7 @@ class SupportRepository:
         conversation.status = SupportStatus.CLOSED
         conversation.closed_at = datetime.now(timezone.utc)
         await self.session.commit()
-        await self.session.refresh(conversation)
-        return ConversationResponse.model_validate(conversation)
+        return await self.get_conversation_by_id(conversation_id)
 
     async def mark_as_read(
         self, conversation_id: int, is_admin: bool

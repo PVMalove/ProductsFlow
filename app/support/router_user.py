@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.models import User as UserORM
+from app.models import UserRole
 from app.security import CurrentUser
 from app.support.models import Conversation as ConversationORM
 from app.support.models import SenderRole, SupportStatus
@@ -25,6 +26,11 @@ def _ensure_owner(conversation: ConversationORM, user: UserORM) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Обращение не найдено",
         )
+
+
+def _ensure_owner_or_admin(conversation: ConversationORM, user: UserORM) -> None:
+    if user.role != UserRole.ADMIN:
+        _ensure_owner(conversation, user)
 
 
 @router.get(
@@ -124,6 +130,36 @@ async def mark_conversation_as_read(
             detail="Обращение не найдено",
         )
     return updated_conversation
+
+
+@router.post(
+    "/conversations/{conversation_id}/close",
+    response_model=ConversationResponse,
+)
+async def close_conversation(
+    conversation_id: ConversationId,
+    repository: SupportRepositoryDI,
+    current_user: CurrentUser,
+) -> ConversationResponse:
+    conversation: ConversationORM | None = await repository.get_conversation_orm_by_id(
+        conversation_id
+    )
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Обращение не найдено",
+        )
+    _ensure_owner_or_admin(conversation, current_user)
+
+    closed_conversation: (
+        ConversationResponse | None
+    ) = await repository.close_conversation(conversation_id)
+    if closed_conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Обращение не найдено",
+        )
+    return closed_conversation
 
 
 @router.get(
