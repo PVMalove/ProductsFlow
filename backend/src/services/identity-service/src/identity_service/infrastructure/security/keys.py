@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+from functools import lru_cache
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -8,7 +9,21 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from identity_service.settings import Settings
 
 
+def generate_private_key_pem() -> bytes:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+@lru_cache(maxsize=32)
 def load_private_key(path: str) -> rsa.RSAPrivateKey:
+    """Читает и парсит ключ один раз на путь, затем отдаёт из памяти — ключ
+    проверяет токены локально, без чтения файла на каждый запрос (ADR 0011).
+    Кэш ключуется строкой пути, поэтому разные тесты с разными tmp-путями
+    никогда не делят записи; неудачный разбор (исключение) не кэшируется."""
     with open(path, "rb") as key_file:
         data = key_file.read()
     key = serialization.load_pem_private_key(data, password=None)
@@ -62,7 +77,7 @@ def validate_prod_key(settings: Settings) -> None:
         )
     try:
         load_private_key(settings.identity_jwt_private_key_path)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise RuntimeError(
             f"Не удалось прочитать приватный ключ "
             f"({settings.identity_jwt_private_key_path}): {exc}"

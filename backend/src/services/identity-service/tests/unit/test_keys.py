@@ -59,9 +59,28 @@ def test_compute_kid_differs_for_different_keys(
     assert compute_kid(first_key.public_key()) != compute_kid(second_key.public_key())
 
 
+def test_load_private_key_reuses_the_same_in_memory_key_for_the_same_path(
+    configured_key_path: Path,
+) -> None:
+    """Второй вызов не должен снова читать файл с диска (ADR 0011: "по ключу
+    в памяти") — объект, а не только значение, должен быть тем же самым."""
+    first = load_private_key(str(configured_key_path))
+    second = load_private_key(str(configured_key_path))
+
+    assert first is second
+
+
 def test_load_private_key_raises_for_missing_file() -> None:
     with pytest.raises(OSError):
         load_private_key(str(Path("no") / "such" / "path.pem"))
+
+
+def test_load_private_key_raises_for_invalid_pem_content(tmp_path: Path) -> None:
+    bad_path = tmp_path / "garbage.pem"
+    bad_path.write_text("not a pem file")
+
+    with pytest.raises(ValueError):
+        load_private_key(str(bad_path))
 
 
 def test_build_jwk_contains_expected_fields(configured_key_path: Path) -> None:
@@ -99,6 +118,18 @@ def test_validate_prod_key_raises_when_path_is_unreadable_in_prod(
     monkeypatch.setattr(
         settings, "identity_jwt_private_key_path", str(Path("no") / "such" / "file.pem")
     )
+
+    with pytest.raises(RuntimeError):
+        validate_prod_key(settings)
+
+
+def test_validate_prod_key_raises_when_file_content_is_invalid_in_prod(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bad_path = tmp_path / "garbage.pem"
+    bad_path.write_text("not a pem file")
+    monkeypatch.setattr(settings, "app_env", "prod")
+    monkeypatch.setattr(settings, "identity_jwt_private_key_path", str(bad_path))
 
     with pytest.raises(RuntimeError):
         validate_prod_key(settings)
