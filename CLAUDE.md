@@ -8,17 +8,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### backend/ (uv workspace)
 
-Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-platform`; services `identity-service`, `catalog-service`, `support-service` — all still empty skeletons (issues #73–75 built the workspace/Docker/compose/CI scaffolding ahead of any domain code). Requires Python 3.14 (`backend/pyproject.toml`'s `requires-python`).
+Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-platform`; services `identity-service`, `catalog-service`, `support-service`. `kernel-domain`, `kernel-platform`, `catalog-service`, `support-service` are still empty skeletons; `identity-service` has its first real code — RS256 token signing/verification and a public `/.well-known/jwks.json` (ADR 0011, issue #82) — issues #73–75 built the workspace/Docker/compose/CI scaffolding ahead of that. Requires Python 3.14 (`backend/pyproject.toml`'s `requires-python`).
 
 - Install deps (from `backend/`): `uv sync`
 - Lint/typecheck one member: `make check pkg=<member>` (ruff check, `mypy --explicit-package-bases`, ruff format --check, `vulture whitelist.py`), scoped to `src/libs/<member>` or `src/services/<member>`.
 - Format one member: `make format pkg=<member>` (ruff format + ruff check --fix). `make lint pkg=<member>` = format then check.
+- Test one member: `make test pkg=<member>` (`uv run --package <member> pytest`), scoped to the same member directory.
+- Generate a local RS256 dev key pair for identity: `make keys` — writes `backend/secrets/identity_jwt_private_key.pem` (git-ignored); point `IDENTITY_JWT_PRIVATE_KEY_PATH` in `.env` at it.
 - Build service images: `make build service=<compose-service>` (`identity-api`/`catalog-api`/`support-api`), or `docker compose build` directly.
 - Dev stack: `make up_dev service=<compose-service>` — base `docker-compose.yml` + `docker-compose.dev.yml` override (host ports 9010–9012, `APP_ENV=dev`).
 - Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (host ports 9013–9015, `APP_ENV=prod`, `restart: unless-stopped`).
-- Each service container gets only its own `*_DATABASE_URL` via `environment:` (ADR 0010 — not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `CATALOG_DATABASE_URL`, `SUPPORT_DATABASE_URL`).
+- Each service container gets only its own `*_DATABASE_URL` via `environment:` (ADR 0010 — not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_PRIVATE_KEY_PATH`, `IDENTITY_ACCESS_TOKEN_TTL_HOURS`, `CATALOG_DATABASE_URL`, `SUPPORT_DATABASE_URL`).
 - `docker-compose.migrations.yml` is currently an empty stub — will hold one-off bootstrap services (`alembic upgrade` + bucket-ensure + seed) once services have real Alembic revisions.
-- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-build` runs `docker compose build`.
+- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-test` runs `make test pkg=identity-service` (the only member with tests so far); `backend-build` runs `docker compose build`.
 
 ### app/ (frozen monolith)
 
