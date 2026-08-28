@@ -1,9 +1,12 @@
+import logging
 import time
 from typing import Any
 
 import httpx
 import jwt
 from jwt.algorithms import RSAAlgorithm
+
+logger = logging.getLogger(__name__)
 
 ALGORITHM = "RS256"
 DEFAULT_JWKS_PATH = "/.well-known/jwks.json"
@@ -37,11 +40,14 @@ class TokenVerifier:
 
     async def preload(self) -> None:
         """Предзагрузка при старте: неудача не фатальна и не блокирует
-        запуск — дальше при первой верификации сработает ленивый fetch."""
+        запуск — дальше при первой верификации сработает ленивый fetch
+        (ADR 0011). Ловим Exception намеренно: контракт этого метода —
+        никогда не поднимать исключение наверх, независимо от причины сбоя
+        (сеть, битый статус, невалидное тело JWKS-ответа)."""
         try:
             await self._fetch()
-        except httpx.HTTPError:
-            pass
+        except Exception:
+            logger.warning("Не удалось предзагрузить JWKS при старте", exc_info=True)
 
     async def verify(self, token: str) -> dict[str, Any]:
         kid = jwt.get_unverified_header(token).get("kid")

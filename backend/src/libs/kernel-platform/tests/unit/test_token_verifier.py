@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import httpx
@@ -72,8 +73,8 @@ async def test_verify_rejects_a_token_signed_by_a_different_key(
         await verifier.verify(forged_token)
 
 
-async def test_preload_failure_is_non_fatal_and_lazy_fetch_still_works(
-    configured_identity_key: Path,
+async def test_preload_failure_is_non_fatal_logs_and_lazy_fetch_still_works(
+    configured_identity_key: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     transport = FlakyOnceTransport(httpx.ASGITransport(app=identity_app), fail_times=1)
     async with httpx.AsyncClient(
@@ -81,7 +82,12 @@ async def test_preload_failure_is_non_fatal_and_lazy_fetch_still_works(
     ) as http_client:
         verifier = TokenVerifier(http_client)
 
-        await verifier.preload()
+        with caplog.at_level(
+            logging.WARNING, logger="kernel_platform.security.token_verifier"
+        ):
+            await verifier.preload()
+
+        assert "JWKS" in caplog.text
 
         payload = await verifier.verify(create_access_token(sub=7))
 
