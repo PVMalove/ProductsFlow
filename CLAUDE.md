@@ -20,7 +20,7 @@ Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-
 - Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (host ports 9013–9015, `APP_ENV=prod`, `restart: unless-stopped`).
 - Each service container gets only its own `*_DATABASE_URL` via `environment:` (ADR 0010 — not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_PRIVATE_KEY_PATH`, `IDENTITY_ACCESS_TOKEN_TTL_HOURS`, `CATALOG_DATABASE_URL`, `SUPPORT_DATABASE_URL`).
 - `docker-compose.migrations.yml` is currently an empty stub — will hold one-off bootstrap services (`alembic upgrade` + bucket-ensure + seed) once services have real Alembic revisions.
-- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-test` runs `make test pkg=<member>` as a matrix job over the members with tests so far (`identity-service`, `kernel-platform`); `backend-build` runs `docker compose build`.
+- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-test` runs `make test pkg=<member>` as a matrix job over the members with tests so far (`identity-service`, `kernel-platform`, `kernel-domain`); `backend-build` runs `docker compose build`.
 
 ### app/ (frozen monolith)
 
