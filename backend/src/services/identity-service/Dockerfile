@@ -18,5 +18,7 @@ WORKDIR /srv
 COPY --from=builder /srv/.venv /srv/.venv
 ENV PATH="/srv/.venv/bin:$PATH"
 
+# main.py и uvicorn как зависимость появятся вместе с доменным кодом сервиса —
+# до этого момента CMD ниже нерабочий (это ожидаемо для каркасного тикета #74).
 EXPOSE 8000
 CMD ["uvicorn", "identity_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
