@@ -1,0 +1,6 @@
+# Заглушка (ADR 0010): место под one-off bootstrap-сервисы (*-bootstrap —
+# alembic upgrade + bucket-ensure + сид), см. ADR 0017. Bootstrap-сервисы
+# добавляются, когда у сервисов появятся реальные alembic-ревизии —
+# в этом тикете их ещё нет (Каркас, #74).
+
+services: {}
