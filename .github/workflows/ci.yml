@@ -35,6 +35,23 @@ jobs:
 
       - run: make check pkg=${{ matrix.member }}
 
+  backend-test:
+    name: Test (identity-service)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - run: make test pkg=identity-service
+
   backend-build:
     name: Build API images
     runs-on: ubuntu-latest

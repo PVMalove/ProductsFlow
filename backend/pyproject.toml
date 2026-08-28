@@ -27,13 +27,21 @@ select = ["E", "F", "I"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "mypy>=2.3.1",
+    "pytest>=9.1.1",
     "ruff>=0.16.1",
     "vulture>=2.14",
 ]
 
 [tool.mypy]
 exclude = ["^whitelist\\.py$"]
+
+# Пустая секция обязательна: без неё pytest не считает backend/pyproject.toml
+# конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
+# найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
+# (testpaths/asyncio_mode), которые к backend/ не относятся.
+[tool.pytest.ini_options]
 
 [tool.vulture]
 exclude = [

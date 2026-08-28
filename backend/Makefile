@@ -6,7 +6,7 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
-.PHONY: check format lint build up_dev up_prod help _require-pkg
+.PHONY: check test format lint build up_dev up_prod keys help _require-pkg
 
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
 pkg ?=
@@ -29,8 +29,14 @@ format: _require-pkg ## Автоформатирование кода члена
 
 lint: format check ## Сначала отформатировать, затем проверить (format + check)
 
+test: _require-pkg ## Прогнать тесты члена workspace (make test pkg=<member>)
+	uv run --package $(pkg) pytest $(member_dir)
+
 build: ## Пересобрать образы docker compose (make build service=identity-api)
 	docker compose build $(service)
+
+keys: ## Сгенерировать локальную RS256-пару для identity (ADR 0011, dev-only, не в git)
+	uv run --package identity-service python scripts/generate_dev_keys.py
 
 up_dev: ## Поднять dev-конфигурацию (docker-compose.yml + docker-compose.dev.yml; make up_dev service=identity-api)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d $(service)
@@ -42,5 +48,5 @@ help: ## Показать список команд с описанием
 	@python -c "import re, sys; print('Доступные команды:'); lines = open(sys.argv[1], encoding='utf-8').readlines(); matches = [re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', line) for line in lines]; [print(f'  {m.group(1):<16} - {m.group(2)}') for m in matches if m]" $(MAKEFILE_LIST)
 	@python -c "print()"
 	@echo Переменные (переопределяются так: make [команда] [переменная]=[значение]):
-	@echo   pkg     - имя члена workspace для check/format/lint (текущее: $(pkg))
+	@echo   pkg     - имя члена workspace для check/format/lint/test (текущее: $(pkg))
 	@echo   service - имя compose-сервиса для build/up_dev/up_prod (текущее: $(service))
