@@ -47,6 +47,7 @@ jobs:
         member:
           - identity-service
           - kernel-platform
+          - kernel-domain
     steps:
       - uses: actions/checkout@v7
 
