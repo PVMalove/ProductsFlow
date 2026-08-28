@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### backend/ (uv workspace)
 
-Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-platform`; services `identity-service`, `catalog-service`, `support-service`. `kernel-domain`, `kernel-platform`, `catalog-service`, `support-service` are still empty skeletons; `identity-service` has its first real code — RS256 token signing/verification and a public `/.well-known/jwks.json` (ADR 0011, issue #82) — issues #73–75 built the workspace/Docker/compose/CI scaffolding ahead of that. Requires Python 3.14 (`backend/pyproject.toml`'s `requires-python`).
+Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-platform`; services `identity-service`, `catalog-service`, `support-service`. `kernel-domain`, `catalog-service`, `support-service` are still empty skeletons; `identity-service` has its first real code — RS256 token signing/verification and a public `/.well-known/jwks.json` (ADR 0011, issue #82) — and `kernel-platform` has its first real code — a JWKS-caching `TokenVerifier` that verifies RS256 tokens against `identity-service`'s real signing/JWKS code via an in-process ASGI round-trip test (ADR 0011, issue #83) — issues #73–75 built the workspace/Docker/compose/CI scaffolding ahead of that. Requires Python 3.14 (`backend/pyproject.toml`'s `requires-python`).
 
 - Install deps (from `backend/`): `uv sync`
 - Lint/typecheck one member: `make check pkg=<member>` (ruff check, `mypy --explicit-package-bases`, ruff format --check, `vulture whitelist.py`), scoped to `src/libs/<member>` or `src/services/<member>`.
@@ -20,7 +20,7 @@ Five members, each with its own `pyproject.toml`: libs `kernel-domain`, `kernel-
 - Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (host ports 9013–9015, `APP_ENV=prod`, `restart: unless-stopped`).
 - Each service container gets only its own `*_DATABASE_URL` via `environment:` (ADR 0010 — not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_PRIVATE_KEY_PATH`, `IDENTITY_ACCESS_TOKEN_TTL_HOURS`, `CATALOG_DATABASE_URL`, `SUPPORT_DATABASE_URL`).
 - `docker-compose.migrations.yml` is currently an empty stub — will hold one-off bootstrap services (`alembic upgrade` + bucket-ensure + seed) once services have real Alembic revisions.
-- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-test` runs `make test pkg=identity-service` (the only member with tests so far); `backend-build` runs `docker compose build`.
+- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per workspace member; `backend-test` runs `make test pkg=<member>` as a matrix job over the members with tests so far (`identity-service`, `kernel-platform`); `backend-build` runs `docker compose build`.
 
 ### app/ (frozen monolith)
 

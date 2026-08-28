@@ -36,11 +36,17 @@ jobs:
       - run: make check pkg=${{ matrix.member }}
 
   backend-test:
-    name: Test (identity-service)
+    name: Test (${{ matrix.member }})
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        member:
+          - identity-service
+          - kernel-platform
     steps:
       - uses: actions/checkout@v7
 
@@ -50,7 +56,7 @@ jobs:
 
       - run: uv sync
 
-      - run: make test pkg=identity-service
+      - run: make test pkg=${{ matrix.member }}
 
   backend-build:
     name: Build API images
