@@ -1,0 +1,43 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "ProductsFlow backend — корень uv workspace (ADR 0010)"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["src/libs/*", "src/services/*"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+# Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
+# whitelist.py — файл-whitelist для vulture, а не исполняемый/типизируемый код.
+extend-exclude = ["*/alembic/versions", "whitelist.py"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "ruff>=0.16.1",
+    "vulture>=2.14",
+]
+
+[tool.mypy]
+exclude = ["^whitelist\\.py$"]
+
+[tool.vulture]
+exclude = [
+    ".venv/",
+    "*/alembic/versions/",
+]
+min_confidence = 80
