@@ -3,7 +3,11 @@ name = "kernel-platform"
 version = "0.1.0"
 description = "Инфраструктурные примитивы ProductsFlow (TokenVerifier/IdentityClient/Outbox-Inbox/bootstrap) — httpx/SQLAlchemy/OTEL допустимы (ADR 0013)."
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "cryptography>=50.0.0",
+    "httpx>=0.28.1",
+    "pyjwt>=2.13.0",
+]
 
 [build-system]
 requires = ["hatchling"]
