@@ -132,6 +132,18 @@ async def test_fetch_current_user_propagates_identity_failure() -> None:
             await client.fetch_current_user("some-token")
 
 
+async def test_fetch_current_user_propagates_a_connection_error() -> None:
+    app = FakeUsersMeApp()
+    transport = FlakyOnceTransport(httpx.ASGITransport(app=app), fail_times=1)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://identity"
+    ) as http_client:
+        client = IdentityClient(http_client)
+
+        with pytest.raises(httpx.ConnectError):
+            await client.fetch_current_user("some-token")
+
+
 async def test_fetch_current_user_never_caches_across_calls() -> None:
     app = FakeUsersMeApp()
     transport = CountingTransport(httpx.ASGITransport(app=app))
