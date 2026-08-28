@@ -6,20 +6,23 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
-.PHONY: check format lint help
+.PHONY: check format lint help _require-pkg
 
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
 pkg ?=
 
 member_dir = $(firstword $(wildcard src/libs/$(pkg)) $(wildcard src/services/$(pkg)))
 
-check: ## Прогнать все линтеры на члене workspace (make check pkg=<member>)
+_require-pkg:
+	$(if $(pkg),,$(error pkg не задан — использование: make check pkg=<member>))
+
+check: _require-pkg ## Прогнать все линтеры на члене workspace (make check pkg=<member>)
 	uv run --package $(pkg) ruff check $(member_dir)
 	uv run --package $(pkg) mypy --explicit-package-bases $(member_dir)
 	uv run --package $(pkg) ruff format --check $(member_dir)
 	uv run --package $(pkg) vulture whitelist.py $(member_dir)
 
-format: ## Автоформатирование кода члена workspace (ruff format + ruff check --fix)
+format: _require-pkg ## Автоформатирование кода члена workspace (ruff format + ruff check --fix)
 	uv run --package $(pkg) ruff format $(member_dir)
 	uv run --package $(pkg) ruff check --fix $(member_dir)
 
