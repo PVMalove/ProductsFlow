@@ -1,8 +1,9 @@
 from kernel_domain.entity import Entity
+from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from identity.domain.email import Email
-from identity.domain.events import UserRegistered
+from identity.domain.events import PasswordChanged, UserRegistered
 from identity.domain.role import Role
 from identity.domain.user_id import UserId
 
@@ -41,3 +42,17 @@ class User(Entity[UserId]):
         )
         user.add_domain_event(UserRegistered(user_id=user.id, email=email))
         return Result.ok(user)
+
+    def change_password(self, new_password_hash: str) -> Result[None]:
+        if not self.is_active:
+            return Result.fail(
+                Error(
+                    code="user_deactivated",
+                    description="Деактивированный пользователь не может сменить пароль",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
+
+        self.password_hash = new_password_hash
+        self.add_domain_event(PasswordChanged(user_id=self.id))
+        return Result.ok(None)

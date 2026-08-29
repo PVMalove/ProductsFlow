@@ -10,3 +10,8 @@ from identity.domain.user_id import UserId
 class UserRegistered(DomainEvent):
     user_id: UserId
     email: Email
+
+
+@dataclass(frozen=True, kw_only=True)
+class PasswordChanged(DomainEvent):
+    user_id: UserId
