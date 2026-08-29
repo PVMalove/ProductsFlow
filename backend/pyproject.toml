@@ -30,6 +30,9 @@ select = ["E", "F", "I"]
 
 [dependency-groups]
 dev = [
+    # Только для identity-service: async-драйвер Postgres-фикстуры (issue #99,
+    # см. testcontainers ниже).
+    "asyncpg>=0.31.0",
     "httpx>=0.28.1",
     # Только для kernel-platform: сквозной round-trip тест JWKS (ADR 0011)
     # верифицирует токен через настоящий код и настоящий эндпоинт identity —
@@ -38,14 +41,33 @@ dev = [
     # а не дополняют друг друга), поэтому declaration только здесь.
     "identity-service",
     "mypy>=2.3.1",
+    # Только для identity-service: RabbitMQ smoke-фикстура (issue #99) вызывает
+    # pika напрямую (объявляет/чистит тестовую очередь) — так же тянется
+    # транзитивно testcontainers[rabbitmq]'s own readiness probe, но прямое
+    # использование заслуживает собственной строки, а не скрытой транзитивности.
+    "pika>=1.4.4",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.16.1",
+    # Только для identity-service: session/savepoint-обвязка Postgres-фикстуры
+    # (issue #99), тот же приём, что db_session в tests/conftest.py монолита.
+    "sqlalchemy[asyncio]>=2.0",
+    # Только для identity-service: заглушечные Postgres+RabbitMQ
+    # testcontainers-фикстуры (issue #99) взамен ещё не существующего
+    # libs/test-support (ADR 0018) — те же ограничения на merge dev-групп,
+    # что и у httpx выше.
+    "testcontainers[postgres,rabbitmq]>=4.15.0",
     "vulture>=2.14",
 ]
 
 [tool.mypy]
 exclude = ["^whitelist\\.py$"]
+
+[[tool.mypy.overrides]]
+# pika (RabbitMQ smoke-test fixture, issue #99) ships no stubs/py.typed —
+# same treatment monolith's root pyproject.toml gives aioboto3.
+module = ["pika.*"]
+ignore_missing_imports = true
 
 # Секция обязательна: без неё pytest не считает backend/pyproject.toml
 # конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
