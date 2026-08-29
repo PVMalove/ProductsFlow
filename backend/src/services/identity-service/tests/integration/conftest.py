@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator, Iterator
 from urllib.parse import quote
 
+import aio_pika
 import pika
 import pytest
 import pytest_asyncio
+from aio_pika.abc import AbstractRobustConnection
 from pika.adapters.blocking_connection import BlockingChannel
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
@@ -86,3 +88,14 @@ def rabbitmq_channel(
         # ломают изоляцию для следующего.
         channel.queue_purge(queue=SMOKE_QUEUE)
         connection.close()
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
+async def amqp_connection(
+    rabbitmq_amqp_url: str,
+) -> AsyncIterator[AbstractRobustConnection]:
+    connection = await aio_pika.connect_robust(rabbitmq_amqp_url)
+    try:
+        yield connection
+    finally:
+        await connection.close()

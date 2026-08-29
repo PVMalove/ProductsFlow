@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 import aio_pika
+from kernel_platform.outbox.listener import OutboxListener, to_asyncpg_dsn
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME, OutboxPublisher
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -12,8 +13,10 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     """identity-worker (ADR 0010): вторая точка входа identity-service, не
-    HTTP-процесс — гоняет `OutboxPublisher` на fixed-interval таймере
-    (issue #100, happy path; `LISTEN/NOTIFY` — issue #102).
+    HTTP-процесс — гоняет `OutboxPublisher` на гибридном пробуждении (ADR
+    0014): `NOTIFY` через `OutboxListener` даёт почти мгновенную реакцию
+    (issue #102), 5-секундный poll (issue #100, happy path) остаётся
+    страховкой на случай потерянного `NOTIFY`.
     """
     engine = create_async_engine(settings.identity_database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -26,10 +29,14 @@ async def main() -> None:
         )
         publisher = OutboxPublisher(session_factory, exchange)
 
-        logger.info("identity-worker: outbox publisher started")
-        while True:
-            await publisher.run_once()
-            await asyncio.sleep(settings.identity_outbox_poll_interval_seconds)
+        listener_dsn = to_asyncpg_dsn(settings.identity_database_url)
+        async with OutboxListener(listener_dsn) as listener:
+            logger.info("identity-worker: outbox publisher started (hybrid wakeup)")
+            while True:
+                await publisher.run_once()
+                await listener.wait_for_wakeup(
+                    settings.identity_outbox_poll_interval_seconds
+                )
 
 
 if __name__ == "__main__":

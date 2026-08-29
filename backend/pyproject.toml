@@ -69,6 +69,12 @@ exclude = ["^whitelist\\.py$"]
 module = ["pika.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# asyncpg (OutboxListener's dedicated LISTEN connection, ADR 0014/issue #102)
+# ships no stubs/py.typed either — same treatment as pika above.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
 # Секция обязательна: без неё pytest не считает backend/pyproject.toml
 # конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
 # найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
