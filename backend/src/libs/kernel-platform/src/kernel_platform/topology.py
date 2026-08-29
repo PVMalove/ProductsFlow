@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractQueue
 
@@ -6,8 +8,10 @@ from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
 DLX_EXCHANGE_NAME = "productsflow.dlx"
 
 # Тюнинг-параметр (ADR 0015): три ступени TTL, не полноценный exponential
-# backoff — суффикс становится частью имени очереди-ступени.
-_RETRY_STAGE_TTL_MS = {
+# backoff — суффикс становится частью имени очереди-ступени. Порядок ключей
+# задаёт порядок ступеней лестницы — публичная, потому что на неё опирается
+# consumer.py (issue #110).
+RETRY_STAGE_TTL_MS = {
     "retry.5s": 5_000,
     "retry.30s": 30_000,
     "retry.2m": 120_000,
@@ -15,7 +19,10 @@ _RETRY_STAGE_TTL_MS = {
 
 
 async def declare_topology(
-    channel: AbstractChannel, service_name: str
+    channel: AbstractChannel,
+    service_name: str,
+    *,
+    retry_stage_ttl_ms: Mapping[str, int] | None = None,
 ) -> AbstractQueue:
     """Идемпотентно объявляет топологию потребителя `user.*.v1` (ADR 0015):
     DLX, основную quorum-очередь `<service>.user-events` (биндинг на уже
@@ -24,6 +31,10 @@ async def declare_topology(
     три TTL-очереди-ступени без потребителей и DLQ. `aio-pika` declare
     идемпотентен при совпадающих параметрах — повторный вызов при рестарте
     процесса не бросает `PRECONDITION_FAILED` и не создаёт дублей.
+
+    `retry_stage_ttl_ms` переопределяет TTL ступеней теми же именами (issue
+    #110): интеграционным тестам ступеней лестницы не нужно ждать реальные
+    5с/30с/2м брокера. Не задан — используются продовые значения.
 
     Управление retry-лестницей (чтение `x-death`, публикация в конкретную
     ступень, `ack`/`reject`) — код консьюмера, не этой функции (issue #66/#67).
@@ -45,7 +56,10 @@ async def declare_topology(
     )
     await main_queue.bind(events_exchange, routing_key="user.*.v1")
 
-    for suffix, ttl_ms in _RETRY_STAGE_TTL_MS.items():
+    stage_ttl_ms = (
+        RETRY_STAGE_TTL_MS if retry_stage_ttl_ms is None else retry_stage_ttl_ms
+    )
+    for suffix, ttl_ms in stage_ttl_ms.items():
         await channel.declare_queue(
             f"{main_queue_name}.{suffix}",
             durable=True,
