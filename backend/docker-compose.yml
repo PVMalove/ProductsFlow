@@ -34,7 +34,7 @@ services:
   catalog-api:
     build:
       context: .
-      dockerfile: src/services/catalog-service/Dockerfile
+      dockerfile: services/catalog-service/Dockerfile
     container_name: catalog-api
     environment:
       APP_ENV: ${APP_ENV}
@@ -45,7 +45,7 @@ services:
   support-api:
     build:
       context: .
-      dockerfile: src/services/support-service/Dockerfile
+      dockerfile: services/support-service/Dockerfile
     container_name: support-api
     environment:
       APP_ENV: ${APP_ENV}
