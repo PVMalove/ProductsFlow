@@ -1,0 +1,65 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "ProductsFlow backend — корень uv workspace (ADR 0010)"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["src/libs/*", "src/services/*"]
+
+[tool.uv.sources]
+identity-service = { workspace = true }
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+# Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
+# whitelist.py — файл-whitelist для vulture, а не исполняемый/типизируемый код.
+extend-exclude = ["*/alembic/versions", "whitelist.py"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    # Только для kernel-platform: сквозной round-trip тест JWKS (ADR 0011)
+    # верифицирует токен через настоящий код и настоящий эндпоинт identity —
+    # без своей группы зависимостей у kernel-platform она бы не merge'илась
+    # с этой (per-package dependency-groups в uv workspace переопределяют,
+    # а не дополняют друг друга), поэтому declaration только здесь.
+    "identity-service",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.16.1",
+    "vulture>=2.14",
+]
+
+[tool.mypy]
+exclude = ["^whitelist\\.py$"]
+
+# Секция обязательна: без неё pytest не считает backend/pyproject.toml
+# конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
+# найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
+# (testpaths/asyncio_mode), которые к backend/ не относятся.
+# asyncio_mode = "auto" — общий для всех членов workspace: async def test_*
+# запускаются сами, без ручных @pytest.mark.asyncio на каждом (kernel-platform,
+# ADR 0011 round-trip тест).
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.vulture]
+exclude = [
+    ".venv/",
+    "*/alembic/versions/",
+]
+min_confidence = 80

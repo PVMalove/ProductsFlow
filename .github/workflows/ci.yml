@@ -6,13 +6,24 @@ on:
     branches: [master]
 
 permissions:
-  contents: read       # нужно для checkout
-  checks: write        # нужно для публикации отчёта о тестах (test-reporter)
-  pull-requests: write # нужно, чтобы отчёт был виден в проверках PR
+  contents: read # нужно для checkout
 
 jobs:
-  lint:
+  backend-lint:
+    name: Lint (${{ matrix.member }})
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        member:
+          - kernel-domain
+          - kernel-platform
+          - identity-service
+          - catalog-service
+          - support-service
     steps:
       - uses: actions/checkout@v7
 
@@ -22,22 +33,21 @@ jobs:
 
       - run: uv sync
 
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy --explicit-package-bases app
+      - run: make check pkg=${{ matrix.member }}
 
-  test:
+  backend-test:
+    name: Test (${{ matrix.member }})
     runs-on: ubuntu-latest
-    # DATABASE_URL нужен просто как синтаксически валидный URL: app/db.py
-    # строит движок из settings.database_url при импорте модуля (ещё до
-    # того, как testcontainers поднимет собственный Postgres для тестов),
-    # и без него create_async_engine() падает прямо на сборе тестов —
-    # реального подключения по этому URL никогда не происходит.
-    # SECRET_KEY, в отличие от него, используется по-настоящему: unit-тесты
-    # в tests/unit/test_security.py подписывают и проверяют JWT этим ключом.
-    env:
-      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
-      SECRET_KEY: ci-test-only-secret-key-do-not-use-in-production
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        member:
+          - identity-service
+          - kernel-platform
+          - kernel-domain
     steps:
       - uses: actions/checkout@v7
 
@@ -47,25 +57,15 @@ jobs:
 
       - run: uv sync
 
-      # Postgres не поднимается отдельным services-блоком: testcontainers
-      # сам стартует и гасит контейнер на Docker-демоне раннера.
-      # continue-on-error даёт шагу с отчётом выполниться, даже если тесты упали.
-      - name: Run tests
-        continue-on-error: true
-        run: uv run pytest --junitxml=test-results.xml
+      - run: make test pkg=${{ matrix.member }}
 
-      - name: Publish Test Report
-        uses: dorny/test-reporter@v3
-        if: always() # выполняется всегда, чтобы отчёт был виден и при падении тестов
-        with:
-          name: Test Results
-          path: test-results.xml
-          reporter: python-xunit # формат отчёта, который генерирует pytest --junitxml
-          fail-on-error: 'true'
+  backend-build:
+    name: Build API images
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
 
-      - name: Upload test results artifact
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: test-results
-          path: test-results.xml
+      - run: docker compose build

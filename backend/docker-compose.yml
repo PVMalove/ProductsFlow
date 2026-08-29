@@ -1,0 +1,41 @@
+name: productsflow-backend
+
+services:
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/services/identity-service/Dockerfile
+    container_name: identity-api
+    environment:
+      APP_ENV: ${APP_ENV}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      IDENTITY_JWT_PRIVATE_KEY_PATH: ${IDENTITY_JWT_PRIVATE_KEY_PATH}
+      IDENTITY_ACCESS_TOKEN_TTL_HOURS: ${IDENTITY_ACCESS_TOKEN_TTL_HOURS}
+    networks:
+      - backend-network
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: src/services/catalog-service/Dockerfile
+    container_name: catalog-api
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+    networks:
+      - backend-network
+
+  support-api:
+    build:
+      context: .
+      dockerfile: src/services/support-service/Dockerfile
+    container_name: support-api
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+    networks:
+      - backend-network
+
+networks:
+  backend-network:
+    driver: bridge
