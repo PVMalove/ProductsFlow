@@ -1,45 +1,20 @@
 import asyncio
-from collections.abc import AsyncIterator
 
 import aio_pika
 import pytest
-import pytest_asyncio
-from aio_pika.abc import (
-    AbstractChannel,
-    AbstractIncomingMessage,
-    AbstractRobustConnection,
-)
+from aio_pika.abc import AbstractChannel, AbstractIncomingMessage
 from kernel_platform.consumer import consume
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
 
-# amqp_connection (conftest.py) — module-scoped, bound к session-scoped
-# event loop; см. test_topology.py.
+# amqp_connection/channel/events_exchange_exists (conftest.py) —
+# module/session-scoped, bound к session-scoped event loop; см.
+# test_topology.py.
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 SERVICE_NAME = "kernel-consumer-test"
 MAIN_QUEUE_NAME = f"{SERVICE_NAME}.user-events"
 DLQ_NAME = f"{MAIN_QUEUE_NAME}.dlq"
-
-
-@pytest_asyncio.fixture(loop_scope="session")
-async def channel(
-    amqp_connection: AbstractRobustConnection,
-) -> AsyncIterator[AbstractChannel]:
-    ch = await amqp_connection.channel()
-    try:
-        yield ch
-    finally:
-        if not ch.is_closed:
-            await ch.close()
-
-
-@pytest_asyncio.fixture(autouse=True, loop_scope="session")
-async def events_exchange_exists(channel: AbstractChannel) -> None:
-    """Симулирует объявление identity-service при своём старте (ADR 0015)."""
-    await channel.declare_exchange(
-        EVENTS_EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True
-    )
 
 
 async def _publish_event(channel: AbstractChannel, body: bytes) -> None:
