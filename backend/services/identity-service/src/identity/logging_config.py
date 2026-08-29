@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from kernel_platform.logging.formatters import select_formatter
+from observability.formatters import select_formatter
 
 _SERVICE_NAME = "identity-service"
 
@@ -10,7 +10,7 @@ def configure_logging(app_env: str, logger: logging.Logger | None = None) -> Non
     """Переключает формат логов identity-api через select_formatter из
     kernel-platform (ADR 0016, issue #120). По умолчанию ставится на
     root-логгер — под этот формат попадают и access-log строки
-    RequestContextMiddleware (логгер kernel_platform.logging.middleware),
+    RequestContextMiddleware (логгер observability.middleware),
     и собственные логи сервиса."""
     target = logger if logger is not None else logging.getLogger()
     if target.handlers:

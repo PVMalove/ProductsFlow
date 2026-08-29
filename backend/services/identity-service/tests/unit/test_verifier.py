@@ -1,7 +1,8 @@
 import jwt
 import pytest
-from identity_service.infrastructure.security.tokens import create_access_token
-from identity_service.infrastructure.security.verifier import LocalTokenVerifier
+
+from identity.infrastructure.security.tokens import create_access_token
+from identity.infrastructure.security.verifier import LocalTokenVerifier
 
 pytestmark = pytest.mark.usefixtures("configured_key_path")
 

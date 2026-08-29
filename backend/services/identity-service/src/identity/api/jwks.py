@@ -1,11 +1,11 @@
 from fastapi import APIRouter
 
-from identity_service.infrastructure.security.keys import (
+from identity.infrastructure.security.keys import (
     build_jwk,
     compute_kid,
     load_private_key,
 )
-from identity_service.settings import settings
+from identity.settings import settings
 
 router = APIRouter()
 

@@ -2,8 +2,9 @@ import logging
 from collections.abc import Iterator
 
 import pytest
-from identity_service.logging_config import configure_logging
-from kernel_platform.logging.formatters import ColorFormatter, JsonFormatter
+from observability.formatters import ColorFormatter, JsonFormatter
+
+from identity.logging_config import configure_logging
 
 
 @pytest.fixture

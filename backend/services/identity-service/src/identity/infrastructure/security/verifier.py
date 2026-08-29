@@ -1,6 +1,6 @@
 from typing import Any
 
-from identity_service.infrastructure.security.tokens import decode_access_token
+from identity.infrastructure.security.tokens import decode_access_token
 
 
 class LocalTokenVerifier:

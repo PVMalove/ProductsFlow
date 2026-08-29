@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from identity_service.infrastructure.security.keys import (
+
+from identity.infrastructure.security.keys import (
     build_jwk,
     compute_kid,
     load_private_key,
     validate_prod_key,
 )
-from identity_service.settings import settings
-
+from identity.settings import settings
 from tests.unit.keygen import write_rsa_key_file
 
 # Вектор из RFC 7638, приложение A — проверяет compute_kid против эталонного thumbprint.

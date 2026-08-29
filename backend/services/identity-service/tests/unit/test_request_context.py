@@ -2,13 +2,14 @@ import logging
 
 import pytest
 from fastapi.testclient import TestClient
-from identity_service.infrastructure.security.tokens import create_access_token
-from identity_service.main import app
-from kernel_platform.logging.context import actor_id_var
+from observability.context import actor_id_var
+
+from identity.infrastructure.security.tokens import create_access_token
+from identity.main import app
 
 pytestmark = pytest.mark.usefixtures("configured_key_path")
 
-_MIDDLEWARE_LOGGER = "kernel_platform.logging.middleware"
+_MIDDLEWARE_LOGGER = "observability.middleware"
 
 
 class _ActorIdCapturingHandler(logging.Handler):

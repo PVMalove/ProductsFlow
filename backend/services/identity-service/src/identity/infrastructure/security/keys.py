@@ -6,7 +6,7 @@ from functools import lru_cache
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from identity_service.settings import Settings
+from identity.settings import Settings
 
 
 def generate_private_key_pem() -> bytes:

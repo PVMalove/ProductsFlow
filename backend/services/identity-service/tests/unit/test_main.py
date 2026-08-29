@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from identity_service.main import app
-from identity_service.settings import settings
+
+from identity.main import app
+from identity.settings import settings
 
 
 def test_app_startup_fails_fast_in_prod_without_a_configured_key(

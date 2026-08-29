@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-from identity_service.settings import Settings
+
+from identity.settings import Settings
 
 
 def test_settings_defaults_are_safe_for_a_fresh_clone(
