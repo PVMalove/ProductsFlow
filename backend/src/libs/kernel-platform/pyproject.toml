@@ -8,6 +8,9 @@ dependencies = [
     # aiormq/pamqp — импортируются напрямую в outbox/publisher.py
     # (DeliveryError, Basic.Ack), не только транзитивно через aio-pika.
     "aiormq>=7.0.0",
+    # LISTEN/NOTIFY (outbox/listener.py, ADR 0014) — dedicated raw connection,
+    # выделенное соединение не через SQLAlchemy-пул.
+    "asyncpg>=0.31.0",
     "cryptography>=50.0.0",
     "httpx>=0.28.1",
     "pamqp>=4.0.1",
