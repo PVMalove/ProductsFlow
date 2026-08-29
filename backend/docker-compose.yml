@@ -14,6 +14,23 @@ services:
     networks:
       - backend-network
 
+  identity-worker:
+    # Outbox Publisher (ADR 0014, issue #100) — вторая точка входа
+    # identity-service, не HTTP-процесс (ADR 0010: тот же образ, другой
+    # CMD). Никогда не делит процесс с identity-api: краш/рестарт паблишера
+    # не задевает обработку запросов.
+    build:
+      context: .
+      dockerfile: src/services/identity-service/Dockerfile
+    container_name: identity-worker
+    command: ["python", "-m", "identity_service.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      IDENTITY_AMQP_URL: ${IDENTITY_AMQP_URL}
+    networks:
+      - backend-network
+
   catalog-api:
     build:
       context: .

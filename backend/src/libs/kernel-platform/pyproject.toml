@@ -4,9 +4,15 @@ version = "0.1.0"
 description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/bootstrap) — httpx/SQLAlchemy/OTEL допустимы (ADR 0013)."
 requires-python = ">=3.14"
 dependencies = [
+    "aio-pika>=10.0.1",
+    # aiormq/pamqp — импортируются напрямую в outbox/publisher.py
+    # (DeliveryError, Basic.Ack), не только транзитивно через aio-pika.
+    "aiormq>=7.0.0",
     "cryptography>=50.0.0",
     "httpx>=0.28.1",
+    "pamqp>=4.0.1",
     "pyjwt>=2.13.0",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [build-system]

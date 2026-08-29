@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Iterator
+from urllib.parse import quote
 
 import pika
 import pytest
@@ -53,6 +54,20 @@ async def db_session(db_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 def rabbitmq_container() -> Iterator[RabbitMqContainer]:
     with RabbitMqContainer(RABBITMQ_IMAGE) as container:
         yield container
+
+
+@pytest.fixture(scope="session")
+def rabbitmq_amqp_url(rabbitmq_container: RabbitMqContainer) -> str:
+    """AMQP URI для `aio-pika` (`aio_pika.connect_robust`) — `get_connection_params()`
+    отдаёт объект под `pika`, а не URI-строку. Vhost кодируется явно: голый
+    `/` в конце URI означает vhost `""`, а не дефолтный `/` (частая ловушка
+    AMQP URI)."""
+    params = rabbitmq_container.get_connection_params()
+    vhost = quote(params.virtual_host, safe="")
+    return (
+        f"amqp://{params.credentials.username}:{params.credentials.password}"
+        f"@{params.host}:{params.port}/{vhost}"
+    )
 
 
 @pytest.fixture
