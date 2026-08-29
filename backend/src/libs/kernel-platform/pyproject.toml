@@ -16,6 +16,9 @@ dependencies = [
     "pamqp>=4.0.1",
     "pyjwt>=2.13.0",
     "sqlalchemy[asyncio]>=2.0",
+    # RequestContextMiddleware (ADR 0016) — ASGI-примитив, не завязан на
+    # fastapi целиком.
+    "starlette>=1.6.0",
 ]
 
 [build-system]
