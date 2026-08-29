@@ -1,7 +1,7 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "ProductsFlow backend — корень uv workspace (ADR 0010)"
+description = "ProductsFlow backend — общий конфиг для пакетов с изолированными окружениями (ADR 0020); src/services/* — переходный uv-workspace, ещё не переехавший на per-package layout (issues #132–134)"
 requires-python = ">=3.14"
 dependencies = []
 
@@ -9,10 +9,7 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["src/libs/*", "src/services/*"]
-
-[tool.uv.sources]
-identity-service = { workspace = true }
+members = ["src/services/*"]
 
 [tool.ruff]
 line-length = 88
@@ -34,12 +31,6 @@ dev = [
     # см. testcontainers ниже).
     "asyncpg>=0.31.0",
     "httpx>=0.28.1",
-    # Только для kernel-platform: сквозной round-trip тест JWKS (ADR 0011)
-    # верифицирует токен через настоящий код и настоящий эндпоинт identity —
-    # без своей группы зависимостей у kernel-platform она бы не merge'илась
-    # с этой (per-package dependency-groups в uv workspace переопределяют,
-    # а не дополняют друг друга), поэтому declaration только здесь.
-    "identity-service",
     "mypy>=2.3.1",
     # Только для identity-service: RabbitMQ smoke-фикстура (issue #99) вызывает
     # pika напрямую (объявляет/чистит тестовую очередь) — так же тянется
@@ -79,9 +70,9 @@ ignore_missing_imports = true
 # конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
 # найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
 # (testpaths/asyncio_mode), которые к backend/ не относятся.
-# asyncio_mode = "auto" — общий для всех членов workspace: async def test_*
-# запускаются сами, без ручных @pytest.mark.asyncio на каждом (kernel-platform,
-# ADR 0011 round-trip тест).
+# asyncio_mode = "auto" — общий для src/services/* (ещё не переехавших на
+# per-package layout, ADR 0020): async def test_* запускаются сами, без
+# ручных @pytest.mark.asyncio на каждом.
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
