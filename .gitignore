@@ -159,9 +159,6 @@ ENV/
 env.bak/
 venv.bak/
 
-# Локальные dev-ключи identity (make keys, ADR 0011) — не для git
-backend/secrets/
-
 # Spyder project settings
 .spyderproject
 .spyproject

@@ -54,7 +54,7 @@ dev = [
 dev = ["ruff"]
 
 [tool.mypy]
-exclude = ["^whitelist\\.py$", "^backend/"]
+exclude = ["^whitelist\\.py$"]
 
 [[tool.mypy.overrides]]
 module = ["aioboto3.*"]
