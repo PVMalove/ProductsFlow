@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "cryptography>=50.0.0",
     "fastapi>=0.141.1",
+    "kernel-domain",
     "kernel-platform",
     "observability",
     "pydantic-settings>=2.0.0",
@@ -19,6 +20,7 @@ dependencies = [
 # path-зависимости на соседние пакеты монорепо (ADR 0020) — editable в
 # dev-окружении, --no-editable при сборке production-образа (см. Dockerfile).
 [tool.uv.sources]
+kernel-domain = { path = "../../libs/kernel-domain", editable = true }
 kernel-platform = { path = "../../libs/kernel-platform", editable = true }
 observability = { path = "../../libs/observability", editable = true }
 
