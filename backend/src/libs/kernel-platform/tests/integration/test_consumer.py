@@ -57,12 +57,25 @@ async def test_consume_routes_message_to_dlq_when_handler_raises(
 
     consumer_tag = await consume(main_queue, handler)
     try:
-        await _publish_event(channel, b'{"user_id": 2}')
-
         dlq = await channel.get_queue(DLQ_NAME)
-        incoming = await dlq.get(fail=True, timeout=5)
-        await incoming.ack()
+        dead_lettered: asyncio.Queue[AbstractIncomingMessage] = asyncio.Queue()
 
-        assert incoming.body == b'{"user_id": 2}'
+        async def on_dead_lettered(message: AbstractIncomingMessage) -> None:
+            await message.ack()
+            await dead_lettered.put(message)
+
+        # `Queue.get(fail=True)` — это одноразовый `basic_get`, не ожидание:
+        # он мгновенно проверяет очередь и не ждёт, пока брокер домаршрутизирует
+        # `reject` в DLQ (гонка, воспроизводимая на медленном CI-раннере).
+        # Живой консьюмер получает сообщение push'ем, как только оно там
+        # появится, сколько бы это ни заняло.
+        dlq_consumer_tag = await dlq.consume(on_dead_lettered)
+        try:
+            await _publish_event(channel, b'{"user_id": 2}')
+            incoming = await asyncio.wait_for(dead_lettered.get(), timeout=5)
+
+            assert incoming.body == b'{"user_id": 2}'
+        finally:
+            await dlq.cancel(dlq_consumer_tag)
     finally:
         await main_queue.cancel(consumer_tag)
