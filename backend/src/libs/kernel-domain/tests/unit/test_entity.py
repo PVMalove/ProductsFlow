@@ -3,13 +3,13 @@ from kernel_domain.entity import Entity
 
 
 def test_a_fresh_entity_has_no_pending_events() -> None:
-    entity = Entity()
+    entity = Entity(id=1)
 
     assert entity.pull_events() == []
 
 
 def test_added_events_are_returned_by_pull_events_in_the_order_added() -> None:
-    entity = Entity()
+    entity = Entity(id=1)
     first = DomainEvent()
     second = DomainEvent()
 
@@ -20,7 +20,7 @@ def test_added_events_are_returned_by_pull_events_in_the_order_added() -> None:
 
 
 def test_pull_events_clears_the_store_so_a_second_call_returns_nothing() -> None:
-    entity = Entity()
+    entity = Entity(id=1)
     entity.add_domain_event(DomainEvent())
 
     entity.pull_events()
@@ -29,7 +29,7 @@ def test_pull_events_clears_the_store_so_a_second_call_returns_nothing() -> None
 
 
 def test_events_added_after_a_pull_are_returned_by_the_next_pull() -> None:
-    entity = Entity()
+    entity = Entity(id=1)
     entity.add_domain_event(DomainEvent())
     entity.pull_events()
 
@@ -37,3 +37,26 @@ def test_events_added_after_a_pull_are_returned_by_the_next_pull() -> None:
     entity.add_domain_event(new_event)
 
     assert entity.pull_events() == [new_event]
+
+
+def test_entities_of_the_same_type_with_the_same_id_are_equal() -> None:
+    assert Entity(id=1) == Entity(id=1)
+
+
+def test_entities_of_the_same_type_with_the_same_id_hash_the_same() -> None:
+    assert hash(Entity(id=1)) == hash(Entity(id=1))
+
+
+def test_entities_of_the_same_type_with_different_ids_are_not_equal() -> None:
+    assert Entity(id=1) != Entity(id=2)
+
+
+def test_entities_of_different_types_with_the_same_id_are_not_equal() -> None:
+    class OtherEntity(Entity[int]):
+        pass
+
+    assert Entity(id=1) != OtherEntity(id=1)
+
+
+def test_an_entity_is_not_equal_to_a_non_entity() -> None:
+    assert Entity(id=1) != object()
