@@ -50,6 +50,6 @@ def test_different_types_are_ordered_by_type_name() -> None:
     weight = Weight(value=1)
     quantity = Quantity(value=1)
 
-    lesser, greater = sorted([weight, quantity], key=lambda vo: type(vo).__name__)
+    lesser, greater = sorted([weight, quantity])
 
     assert type(lesser).__name__ < type(greater).__name__

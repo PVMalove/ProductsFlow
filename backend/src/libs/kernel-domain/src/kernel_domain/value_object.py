@@ -12,7 +12,7 @@ class ValueObject(ABC):
     def _equality_components(self) -> tuple[Any, ...]: ...
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ValueObject) or type(other) is not type(self):
+        if type(other) is not type(self):
             return False
         return self._equality_components() == other._equality_components()
 

@@ -20,7 +20,7 @@ class Entity[TId]:
         return events
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Entity) or type(other) is not type(self):
+        if type(other) is not type(self):
             return False
         return self is other or self.id == other.id
 
