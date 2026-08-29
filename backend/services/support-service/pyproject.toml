@@ -11,3 +11,28 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/support"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.1",
+    "vulture>=2.14",
+]
+
+# Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
+# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.mypy]
+exclude = ["^whitelist\\.py$", "^\\.venv/"]
+
+# Секция обязательна: без неё pytest не считает этот pyproject.toml
+# конфиг-файлом и продолжает подниматься вверх по дереву каталогов в поисках
+# другого. Нет async-тестов — asyncio_mode здесь не нужен.
+[tool.pytest.ini_options]
+
+[tool.vulture]
+exclude = [".venv/"]
+min_confidence = 80

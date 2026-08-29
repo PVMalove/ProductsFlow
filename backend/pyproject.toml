@@ -1,15 +1,9 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "ProductsFlow backend — общий конфиг для пакетов с изолированными окружениями (ADR 0020); src/services/* — переходный uv-workspace, ещё не переехавший на per-package layout (issues #132–134)"
+description = "ProductsFlow backend — общий [tool.ruff]/[tool.mypy]-конфиг для пакетов с изолированными окружениями (ADR 0020); каждый пакет в libs/*, services/* синхронизируется и запускается отдельным `uv sync`/`uv run` в своей директории, без общего uv-workspace."
 requires-python = ">=3.14"
 dependencies = []
-
-[tool.uv]
-package = false
-
-[tool.uv.workspace]
-members = ["src/services/*"]
 
 [tool.ruff]
 line-length = 88
@@ -24,32 +18,6 @@ indent-style = "space"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-
-[dependency-groups]
-dev = [
-    # Только для identity-service: async-драйвер Postgres-фикстуры (issue #99,
-    # см. testcontainers ниже).
-    "asyncpg>=0.31.0",
-    "httpx>=0.28.1",
-    "mypy>=2.3.1",
-    # Только для identity-service: RabbitMQ smoke-фикстура (issue #99) вызывает
-    # pika напрямую (объявляет/чистит тестовую очередь) — так же тянется
-    # транзитивно testcontainers[rabbitmq]'s own readiness probe, но прямое
-    # использование заслуживает собственной строки, а не скрытой транзитивности.
-    "pika>=1.4.4",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.0.0",
-    "ruff>=0.16.1",
-    # Только для identity-service: session/savepoint-обвязка Postgres-фикстуры
-    # (issue #99), тот же приём, что db_session в tests/conftest.py монолита.
-    "sqlalchemy[asyncio]>=2.0",
-    # Только для identity-service: заглушечные Postgres+RabbitMQ
-    # testcontainers-фикстуры (issue #99) взамен ещё не существующего
-    # libs/test-support (ADR 0018) — те же ограничения на merge dev-групп,
-    # что и у httpx выше.
-    "testcontainers[postgres,rabbitmq]>=4.15.0",
-    "vulture>=2.14",
-]
 
 [tool.mypy]
 exclude = ["^whitelist\\.py$"]
@@ -70,9 +38,9 @@ ignore_missing_imports = true
 # конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
 # найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
 # (testpaths/asyncio_mode), которые к backend/ не относятся.
-# asyncio_mode = "auto" — общий для src/services/* (ещё не переехавших на
-# per-package layout, ADR 0020): async def test_* запускаются сами, без
-# ручных @pytest.mark.asyncio на каждом.
+# asyncio_mode = "auto" — общий дефолт для пакетов без своего
+# [tool.pytest.ini_options]: async def test_* запускаются сами, без ручных
+# @pytest.mark.asyncio на каждом.
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 

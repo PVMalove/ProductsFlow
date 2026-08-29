@@ -13,46 +13,64 @@ endif
 pkg ?=
 service ?=
 
-member_dir = $(firstword $(wildcard src/libs/$(pkg)) $(wildcard src/services/$(pkg)))
+member_dir = $(firstword $(wildcard libs/$(pkg)) $(wildcard services/$(pkg)))
 
 _require-pkg:
 	$(if $(pkg),,$(error pkg не задан — использование: make check pkg=<member>))
+	$(if $(member_dir),,$(error пакет '$(pkg)' не найден ни в libs/, ни в services/))
 
-check: _require-pkg ## Прогнать все линтеры на члене workspace (make check pkg=<member>)
-	uv run --package $(pkg) ruff check $(member_dir)
-	uv run --package $(pkg) mypy --explicit-package-bases $(member_dir)
-	uv run --package $(pkg) ruff format --check $(member_dir)
-	uv run --package $(pkg) vulture whitelist.py $(member_dir)
+# uv run --project <dir> из backend/ (а не `cd <dir> && uv run`): mypy
+# --explicit-package-bases выводит имя модуля из позиционного пути относительно
+# cwd, и при cwd=<dir> путь "src" — валидный идентификатор, из-за чего
+# value_object.py находится дважды под разными именами модуля
+# ("src.kernel_domain.value_object" и "kernel_domain.value_object" через
+# editable-инсталл в .venv). При cwd=backend/ путь "libs/kernel-domain/src"
+# содержит дефис ("kernel-domain"), который обрывает сборку dotted-имени, и
+# конфликта не возникает.
+check: _require-pkg ## Прогнать все линтеры на пакете (make check pkg=<member>) — своё изолированное окружение
+	uv --project $(member_dir) sync
+	uv run --project $(member_dir) ruff check $(member_dir)
+	uv run --project $(member_dir) mypy --explicit-package-bases $(member_dir)
+	uv run --project $(member_dir) ruff format --check $(member_dir)
+	uv run --project $(member_dir) vulture whitelist.py $(member_dir)
 
-format: _require-pkg ## Автоформатирование кода члена workspace (ruff format + ruff check --fix)
-	uv run --package $(pkg) ruff format $(member_dir)
-	uv run --package $(pkg) ruff check --fix $(member_dir)
+format: _require-pkg ## Автоформатирование кода пакета (ruff format + ruff check --fix)
+	uv --project $(member_dir) sync
+	uv run --project $(member_dir) ruff format $(member_dir)
+	uv run --project $(member_dir) ruff check --fix $(member_dir)
 
 lint: format check ## Сначала отформатировать, затем проверить (format + check)
 
-test: _require-pkg ## Прогнать тесты члена workspace (make test pkg=<member>)
-	uv run --package $(pkg) pytest $(member_dir)
+test: _require-pkg ## Прогнать тесты пакета (make test pkg=<member>)
+	uv --project $(member_dir) sync
+	uv run --project $(member_dir) pytest $(member_dir)
 
 build: ## Пересобрать образы docker compose (make build service=identity-api)
 	docker compose build $(service)
 
 keys: ## Сгенерировать локальную RS256-пару для identity (ADR 0011, dev-only, не в git)
-	uv run --package identity-service python scripts/generate_dev_keys.py
+	cd services/identity-service && uv sync
+	cd services/identity-service && uv run python ../../scripts/generate_dev_keys.py
 
 db-revision: _require-pkg ## Создать ревизию через autogenerate (make db-revision pkg=<service> msg="add foo")
-	uv run --package $(pkg) alembic -c $(member_dir)/alembic.ini revision --autogenerate -m "$(msg)"
+	cd $(member_dir) && uv sync
+	cd $(member_dir) && uv run alembic -c alembic.ini revision --autogenerate -m "$(msg)"
 
 db-upgrade: _require-pkg ## Применить все непримененные миграции сервиса до head (make db-upgrade pkg=<service>)
-	uv run --package $(pkg) alembic -c $(member_dir)/alembic.ini upgrade head
+	cd $(member_dir) && uv sync
+	cd $(member_dir) && uv run alembic -c alembic.ini upgrade head
 
 db-downgrade: _require-pkg ## Откатить последнюю миграцию сервиса на один шаг (make db-downgrade pkg=<service>)
-	uv run --package $(pkg) alembic -c $(member_dir)/alembic.ini downgrade -1
+	cd $(member_dir) && uv sync
+	cd $(member_dir) && uv run alembic -c alembic.ini downgrade -1
 
 db-current: _require-pkg ## Показать текущую ревизию БД сервиса (make db-current pkg=<service>)
-	uv run --package $(pkg) alembic -c $(member_dir)/alembic.ini current
+	cd $(member_dir) && uv sync
+	cd $(member_dir) && uv run alembic -c alembic.ini current
 
 db-history: _require-pkg ## Показать всю историю миграций сервиса (make db-history pkg=<service>)
-	uv run --package $(pkg) alembic -c $(member_dir)/alembic.ini history
+	cd $(member_dir) && uv sync
+	cd $(member_dir) && uv run alembic -c alembic.ini history
 
 up_dev: ## Поднять dev-конфигурацию (docker-compose.yml + docker-compose.dev.yml; make up_dev service=identity-api)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d $(service)

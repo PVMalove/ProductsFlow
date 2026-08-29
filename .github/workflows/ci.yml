@@ -31,8 +31,6 @@ jobs:
         with:
           enable-cache: true
 
-      - run: uv sync
-
       - run: make check pkg=${{ matrix.member }}
 
   backend-test:
@@ -54,8 +52,6 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
-
-      - run: uv sync
 
       - run: make test pkg=${{ matrix.member }}
 
