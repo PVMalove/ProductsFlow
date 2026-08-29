@@ -89,17 +89,6 @@ async def _clear_outbox_after_test(
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="session")
-async def amqp_connection(
-    rabbitmq_amqp_url: str,
-) -> AsyncIterator[AbstractRobustConnection]:
-    connection = await aio_pika.connect_robust(rabbitmq_amqp_url)
-    try:
-        yield connection
-    finally:
-        await connection.close()
-
-
-@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def events_exchange(
     amqp_connection: AbstractRobustConnection,
 ) -> AsyncIterator[AbstractExchange]:
