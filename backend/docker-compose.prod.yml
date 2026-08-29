@@ -6,6 +6,11 @@ services:
       - "9013:8000"
     restart: unless-stopped
 
+  identity-worker:
+    environment:
+      APP_ENV: prod
+    restart: unless-stopped
+
   catalog-api:
     environment:
       APP_ENV: prod

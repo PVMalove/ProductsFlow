@@ -5,6 +5,10 @@ services:
     ports:
       - "9010:8000"
 
+  identity-worker:
+    environment:
+      APP_ENV: dev
+
   catalog-api:
     environment:
       APP_ENV: dev

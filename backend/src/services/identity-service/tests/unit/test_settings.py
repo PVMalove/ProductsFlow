@@ -13,9 +13,15 @@ def test_settings_defaults_are_safe_for_a_fresh_clone(
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("IDENTITY_JWT_PRIVATE_KEY_PATH", raising=False)
     monkeypatch.delenv("IDENTITY_ACCESS_TOKEN_TTL_HOURS", raising=False)
+    monkeypatch.delenv("IDENTITY_DATABASE_URL", raising=False)
+    monkeypatch.delenv("IDENTITY_AMQP_URL", raising=False)
+    monkeypatch.delenv("IDENTITY_OUTBOX_POLL_INTERVAL_SECONDS", raising=False)
 
     settings = Settings()
 
     assert settings.app_env == "dev"
     assert settings.identity_jwt_private_key_path == ""
     assert settings.identity_access_token_ttl_hours == 1
+    assert settings.identity_database_url == ""
+    assert settings.identity_amqp_url == "amqp://guest:guest@localhost:5672/"
+    assert settings.identity_outbox_poll_interval_seconds == 5.0
