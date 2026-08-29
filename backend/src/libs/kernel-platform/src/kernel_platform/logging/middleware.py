@@ -38,10 +38,18 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         actor_id_reset = await self._set_actor_id(request)
 
         started_at = time.perf_counter()
+        status_code = 500
         try:
             response = await call_next(request)
-            duration_ms = (time.perf_counter() - started_at) * 1000
+            status_code = response.status_code
             response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            # В finally, а не только на успешном пути — падение обработчика
+            # (call_next поднимает исключение) не должно съедать
+            # access-log-строку: "ровно одна запись на запрос" (ADR 0016)
+            # значит на любой запрос, а не только на успешный.
+            duration_ms = (time.perf_counter() - started_at) * 1000
             logger.info(
                 "%s %s",
                 request.method,
@@ -49,12 +57,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 extra={
                     "method": request.method,
                     "path": request.url.path,
-                    "status_code": response.status_code,
+                    "status_code": status_code,
                     "duration_ms": duration_ms,
                 },
             )
-            return response
-        finally:
             request_id_var.reset(request_id_reset)
             if actor_id_reset is not None:
                 actor_id_var.reset(actor_id_reset)

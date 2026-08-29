@@ -28,9 +28,18 @@ async def _echo(_request: Request) -> JSONResponse:
     )
 
 
+async def _boom(_request: Request) -> JSONResponse:
+    raise RuntimeError("boom")
+
+
 def _build_client(verifier: FakeTokenVerifier) -> httpx.AsyncClient:
-    inner = Starlette(routes=[Route("/echo", _echo)])
-    app = RequestContextMiddleware(inner, verifier=verifier)
+    # Middleware добавлена через add_middleware на само приложение (как в
+    # реальном использовании identity-service), а не обёрнута снаружи
+    # отдельного Starlette-инстанса — иначе необработанное исключение
+    # маршрута гасится собственным ServerErrorMiddleware внутреннего
+    # приложения раньше, чем долетит до dispatch() этой middleware.
+    app = Starlette(routes=[Route("/echo", _echo), Route("/boom", _boom)])
+    app.add_middleware(RequestContextMiddleware, verifier=verifier)
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     )
@@ -96,6 +105,25 @@ async def test_exactly_one_access_log_record_with_correct_fields(
     assert getattr(record, "path") == "/echo"
     assert getattr(record, "status_code") == response.status_code
     assert getattr(record, "duration_ms") >= 0
+
+
+async def test_writes_exactly_one_access_log_record_when_the_handler_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="kernel_platform.logging.middleware"):
+        async with _build_client(FakeTokenVerifier()) as client:
+            with pytest.raises(RuntimeError):
+                await client.get("/boom")
+
+    records = [
+        r for r in caplog.records if r.name == "kernel_platform.logging.middleware"
+    ]
+    assert len(records) == 1
+    assert getattr(records[0], "path") == "/boom"
+    assert getattr(records[0], "status_code") == 500
+
+    assert actor_id_var.get() is None
+    assert request_id_var.get() is None
 
 
 async def test_context_vars_do_not_leak_between_requests() -> None:
