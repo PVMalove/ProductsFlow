@@ -6,7 +6,11 @@ import pytest_asyncio
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractRobustConnection
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
-from kernel_platform.topology import DLX_EXCHANGE_NAME, declare_topology
+from kernel_platform.topology import (
+    _RETRY_STAGE_TTL_MS,
+    DLX_EXCHANGE_NAME,
+    declare_topology,
+)
 
 # amqp_connection (conftest.py) — module-scoped, bound к session-scoped
 # event loop; тесты и фикстуры этого модуля должны идти на том же loop —
@@ -16,11 +20,6 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 SERVICE_NAME = "kernel-topology-test"
 MAIN_QUEUE_NAME = f"{SERVICE_NAME}.user-events"
 DLQ_NAME = f"{MAIN_QUEUE_NAME}.dlq"
-RETRY_STAGE_TTL_MS = {
-    "retry.5s": 5_000,
-    "retry.30s": 30_000,
-    "retry.2m": 120_000,
-}
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -64,7 +63,7 @@ async def test_declare_topology_creates_dlx_main_queue_retry_stages_and_dlq(
             "x-dead-letter-routing-key": MAIN_QUEUE_NAME,
         },
     )
-    for suffix, ttl_ms in RETRY_STAGE_TTL_MS.items():
+    for suffix, ttl_ms in _RETRY_STAGE_TTL_MS.items():
         await channel.declare_queue(
             f"{MAIN_QUEUE_NAME}.{suffix}",
             durable=True,
