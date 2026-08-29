@@ -4,8 +4,8 @@ from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import (
-    _RETRY_STAGE_TTL_MS,
     DLX_EXCHANGE_NAME,
+    RETRY_STAGE_TTL_MS,
     declare_topology,
 )
 
@@ -39,7 +39,7 @@ async def test_declare_topology_creates_dlx_main_queue_retry_stages_and_dlq(
             "x-dead-letter-routing-key": MAIN_QUEUE_NAME,
         },
     )
-    for suffix, ttl_ms in _RETRY_STAGE_TTL_MS.items():
+    for suffix, ttl_ms in RETRY_STAGE_TTL_MS.items():
         await channel.declare_queue(
             f"{MAIN_QUEUE_NAME}.{suffix}",
             durable=True,
