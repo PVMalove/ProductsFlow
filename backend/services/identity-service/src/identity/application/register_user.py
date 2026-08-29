@@ -4,6 +4,7 @@ from kernel_domain.result import Result
 from identity.application.password_hasher import PasswordHasher
 from identity.application.user_repository import UserRepository
 from identity.domain.email import Email
+from identity.domain.raw_password import RawPassword
 from identity.domain.user import User
 
 
@@ -29,7 +30,11 @@ class RegisterUserCommand:
                 )
             )
 
-        password_hash = self._password_hasher.hash(password)
+        raw_password_result = RawPassword.create(password)
+        if raw_password_result.is_err:
+            return Result.fail(raw_password_result.error)
+
+        password_hash = self._password_hasher.hash(raw_password_result.value.value)
         result = User.register(email_vo, password_hash)
         if result.is_err:
             return result

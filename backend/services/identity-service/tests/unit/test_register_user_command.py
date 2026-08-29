@@ -6,10 +6,6 @@ from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
-def _command() -> RegisterUserCommand:
-    return RegisterUserCommand(FakeUserRepository(), FakePasswordHasher())
-
-
 def test_register_persists_the_user_and_returns_ok() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
@@ -49,9 +45,18 @@ def test_register_does_not_construct_the_aggregate_on_a_duplicate_email() -> Non
 
 
 def test_register_fails_with_validation_on_a_weak_password() -> None:
-    command = _command()
+    command = RegisterUserCommand(FakeUserRepository(), FakePasswordHasher())
 
     result = command.execute("user@example.com", "short")
 
     assert result.is_err
     assert result.error.type == ErrorType.VALIDATION
+
+
+def test_register_does_not_hash_a_weak_password() -> None:
+    repository = FakeUserRepository()
+    command = RegisterUserCommand(repository, FakePasswordHasher())
+
+    command.execute("user@example.com", "short")
+
+    assert repository.users == {}
