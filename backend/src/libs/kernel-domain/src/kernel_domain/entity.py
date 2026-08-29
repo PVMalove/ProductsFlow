@@ -1,11 +1,7 @@
-from typing import Generic, TypeVar
-
 from kernel_domain.domain_event import DomainEvent
 
-TId = TypeVar("TId")
 
-
-class Entity(Generic[TId]):
+class Entity[TId]:
     """Базовый строительный блок агрегата (ADR 0013): равенство по `id` в
     рамках одного конкретного типа (не по значению полей), плюс накопление
     доменных событий, атомарно отдаваемых вызывающему через `pull_events()`
