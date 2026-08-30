@@ -11,6 +11,7 @@ from catalog.domain.events import (
     ProductCreated,
     ProductDeactivated,
     ProductDeleted,
+    ProductEvent,
     ProductUpdated,
 )
 from catalog.domain.product import Product
@@ -32,6 +33,14 @@ _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id')
 # self-referencing имён в теле класса).
 _ProductRows = list[ProductModel]
 
+_EVENT_TYPES: dict[type[ProductEvent], str] = {
+    ProductCreated: "product.created.v1",
+    ProductUpdated: "product.updated.v1",
+    ProductActivated: "product.activated.v1",
+    ProductDeactivated: "product.deactivated.v1",
+    ProductDeleted: "product.deleted.v1",
+}
+
 
 def _to_domain(row: ProductModel) -> Product:
     return Product(
@@ -46,46 +55,31 @@ def _to_domain(row: ProductModel) -> Product:
 
 
 def _to_outbox_message(event: DomainEvent) -> OutboxMessage:
+    # Все домeнные события Product наследуют ProductEvent (product_id) —
+    # `pull_events()` типизирован общим `DomainEvent` на уровне kernel-domain
+    # (Entity не параметризуется по типу события), поэтому здесь нужен явный
+    # guard для сужения типа.
+    assert isinstance(event, ProductEvent)
+    payload: dict[str, object] = {"product_id": event.product_id.value}
     if isinstance(event, ProductCreated):
-        event_type = "product.created.v1"
-        payload = {
-            "product_id": event.product_id.value,
-            "user_id": str(event.user_id),
-            "name": event.name,
-            "category": event.category,
-            "price": event.price,
-        }
-        product_id = event.product_id
-    elif isinstance(event, ProductUpdated):
-        event_type = "product.updated.v1"
-        payload = {"product_id": event.product_id.value}
-        product_id = event.product_id
-    elif isinstance(event, ProductActivated):
-        event_type = "product.activated.v1"
-        payload = {"product_id": event.product_id.value}
-        product_id = event.product_id
-    elif isinstance(event, ProductDeactivated):
-        event_type = "product.deactivated.v1"
-        payload = {"product_id": event.product_id.value}
-        product_id = event.product_id
-    elif isinstance(event, ProductDeleted):
-        event_type = "product.deleted.v1"
-        payload = {"product_id": event.product_id.value}
-        product_id = event.product_id
-    else:  # pragma: no cover — защита от забытого будущего типа события
-        raise TypeError(f"Неизвестное доменное событие Product: {type(event)!r}")
+        payload.update(
+            user_id=str(event.user_id),
+            name=event.name,
+            category=event.category,
+            price=event.price,
+        )
 
     return OutboxMessage(
         aggregate_type="Product",
-        aggregate_id=product_id.value,
-        event_type=event_type,
+        aggregate_id=event.product_id.value,
+        event_type=_EVENT_TYPES[type(event)],
         payload=payload,
         occurred_at=event.occurred_on_utc,
     )
 
 
 class ProductRepository:
-    """CRUD + keyset-пагинация для `Product` (issue #148). `_drain_outbox` —
+    """CRUD + keyset-пагинация для `Product` (issue #148). `_commit` —
     единственное место, которое видит и доменную сущность, и `AsyncSession`
     (ADR 0021): каждый мутирующий метод сам коммитит свою транзакцию, атомарно
     фиксируя изменение `ProductModel` и вставленные строки `outbox_messages`.
@@ -128,8 +122,7 @@ class ProductRepository:
                 is_active=product.is_active,
             )
         )
-        await self._drain_outbox(product)
-        await self.session.commit()
+        await self._commit(product)
         return result
 
     async def get_by_id(self, product_id: ProductId) -> Product | None:
@@ -145,11 +138,11 @@ class ProductRepository:
         price: float | None = None,
         category: str | None = None,
     ) -> Result[Product] | None:
-        row = await self.session.get(ProductModel, product_id.value)
-        if row is None:
+        loaded = await self._load(product_id)
+        if loaded is None:
             return None
+        row, product = loaded
 
-        product = _to_domain(row)
         result = product.update(
             name=name, description=description, price=price, category=category
         )
@@ -160,8 +153,7 @@ class ProductRepository:
         row.description = product.description
         row.price = product.price
         row.category = product.category
-        await self._drain_outbox(product)
-        await self.session.commit()
+        await self._commit(product)
         return Result.ok(product)
 
     async def activate(self, product_id: ProductId) -> Result[Product] | None:
@@ -173,26 +165,25 @@ class ProductRepository:
     async def _toggle_active(
         self, product_id: ProductId, *, activate: bool
     ) -> Result[Product] | None:
-        row = await self.session.get(ProductModel, product_id.value)
-        if row is None:
+        loaded = await self._load(product_id)
+        if loaded is None:
             return None
+        row, product = loaded
 
-        product = _to_domain(row)
         result = product.activate() if activate else product.deactivate()
         if result.is_err:
             return Result.fail(result.error)
 
         row.is_active = product.is_active
-        await self._drain_outbox(product)
-        await self.session.commit()
+        await self._commit(product)
         return Result.ok(product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
-        row = await self.session.get(ProductModel, product_id.value)
-        if row is None:
+        loaded = await self._load(product_id)
+        if loaded is None:
             return None
+        row, product = loaded
 
-        product = _to_domain(row)
         product.mark_deleted()
         await self._drain_outbox(product)
         await self.session.delete(row)
@@ -250,6 +241,12 @@ class ProductRepository:
             ),
         )
 
+    async def _load(self, product_id: ProductId) -> tuple[ProductModel, Product] | None:
+        row = await self.session.get(ProductModel, product_id.value)
+        if row is None:
+            return None
+        return row, _to_domain(row)
+
     async def _overfetch(
         self, stmt: Select[tuple[ProductModel]], limit: int
     ) -> tuple[_ProductRows, bool]:
@@ -257,6 +254,10 @@ class ProductRepository:
             (await self.session.scalars(stmt.limit(limit + 1))).all()
         )
         return rows[:limit], len(rows) > limit
+
+    async def _commit(self, product: Product) -> None:
+        await self._drain_outbox(product)
+        await self.session.commit()
 
     async def _drain_outbox(self, product: Product) -> None:
         for event in product.pull_events():

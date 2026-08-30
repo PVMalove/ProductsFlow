@@ -224,3 +224,38 @@ async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> No
     )
     assert [p.id.value for p in second_page.items] == newest_first[2:]
     assert second_page.page_info.has_more is False
+
+
+async def test_list_before_cursor_navigates_back_to_a_newer_page(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+    created_ids = []
+    for i in range(3):
+        product = (
+            await repo.create(
+                name=f"Товар {i}",
+                description="",
+                price=1.0,
+                category="Категория",
+                user_id=owner_id,
+            )
+        ).value
+        created_ids.append(product.id.value)
+
+    newest_first = list(reversed(created_ids))
+
+    first_page = await repo.list(limit=2)
+    assert first_page.page_info.next_cursor is not None
+    second_page = await repo.list(
+        limit=2, after=decode_cursor(first_page.page_info.next_cursor)
+    )
+    assert second_page.page_info.prev_cursor is not None
+
+    page_before = await repo.list(
+        limit=2, before=decode_cursor(second_page.page_info.prev_cursor)
+    )
+
+    assert [p.id.value for p in page_before.items] == newest_first[:2]
+    assert page_before.page_info.has_more is True
