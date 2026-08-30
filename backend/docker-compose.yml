@@ -39,6 +39,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
     networks:
       - backend-network
 

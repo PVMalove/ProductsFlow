@@ -3,8 +3,9 @@ from datetime import datetime
 
 from kernel_platform.outbox.models import Base
 from observability.context import actor_id_var
-from sqlalchemy import BigInteger, Identity, Text, event, func, insert, inspect
+from sqlalchemy import BigInteger, Identity, Text, event, func, insert, inspect, select
 from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
 from catalog.infrastructure.db.models import ProductModel
@@ -115,3 +116,16 @@ def _on_product_delete(
             ),
         )
     )
+
+
+async def get_audit_logs_by_product(
+    session: AsyncSession, product_id: int
+) -> list[ProductAuditLog]:
+    """Строки переживают удаление Товара (`product_id` без FK) — доступны и
+    для уже удалённого Товара (issue #149)."""
+    rows = await session.scalars(
+        select(ProductAuditLog)
+        .where(ProductAuditLog.product_id == product_id)
+        .order_by(ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc())
+    )
+    return list(rows.all())

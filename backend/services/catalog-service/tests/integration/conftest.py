@@ -1,13 +1,18 @@
 from collections.abc import AsyncIterator
 
+import httpx
+import pytest
 import pytest_asyncio
 from kernel_platform.outbox.models import Base
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 # Импорт регистрирует ProductModel/ProductAuditLog на общем Base.metadata
 # (тот же Base, что и kernel_platform.OutboxMessage) — сам модуль напрямую
 # не используется, только его сторонний эффект на импорте.
 from catalog.infrastructure import db as _db  # noqa: F401
+from catalog.infrastructure.db.session import get_db_session
+from catalog.infrastructure.security.auth import get_identity_gateway
+from tests.integration.fake_identity_gateway import FakeIdentityGateway
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
@@ -23,3 +28,32 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
     finally:
         async with db_engine.begin() as connection:
             await connection.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture
+def identity_gateway() -> FakeIdentityGateway:
+    return FakeIdentityGateway()
+
+
+@pytest_asyncio.fixture
+async def catalog_client(
+    db_session: AsyncSession, identity_gateway: FakeIdentityGateway
+) -> AsyncIterator[httpx.AsyncClient]:
+    """ASGI-тестклиент (ADR 0018, Seam A) поверх настоящего Postgres
+    (`db_session`, savepoint на тест) и фейкового `IdentityGateway` —
+    HTTP-слой прогоняется целиком, identity-service — нет."""
+    from catalog.main import app
+
+    async def _override_session() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = _override_session
+    app.dependency_overrides[get_identity_gateway] = lambda: identity_gateway
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://catalog"
+        ) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()

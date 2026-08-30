@@ -17,6 +17,7 @@ from catalog.domain.events import (
 from catalog.domain.product import Product
 from catalog.domain.product_id import ProductId
 from catalog.infrastructure.db.models import ProductModel
+from catalog.infrastructure.db.owner_read_model import OwnerReadModelRow
 from catalog.infrastructure.db.pagination import (
     Cursor,
     PageInfo,
@@ -197,7 +198,20 @@ class ProductRepository:
         after: Cursor | None = None,
         before: Cursor | None = None,
     ) -> ProductPage:
-        base_stmt = select(ProductModel)
+        # Списки не персонализированы и не имеют admin-обхода (ADR 0002/0003)
+        # — деактивированный Товар и Товар деактивированного (или ещё не
+        # добранного, issue #149) Владельца одинаково скрыты из выдачи для
+        # всех, включая самого Владельца. INNER JOIN: Товар, чей Владелец ещё
+        # не появился в owner_read_model (ни событием, ни синхронным
+        # добором), из списков тоже не виден — тот же осторожный дефолт, что
+        # и на прямом обращении по id.
+        base_stmt = (
+            select(ProductModel)
+            .join(OwnerReadModelRow, OwnerReadModelRow.user_id == ProductModel.user_id)
+            .where(
+                ProductModel.is_active.is_(True), OwnerReadModelRow.is_active.is_(True)
+            )
+        )
         if before is not None:
             stmt = base_stmt.where(
                 tuple_(ProductModel.created_at, ProductModel.id)
