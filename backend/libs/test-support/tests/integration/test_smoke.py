@@ -68,6 +68,31 @@ async def test_db_session_rollback_isolates_writes_between_tests(
         assert await connection.run_sync(_count) == 0
 
 
+# Order-dependent by design: proves the db_session fixture's own teardown
+# (session.close() + connection.rollback()) actually isolates state between
+# tests — not just that the reproduction above does. Relies on pytest's
+# default top-to-bottom execution order within a module (no xdist/randomly
+# plugin runs against this suite), same idiom as the rabbitmq purge tests in
+# identity-service/tests/integration/test_smoke.py.
+@asyncio_session_loop
+async def test_db_session_fixture_leaves_a_row_for_this_test_only(
+    _smoke_probe_table: None, db_session: AsyncSession
+) -> None:
+    await db_session.execute(text(f"INSERT INTO {SMOKE_TABLE} DEFAULT VALUES"))
+    await db_session.flush()
+
+    count = await db_session.scalar(text(f"SELECT count(*) FROM {SMOKE_TABLE}"))
+    assert count == 1
+
+
+@asyncio_session_loop
+async def test_db_session_fixture_rolled_back_the_previous_tests_row(
+    _smoke_probe_table: None, db_session: AsyncSession
+) -> None:
+    count = await db_session.scalar(text(f"SELECT count(*) FROM {SMOKE_TABLE}"))
+    assert count == 0
+
+
 @asyncio_session_loop
 async def test_rabbitmq_channel_roundtrips_a_message(channel: AbstractChannel) -> None:
     queue = await channel.declare_queue(SMOKE_QUEUE, auto_delete=True)
