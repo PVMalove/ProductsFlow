@@ -1,0 +1,226 @@
+import uuid
+
+import pytest
+from kernel_platform.outbox.models import OutboxMessage
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from catalog.domain.product_id import ProductId
+from catalog.infrastructure.db.audit import ProductAuditLog
+from catalog.infrastructure.db.pagination import decode_cursor
+from catalog.infrastructure.db.product_repository import ProductRepository
+
+pytestmark = pytest.mark.asyncio(loop_scope="session")
+
+UNKNOWN_PRODUCT_ID = ProductId(999_999_999)
+
+
+async def _outbox_rows_for(
+    session: AsyncSession, aggregate_id: int
+) -> list[OutboxMessage]:
+    rows = await session.scalars(
+        select(OutboxMessage)
+        .where(OutboxMessage.aggregate_id == aggregate_id)
+        .order_by(OutboxMessage.id)
+    )
+    return list(rows.all())
+
+
+async def _audit_rows_for(
+    session: AsyncSession, product_id: int
+) -> list[ProductAuditLog]:
+    rows = await session.scalars(
+        select(ProductAuditLog)
+        .where(ProductAuditLog.product_id == product_id)
+        .order_by(ProductAuditLog.id)
+    )
+    return list(rows.all())
+
+
+async def test_create_persists_product_and_writes_outbox_row_in_same_transaction(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+
+    result = await repo.create(
+        name="Название товара",
+        description="Описание",
+        price=9.99,
+        category="Категория",
+        user_id=owner_id,
+    )
+
+    assert result.is_ok
+    product = result.value
+
+    fetched = await repo.get_by_id(product.id)
+    assert fetched is not None
+    assert fetched.name == "Название товара"
+    assert fetched.user_id == owner_id
+
+    outbox_rows = await _outbox_rows_for(db_session, product.id.value)
+    assert len(outbox_rows) == 1
+    assert outbox_rows[0].event_type == "product.created.v1"
+    assert outbox_rows[0].payload["user_id"] == str(owner_id)
+
+    audit_rows = await _audit_rows_for(db_session, product.id.value)
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "created"
+
+
+async def test_create_rejects_invalid_product_without_persisting(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+
+    result = await repo.create(
+        name="ab",
+        description="",
+        price=1.0,
+        category="Категория",
+        user_id=uuid.uuid4(),
+    )
+
+    assert result.is_err
+    assert result.error.code == "invalid_name"
+
+
+async def test_get_by_id_returns_none_for_unknown_id(db_session: AsyncSession) -> None:
+    repo = ProductRepository(db_session)
+
+    assert await repo.get_by_id(UNKNOWN_PRODUCT_ID) is None
+
+
+async def test_update_applies_only_provided_fields_and_writes_outbox_row(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    created = (
+        await repo.create(
+            name="Исходное имя",
+            description="Описание",
+            price=5.0,
+            category="Категория",
+            user_id=uuid.uuid4(),
+        )
+    ).value
+
+    result = await repo.update(created.id, name="Новое имя")
+
+    assert result is not None
+    assert result.is_ok
+    updated = result.value
+    assert updated.name == "Новое имя"
+    assert updated.category == "Категория"
+
+    outbox_rows = await _outbox_rows_for(db_session, created.id.value)
+    assert [row.event_type for row in outbox_rows] == [
+        "product.created.v1",
+        "product.updated.v1",
+    ]
+
+
+async def test_update_unknown_product_returns_none(db_session: AsyncSession) -> None:
+    repo = ProductRepository(db_session)
+
+    assert await repo.update(UNKNOWN_PRODUCT_ID, name="x") is None
+
+
+async def test_activate_deactivate_toggle_persisted_state(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    created = (
+        await repo.create(
+            name="Название товара",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=uuid.uuid4(),
+        )
+    ).value
+
+    deactivated = await repo.deactivate(created.id)
+    assert deactivated is not None and deactivated.is_ok
+    fetched = await repo.get_by_id(created.id)
+    assert fetched is not None
+    assert fetched.is_active is False
+
+    activated = await repo.activate(created.id)
+    assert activated is not None and activated.is_ok
+    fetched = await repo.get_by_id(created.id)
+    assert fetched is not None
+    assert fetched.is_active is True
+
+    outbox_rows = await _outbox_rows_for(db_session, created.id.value)
+    assert [row.event_type for row in outbox_rows] == [
+        "product.created.v1",
+        "product.deactivated.v1",
+        "product.activated.v1",
+    ]
+
+
+async def test_delete_removes_row_and_writes_outbox_row(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    created = (
+        await repo.create(
+            name="Название товара",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=uuid.uuid4(),
+        )
+    ).value
+
+    deleted = await repo.delete(created.id)
+    assert deleted is not None
+
+    assert await repo.get_by_id(created.id) is None
+
+    outbox_rows = await _outbox_rows_for(db_session, created.id.value)
+    assert [row.event_type for row in outbox_rows] == [
+        "product.created.v1",
+        "product.deleted.v1",
+    ]
+
+    audit_rows = await _audit_rows_for(db_session, created.id.value)
+    assert [row.action for row in audit_rows] == ["created", "deleted"]
+
+
+async def test_delete_unknown_product_returns_none(db_session: AsyncSession) -> None:
+    repo = ProductRepository(db_session)
+
+    assert await repo.delete(UNKNOWN_PRODUCT_ID) is None
+
+
+async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+    created_ids = []
+    for i in range(3):
+        product = (
+            await repo.create(
+                name=f"Товар {i}",
+                description="",
+                price=1.0,
+                category="Категория",
+                user_id=owner_id,
+            )
+        ).value
+        created_ids.append(product.id.value)
+
+    newest_first = list(reversed(created_ids))
+
+    first_page = await repo.list(limit=2)
+    assert [p.id.value for p in first_page.items] == newest_first[:2]
+    assert first_page.page_info.has_more is True
+    assert first_page.page_info.next_cursor is not None
+
+    second_page = await repo.list(
+        limit=2, after=decode_cursor(first_page.page_info.next_cursor)
+    )
+    assert [p.id.value for p in second_page.items] == newest_first[2:]
+    assert second_page.page_info.has_more is False
