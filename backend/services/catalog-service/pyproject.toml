@@ -1,9 +1,25 @@
 [project]
 name = "catalog-service"
 version = "0.1.0"
-description = "catalog-service (TD-01, Фазы 3-4) — пустой каркас, наполняется начиная с Фазы 3."
+description = "catalog-service — домен Product, персистентность, outbox-запись мутаций (ADR 0013/0020/0021, issue #148)."
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "kernel-domain",
+    "kernel-platform",
+    "observability",
+    "pydantic-settings>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0",
+]
+
+# path-зависимости на соседние пакеты монорепо (ADR 0020) — editable в
+# dev-окружении, --no-editable при сборке production-образа (см. Dockerfile).
+[tool.uv.sources]
+kernel-domain = { path = "../../libs/kernel-domain", editable = true }
+kernel-platform = { path = "../../libs/kernel-platform", editable = true }
+observability = { path = "../../libs/observability", editable = true }
+test-support = { path = "../../libs/test-support", editable = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -16,7 +32,9 @@ packages = ["src/catalog"]
 dev = [
     "mypy>=2.3.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
     "ruff>=0.16.1",
+    "test-support",
     "vulture>=2.14",
 ]
 
@@ -26,13 +44,16 @@ dev = [
 extend = "../../pyproject.toml"
 
 [tool.mypy]
-exclude = ["^whitelist\\.py$", "^\\.venv/"]
+exclude = ["^whitelist\\.py$"]
 
-# Секция обязательна: без неё pytest не считает этот pyproject.toml
-# конфиг-файлом и продолжает подниматься вверх по дереву каталогов в поисках
-# другого. Нет async-тестов — asyncio_mode здесь не нужен.
+[[tool.mypy.overrides]]
+# asyncpg ships no stubs/py.typed — same treatment identity-service/kernel-platform give it.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.vulture]
-exclude = [".venv/"]
+exclude = [".venv/", "*/alembic/versions/"]
 min_confidence = 80
