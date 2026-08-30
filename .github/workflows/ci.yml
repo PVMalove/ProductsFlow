@@ -21,6 +21,7 @@ jobs:
         member:
           - kernel-domain
           - kernel-platform
+          - test-support
           - identity-service
           - catalog-service
           - support-service
@@ -46,6 +47,7 @@ jobs:
           - identity-service
           - kernel-platform
           - kernel-domain
+          - test-support
     steps:
       - uses: actions/checkout@v7
 
