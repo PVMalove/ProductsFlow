@@ -25,3 +25,6 @@ class FakeUserRepository(UserRepository):
 
     def add(self, user: User) -> None:
         self.users[user.email.value] = user
+
+    def save(self, user: User) -> None:
+        self.users[user.email.value] = user

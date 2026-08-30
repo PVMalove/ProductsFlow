@@ -15,3 +15,13 @@ class UserRegistered(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class PasswordChanged(DomainEvent):
     user_id: UserId
+
+
+@dataclass(frozen=True, kw_only=True)
+class Deactivated(DomainEvent):
+    user_id: UserId
+
+
+@dataclass(frozen=True, kw_only=True)
+class Activated(DomainEvent):
+    user_id: UserId
