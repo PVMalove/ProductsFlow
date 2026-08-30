@@ -1,3 +1,5 @@
+import uuid
+
 import httpx
 import pytest
 
@@ -7,7 +9,10 @@ from tests.unit.fake_users_me_app import FakeUsersMeApp
 
 
 async def test_fetch_current_user_returns_the_three_contract_fields() -> None:
-    app = FakeUsersMeApp(response={"id": 7, "role": "admin", "is_active": True})
+    user_id = uuid.uuid4()
+    app = FakeUsersMeApp(
+        response={"id": str(user_id), "role": "admin", "is_active": True}
+    )
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://identity"
     ) as http_client:
@@ -15,7 +20,7 @@ async def test_fetch_current_user_returns_the_three_contract_fields() -> None:
 
         info = await client.fetch_current_user("some-token")
 
-        assert info.id == 7
+        assert info.id == user_id
         assert info.role == "admin"
         assert info.is_active is True
 

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog.domain.product_id import ProductId
 from catalog.infrastructure.db.audit import ProductAuditLog
+from catalog.infrastructure.db.owner_read_model import upsert_owner_read_model
 from catalog.infrastructure.db.pagination import decode_cursor
 from catalog.infrastructure.db.product_repository import ProductRepository
 
@@ -199,6 +200,13 @@ async def test_delete_unknown_product_returns_none(db_session: AsyncSession) -> 
 async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> None:
     repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=True,
+        last_applied_outbox_id=1,
+    )
     created_ids = []
     for i in range(3):
         product = (
@@ -231,6 +239,13 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
 ) -> None:
     repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=True,
+        last_applied_outbox_id=1,
+    )
     created_ids = []
     for i in range(3):
         product = (
@@ -259,3 +274,84 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
 
     assert [p.id.value for p in page_before.items] == newest_first[:2]
     assert page_before.page_info.has_more is True
+
+
+async def test_list_hides_deactivated_products_from_everyone(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=True,
+        last_applied_outbox_id=1,
+    )
+    active = (
+        await repo.create(
+            name="Активный",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=owner_id,
+        )
+    ).value
+    inactive = (
+        await repo.create(
+            name="Неактивный",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=owner_id,
+        )
+    ).value
+    await repo.deactivate(inactive.id)
+
+    page = await repo.list(limit=10)
+
+    assert [p.id.value for p in page.items] == [active.id.value]
+
+
+async def test_list_hides_products_of_a_deactivated_owner(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=False,
+        last_applied_outbox_id=1,
+    )
+    await repo.create(
+        name="Товар деактивированного владельца",
+        description="",
+        price=1.0,
+        category="Категория",
+        user_id=owner_id,
+    )
+
+    page = await repo.list(limit=10)
+
+    assert page.items == []
+
+
+async def test_list_hides_products_of_an_unknown_owner(
+    db_session: AsyncSession,
+) -> None:
+    """Строка ещё не появилась в owner_read_model (ни событием, ни
+    синхронным добором) — осторожный дефолт: скрыт, а не показан."""
+    repo = ProductRepository(db_session)
+    await repo.create(
+        name="Товар без owner_read_model",
+        description="",
+        price=1.0,
+        category="Категория",
+        user_id=uuid.uuid4(),
+    )
+
+    page = await repo.list(limit=10)
+
+    assert page.items == []

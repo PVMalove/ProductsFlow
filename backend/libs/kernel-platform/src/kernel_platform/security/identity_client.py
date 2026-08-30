@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +19,11 @@ DEFAULT_UNKNOWN_KID_THROTTLE_SECONDS = 60.0
 
 @dataclass(frozen=True)
 class CurrentUserInfo:
-    id: int
+    """`id` — GUID (`identity.UserId`, ADR TD-01 Фаза 1), не `int`: тип
+    следовал за отсутствовавшим доменом `User` на момент issue #87, теперь
+    рассинхронизирован с ним."""
+
+    id: uuid.UUID
     role: str
     is_active: bool
 
@@ -85,7 +90,7 @@ class IdentityClient:
         response.raise_for_status()
         body = response.json()
         return CurrentUserInfo(
-            id=body["id"], role=body["role"], is_active=body["is_active"]
+            id=uuid.UUID(body["id"]), role=body["role"], is_active=body["is_active"]
         )
 
     async def _resolve_key(self, kid: str | None) -> Any:

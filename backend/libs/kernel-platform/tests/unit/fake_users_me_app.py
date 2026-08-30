@@ -4,12 +4,17 @@ from typing import Any
 
 class FakeUsersMeApp:
     """Минимальный ASGI-стаб GET /api/v1/users/me — не настоящий identity-service
-    (у него ещё нет домена User), только форма ответа из контракта ADR 0012."""
+    (у него ещё нет HTTP-роута для этого эндпоинта), только форма ответа из
+    контракта ADR 0012 (`id` — GUID `identity.UserId`)."""
 
     def __init__(
         self, response: dict[str, Any] | None = None, status: int = 200
     ) -> None:
-        self._response = response or {"id": 1, "role": "user", "is_active": True}
+        self._response = response or {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "role": "user",
+            "is_active": True,
+        }
         self._status = status
         self.received_authorization: str | None = None
 
