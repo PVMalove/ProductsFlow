@@ -3,7 +3,12 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from identity.domain.email import Email
-from identity.domain.events import PasswordChanged, UserRegistered
+from identity.domain.events import (
+    Activated,
+    Deactivated,
+    PasswordChanged,
+    UserRegistered,
+)
 from identity.domain.role import Role
 from identity.domain.user_id import UserId
 
@@ -55,4 +60,32 @@ class User(Entity[UserId]):
 
         self.password_hash = new_password_hash
         self.add_domain_event(PasswordChanged(user_id=self.id))
+        return Result.ok(None)
+
+    def deactivate(self) -> Result[None]:
+        if not self.is_active:
+            return Result.fail(
+                Error(
+                    code="already_deactivated",
+                    description="Пользователь уже деактивирован",
+                    type=ErrorType.CONFLICT,
+                )
+            )
+
+        self.is_active = False
+        self.add_domain_event(Deactivated(user_id=self.id))
+        return Result.ok(None)
+
+    def activate(self) -> Result[None]:
+        if self.is_active:
+            return Result.fail(
+                Error(
+                    code="already_active",
+                    description="Пользователь уже активен",
+                    type=ErrorType.CONFLICT,
+                )
+            )
+
+        self.is_active = True
+        self.add_domain_event(Activated(user_id=self.id))
         return Result.ok(None)
