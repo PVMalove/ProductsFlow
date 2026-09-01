@@ -6,8 +6,7 @@ from domain.user_id import UserId
 
 
 class UserRepository(Protocol):
-    """Порт персистентности User (ADR TD-01 Фаза 1) — без реальной БД до
-    Фазы 2; реализация в этой части — только in-memory фейк для тестов."""
+    """Persistence contract for the identity domain's User aggregate."""
 
     def exists_by_email(self, email: Email) -> bool: ...
 
