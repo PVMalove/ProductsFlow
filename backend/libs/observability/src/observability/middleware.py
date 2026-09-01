@@ -65,7 +65,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             if actor_id_reset is not None:
                 actor_id_var.reset(actor_id_reset)
 
-    async def _set_actor_id(self, request: Request) -> Token[int | None] | None:
+    async def _set_actor_id(self, request: Request) -> Token[int | str | None] | None:
         auth_header = request.headers.get("authorization", "")
         if not auth_header.lower().startswith("bearer "):
             return None
@@ -74,7 +74,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             sub = payload.get("sub")
             if sub is None:
                 return None
-            return actor_id_var.set(int(sub))
+            try:
+                actor_id: int | str = int(sub)
+            except TypeError, ValueError:
+                actor_id = str(sub)
+            return actor_id_var.set(actor_id)
         except Exception:
             # Терпимый паттерн ADR 0016 — сюда прилетает и невалидный
             # токен (jwt.*Error), и сбой самого TokenVerifier (например,

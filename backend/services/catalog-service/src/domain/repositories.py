@@ -7,6 +7,7 @@ from kernel_domain.result import Result
 
 from domain.product import Product
 from domain.product_id import ProductId
+from domain.product_image import ProductImage
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,22 @@ class ProductRepository(Protocol):
     async def deactivate(self, product_id: ProductId) -> Result[Product] | None: ...
 
     async def delete(self, product_id: ProductId) -> Product | None: ...
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None: ...
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        *,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: uuid.UUID,
+    ) -> ProductImage: ...
+
+    async def delete_product_image(
+        self, product_id: ProductId, *, actor_user_id: uuid.UUID
+    ) -> None: ...
 
     async def list(
         self,

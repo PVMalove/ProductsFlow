@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from application.ports import ProductAuditAction, ProductAuditEntry
+from application.product_image_use_cases import ProductImageView
 from domain.product import Product
 from domain.repositories import PageInfo, ProductPage
 
@@ -79,7 +80,7 @@ class ProductListResponse(BaseModel):
 class ProductAuditLogResponse(BaseModel):
     id: int
     product_id: int
-    actor_user_id: int | None
+    actor_user_id: uuid.UUID | None
     action: ProductAuditAction
     description: str
     created_at: datetime
@@ -94,3 +95,12 @@ class ProductAuditLogResponse(BaseModel):
             description=row.description,
             created_at=row.created_at,
         )
+
+
+class ProductImageResponse(BaseModel):
+    image_url: str
+    updated_at: datetime
+
+    @classmethod
+    def from_view(cls, view: ProductImageView) -> "ProductImageResponse":
+        return cls(image_url=view.image_url, updated_at=view.updated_at)

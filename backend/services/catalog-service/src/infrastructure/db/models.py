@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 
 from kernel_platform.outbox.models import Base
-from sqlalchemy import BigInteger, Identity, Index, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,3 +37,19 @@ class ProductModel(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class ProductImageModel(Base):
+    __tablename__ = "product_images"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("products.id", ondelete="CASCADE"), unique=True
+    )
+    s3_key: Mapped[str] = mapped_column(String(512))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
