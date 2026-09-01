@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from domain.repositories import PageInfo, TicketPage
 from domain.ticket import Ticket
 
 
@@ -30,9 +31,12 @@ class TicketResponse(BaseModel):
     subject: str
     status: str
     messages: list[TicketMessageResponse]
+    page_info: "PageInfoResponse | None" = None
 
     @classmethod
-    def from_domain(cls, ticket: Ticket) -> "TicketResponse":
+    def from_domain(
+        cls, ticket: Ticket, page_info: "PageInfoResponse | None" = None
+    ) -> "TicketResponse":
         return cls(
             id=ticket.id,
             author_id=ticket.author_id,
@@ -47,4 +51,33 @@ class TicketResponse(BaseModel):
                 )
                 for message in ticket.messages
             ],
+            page_info=page_info,
+        )
+
+
+class PageInfoResponse(BaseModel):
+    next_cursor: str | None
+    prev_cursor: str | None
+    has_more: bool
+    has_prev: bool
+
+    @classmethod
+    def from_domain(cls, page_info: PageInfo) -> "PageInfoResponse":
+        return cls(
+            next_cursor=page_info.next_cursor,
+            prev_cursor=page_info.prev_cursor,
+            has_more=page_info.has_more,
+            has_prev=page_info.has_prev,
+        )
+
+
+class TicketListResponse(BaseModel):
+    items: list[TicketResponse]
+    page_info: PageInfoResponse
+
+    @classmethod
+    def from_domain(cls, page: TicketPage) -> "TicketListResponse":
+        return cls(
+            items=[TicketResponse.from_domain(ticket) for ticket in page.items],
+            page_info=PageInfoResponse.from_domain(page.page_info),
         )
