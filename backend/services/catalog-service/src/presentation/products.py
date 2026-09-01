@@ -16,7 +16,7 @@ from infrastructure.db.pagination import (
     InvalidCursorError,
     decode_cursor,
 )
-from infrastructure.db.product_repository import ProductRepository
+from infrastructure.db.product_repository import SqlAlchemyProductRepository
 from infrastructure.db.session import DbSessionDI
 from infrastructure.security.auth import (
     IdentityGatewayDI,
@@ -55,7 +55,7 @@ async def create_product(
     await ensure_owner_read_model_seeded(
         session, identity, user_id=auth.user_id, token=auth.token
     )
-    result = await ProductRepository(session).create(
+    result = await SqlAlchemyProductRepository(session).create(
         name=request.name,
         description=request.description,
         price=request.price,
@@ -79,7 +79,7 @@ async def list_products(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    page = await ProductRepository(session).list(
+    page = await SqlAlchemyProductRepository(session).list(
         limit=limit, after=_parse_cursor(after), before=_parse_cursor(before)
     )
     return ProductListResponse.from_domain(page)
@@ -92,7 +92,9 @@ async def get_product(
     auth: OptionalAuth,
     identity: IdentityGatewayDI,
 ) -> ProductResponse:
-    product = await ProductRepository(session).get_by_id(ProductId(product_id))
+    product = await SqlAlchemyProductRepository(session).get_by_id(
+        ProductId(product_id)
+    )
     if product is None:
         raise _NOT_FOUND
 
@@ -129,7 +131,7 @@ async def update_product(
     auth: RequiredAuth,
     identity: IdentityGatewayDI,
 ) -> None:
-    repo = ProductRepository(session)
+    repo = SqlAlchemyProductRepository(session)
     existing = await _get_or_404(repo, product_id)
     await ensure_owner_or_admin(auth, existing.user_id, identity)
 
@@ -149,7 +151,7 @@ async def activate_product(
     auth: RequiredAuth,
     identity: IdentityGatewayDI,
 ) -> ProductResponse:
-    repo = ProductRepository(session)
+    repo = SqlAlchemyProductRepository(session)
     existing = await _get_or_404(repo, product_id)
     await ensure_owner_or_admin(auth, existing.user_id, identity)
 
@@ -168,7 +170,7 @@ async def deactivate_product(
     auth: RequiredAuth,
     identity: IdentityGatewayDI,
 ) -> ProductResponse:
-    repo = ProductRepository(session)
+    repo = SqlAlchemyProductRepository(session)
     existing = await _get_or_404(repo, product_id)
     await ensure_owner_or_admin(auth, existing.user_id, identity)
 
@@ -187,7 +189,7 @@ async def delete_product(
     auth: RequiredAuth,
     identity: IdentityGatewayDI,
 ) -> None:
-    repo = ProductRepository(session)
+    repo = SqlAlchemyProductRepository(session)
     existing = await _get_or_404(repo, product_id)
     await ensure_owner_or_admin(auth, existing.user_id, identity)
 
@@ -202,7 +204,9 @@ async def get_product_audit(
     auth: RequiredAuth,
     identity: IdentityGatewayDI,
 ) -> list[ProductAuditLogResponse]:
-    product = await ProductRepository(session).get_by_id(ProductId(product_id))
+    product = await SqlAlchemyProductRepository(session).get_by_id(
+        ProductId(product_id)
+    )
     logs = await get_audit_logs_by_product(session, product_id)
 
     if product is not None:
@@ -221,7 +225,7 @@ async def get_product_audit(
     return [ProductAuditLogResponse.from_row(row) for row in logs]
 
 
-async def _get_or_404(repo: ProductRepository, product_id: int) -> Product:
+async def _get_or_404(repo: SqlAlchemyProductRepository, product_id: int) -> Product:
     product = await repo.get_by_id(ProductId(product_id))
     if product is None:
         raise _NOT_FOUND

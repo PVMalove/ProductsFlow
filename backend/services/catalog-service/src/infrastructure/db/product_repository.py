@@ -6,6 +6,10 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.pagination import Cursor, PageInfo, ProductPage, encode_cursor
+from application.ports.product_repository import (
+    ProductRepository as ProductRepositoryPort,
+)
 from domain.events import (
     ProductActivated,
     ProductCreated,
@@ -18,16 +22,10 @@ from domain.product import Product
 from domain.product_id import ProductId
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
-from infrastructure.db.pagination import (
-    Cursor,
-    PageInfo,
-    ProductPage,
-    encode_cursor,
-)
 
 _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
-# Алиас, а не `list[ProductModel]` напрямую в аннотациях `ProductRepository`:
+# Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:
 # метод `list` (AC issue #148) одноимённый с builtin'ом внутри той же
 # области видимости класса — mypy резолвит голый `list[...]` в аннотациях
 # методов этого класса в сам метод, а не в builtin (известная особенность
@@ -79,7 +77,7 @@ def _to_outbox_message(event: DomainEvent) -> OutboxMessage:
     )
 
 
-class ProductRepository:
+class SqlAlchemyProductRepository:
     """CRUD + keyset-пагинация для `Product` (issue #148). `_commit` —
     единственное место, которое видит и доменную сущность, и `AsyncSession`
     (ADR 0021): каждый мутирующий метод сам коммитит свою транзакцию, атомарно
@@ -276,3 +274,10 @@ class ProductRepository:
     async def _drain_outbox(self, product: Product) -> None:
         for event in product.pull_events():
             self.session.add(_to_outbox_message(event))
+
+
+# Static structural check: mypy verifies that the concrete adapter satisfies
+# every operation required by the application port.
+_product_repository_implementation: type[ProductRepositoryPort] = (
+    SqlAlchemyProductRepository
+)
