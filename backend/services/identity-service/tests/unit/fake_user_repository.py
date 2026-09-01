@@ -1,5 +1,5 @@
-from domain.repositories import UserRepository
 from domain.email import Email
+from domain.repositories import UserRepository
 from domain.user import User
 from domain.user_id import UserId
 

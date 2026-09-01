@@ -2,8 +2,8 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.password_hasher import PasswordHasher
-from domain.repositories import UserRepository
 from domain.email import Email
+from domain.repositories import UserRepository
 from domain.user import User
 
 _INVALID_CREDENTIALS = Error(
