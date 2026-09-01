@@ -19,7 +19,7 @@ class _ActorIdCapturingHandler(logging.Handler):
 
     def __init__(self) -> None:
         super().__init__()
-        self.captured: list[int | None] = []
+        self.captured: list[int | str | None] = []
 
     def emit(self, record: logging.LogRecord) -> None:
         # Тот же логгер пишет и WARNING на невалидный bearer (middleware.py's
