@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import dataclass
 
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
@@ -28,6 +28,13 @@ USER_EVENT_TYPES = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class UserEventSnapshot:
+    user_id: uuid.UUID
+    role: str | None
+    is_active: bool | None
+
+
 def _event_type(message: AbstractIncomingMessage) -> str:
     event_type = message.type or message.routing_key
     if event_type not in USER_EVENT_TYPES:
@@ -46,9 +53,9 @@ def _message_id(message: AbstractIncomingMessage) -> int:
     return message_id
 
 
-def _snapshot(body: bytes) -> tuple[uuid.UUID, str, bool]:
+def _parse_user_event_snapshot(event_type: str, body: bytes) -> UserEventSnapshot:
     try:
-        payload: Any = json.loads(body)
+        payload: object = json.loads(body)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("User event payload is not valid JSON") from exc
     if not isinstance(payload, dict):
@@ -60,13 +67,25 @@ def _snapshot(body: bytes) -> tuple[uuid.UUID, str, bool]:
     except (AttributeError, ValueError) as exc:
         raise ValueError(f"Invalid user id: {raw_user_id!r}") from exc
 
-    role = payload.get("role")
+    role = payload.get("role", payload.get("new_role"))
+    if role is not None and (not isinstance(role, str) or not role):
+        raise ValueError("User event role must be a non-empty string")
+
     is_active = payload.get("is_active")
-    if not isinstance(role, str) or not role:
-        raise ValueError("User event payload must contain a non-empty role")
-    if not isinstance(is_active, bool):
-        raise ValueError("User event payload must contain boolean is_active")
-    return user_id, role, is_active
+    if is_active is not None and not isinstance(is_active, bool):
+        raise ValueError("User event is_active must be boolean")
+
+    if event_type == "user.registered.v1":
+        role = "user" if role is None else role
+        is_active = True if is_active is None else is_active
+    elif event_type == "user.activated.v1":
+        is_active = True
+    elif event_type == "user.deactivated.v1":
+        is_active = False
+    elif event_type == "user.role_changed.v1" and role is None:
+        raise ValueError("Role-changed event must contain role")
+
+    return UserEventSnapshot(user_id, role, is_active)
 
 
 async def handle_user_event(
@@ -92,12 +111,12 @@ async def handle_user_event(
                 )
                 return
 
-            user_id, role, is_active = _snapshot(message.body)
+            snapshot = _parse_user_event_snapshot(event_type, message.body)
             await upsert_owner_read_model(
                 session,
-                user_id=user_id,
-                role=role,
-                is_active=is_active,
+                user_id=snapshot.user_id,
+                role=snapshot.role,
+                is_active=snapshot.is_active,
                 last_applied_outbox_id=message_id,
                 commit=False,
             )
@@ -105,7 +124,7 @@ async def handle_user_event(
     logger.info(
         "catalog-worker: applied %s for user %s at outbox version %s",
         event_type,
-        user_id,
+        snapshot.user_id,
         message_id,
     )
 

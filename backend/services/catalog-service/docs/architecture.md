@@ -14,6 +14,7 @@ assembled only in `presentation/dependencies.py`, while `presentation` maps
 application errors to the unchanged HTTP status and response contract.
 
 The same `presentation` layer owns `presentation.worker`, the second process of
-the catalog image (ADR 0010). It declares the `catalog.user-events` topology
-through `kernel-platform`, consumes the four supported `user.*.v1` events, and
-applies each owner snapshot with the inbox/version guards from ADR 0019.
+the catalog service image (ADR 0010). It declares the `catalog.user-events`
+topology through `kernel-platform`, consumes the four supported `user.*.v1`
+events (including the sparse payloads emitted by the current identity domain),
+and applies each owner snapshot with the inbox/version guards from ADR 0019.
