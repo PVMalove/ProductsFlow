@@ -58,6 +58,3 @@ class GetProductQueryHandler:
         if query.actor is not None and await self._authorizer.is_admin(query.actor):
             return product
         raise ProductNotFoundError
-
-    async def execute(self, product_id: uuid.UUID, *, actor: Actor | None) -> Product:
-        return await self.handle(GetProductQuery(product_id=product_id, actor=actor))

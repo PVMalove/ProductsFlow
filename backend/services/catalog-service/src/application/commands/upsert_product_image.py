@@ -72,20 +72,3 @@ class UpsertProductImageCommandHandler:
             ),
             replaced=existing is not None,
         )
-
-    async def execute(
-        self,
-        product_id: uuid.UUID,
-        *,
-        actor: Actor,
-        body: bytes,
-        content_type: str,
-    ) -> ProductImageMutation:
-        return await self.handle(
-            UpsertProductImageCommand(
-                product_id=product_id,
-                actor=actor,
-                body=body,
-                content_type=content_type,
-            )
-        )

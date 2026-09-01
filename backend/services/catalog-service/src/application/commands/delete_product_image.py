@@ -48,6 +48,3 @@ class DeleteProductImageCommandHandler:
         )
         if not image.s3_key.startswith(SEED_KEY_PREFIX):
             await self._storage.delete_object(self._bucket_name, image.s3_key)
-
-    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> None:
-        await self.handle(DeleteProductImageCommand(product_id=product_id, actor=actor))

@@ -50,10 +50,3 @@ class GetProductImageQueryHandler:
             ),
             updated_at=image.updated_at,
         )
-
-    async def execute(
-        self, product_id: uuid.UUID, *, actor: Actor | None
-    ) -> ProductImageView:
-        return await self.handle(
-            GetProductImageQuery(product_id=product_id, actor=actor)
-        )

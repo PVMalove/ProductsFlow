@@ -36,8 +36,3 @@ class DeleteProductCommandHandler:
         if deleted is None:
             raise ProductNotFoundError
         return deleted
-
-    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> Product:
-        return await self.handle(
-            DeleteProductCommand(product_id=product_id, actor=actor)
-        )

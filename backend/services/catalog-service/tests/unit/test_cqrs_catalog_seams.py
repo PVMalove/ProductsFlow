@@ -71,6 +71,8 @@ def test_catalog_application_facades_expose_one_handler_per_operation() -> None:
 
     assert all(hasattr(handler_type, "handle") for handler_type in command_types)
     assert all(hasattr(handler_type, "handle") for handler_type in query_types)
+    assert all(not hasattr(handler_type, "execute") for handler_type in command_types)
+    assert all(not hasattr(handler_type, "execute") for handler_type in query_types)
     assert all(
         hasattr(dto_type, "__dataclass_fields__") for dto_type in command_dto_types
     )

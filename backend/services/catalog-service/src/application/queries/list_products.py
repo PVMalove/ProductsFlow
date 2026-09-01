@@ -21,14 +21,3 @@ class ListProductsQueryHandler:
         return await self._repository.list(
             limit=query.limit, after=query.after, before=query.before
         )
-
-    async def execute(
-        self,
-        *,
-        limit: int,
-        after: Cursor | None,
-        before: Cursor | None,
-    ) -> ProductPage:
-        return await self.handle(
-            ListProductsQuery(limit=limit, after=after, before=before)
-        )

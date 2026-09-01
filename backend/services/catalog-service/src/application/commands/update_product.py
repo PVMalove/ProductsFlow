@@ -48,24 +48,3 @@ class UpdateProductCommandHandler:
         if result is None:
             raise ProductNotFoundError
         return result
-
-    async def execute(
-        self,
-        product_id: uuid.UUID,
-        *,
-        actor: Actor,
-        name: str | None = None,
-        description: str | None = None,
-        price: float | None = None,
-        category: str | None = None,
-    ) -> Result[Product]:
-        return await self.handle(
-            UpdateProductCommand(
-                product_id=product_id,
-                actor=actor,
-                name=name,
-                description=description,
-                price=price,
-                category=category,
-            )
-        )

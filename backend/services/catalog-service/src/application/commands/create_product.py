@@ -52,23 +52,3 @@ class CreateProductCommandHandler:
             category=command.category,
             user_id=command.actor.user_id,
         )
-
-    async def execute(
-        self,
-        *,
-        actor: Actor,
-        name: str,
-        description: str,
-        price: float,
-        category: str,
-    ) -> Result[Product]:
-        """Compatibility adapter for the pre-CQRS use-case call shape."""
-        return await self.handle(
-            CreateProductCommand(
-                actor=actor,
-                name=name,
-                description=description,
-                price=price,
-                category=category,
-            )
-        )

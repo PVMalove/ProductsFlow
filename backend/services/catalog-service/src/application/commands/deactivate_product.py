@@ -38,8 +38,3 @@ class DeactivateProductCommandHandler:
         if result is None:
             raise ProductNotFoundError
         return result
-
-    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> Result[Product]:
-        return await self.handle(
-            DeactivateProductCommand(product_id=product_id, actor=actor)
-        )

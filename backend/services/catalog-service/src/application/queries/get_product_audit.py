@@ -43,10 +43,3 @@ class GetProductAuditQueryHandler:
         elif not entries:
             raise ProductNotFoundError
         return entries
-
-    async def execute(
-        self, product_id: uuid.UUID, *, actor: Actor
-    ) -> list[ProductAuditEntry]:
-        return await self.handle(
-            GetProductAuditQuery(product_id=product_id, actor=actor)
-        )
