@@ -234,3 +234,6 @@ skills-lock.json
 /SPEC.md
 /docs/*
 !/docs/adr/
+!/docs/architecture.md
+!/docs/research/
+!/docs/research/*.md
