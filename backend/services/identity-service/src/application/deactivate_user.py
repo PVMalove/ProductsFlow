@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
@@ -18,19 +20,25 @@ _USER_NOT_FOUND = Error(
 )
 
 
+@dataclass(frozen=True)
 class DeactivateUserCommand:
     """Деактивация пользователя (ADR TD-01 Фаза 1) — self-deactivation
     отклоняется здесь, до обращения к агрегату: `User.deactivate()` не
     знает, кто именно выполняет операцию."""
 
+    target_user_id: UserId
+    actor_user_id: UserId
+
+
+class DeactivateUserCommandHandler:
     def __init__(self, user_repository: UserRepository) -> None:
         self._user_repository = user_repository
 
-    def execute(self, target_user_id: UserId, actor_user_id: UserId) -> Result[User]:
-        if target_user_id == actor_user_id:
+    def handle(self, command: DeactivateUserCommand) -> Result[User]:
+        if command.target_user_id == command.actor_user_id:
             return Result.fail(_CANNOT_SELF_DEACTIVATE)
 
-        user = self._user_repository.get_by_id(target_user_id)
+        user = self._user_repository.get_by_id(command.target_user_id)
         if user is None:
             return Result.fail(_USER_NOT_FOUND)
 

@@ -1,14 +1,21 @@
 from kernel_domain.errors import ErrorType
 
-from application.deactivate_user import DeactivateUserCommand
-from application.register_user import RegisterUserCommand
+from application.deactivate_user import (
+    DeactivateUserCommand,
+    DeactivateUserCommandHandler,
+)
+from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.events import Deactivated
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
 def _register(repository: FakeUserRepository, hasher: FakePasswordHasher, email: str):
-    return RegisterUserCommand(repository, hasher).execute(email, "password1").value
+    return (
+        RegisterUserCommandHandler(repository, hasher)
+        .handle(RegisterUserCommand(email, "password1"))
+        .value
+    )
 
 
 def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
@@ -16,8 +23,8 @@ def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
     hasher = FakePasswordHasher()
     user = _register(repository, hasher, "user@example.com")
 
-    result = DeactivateUserCommand(repository).execute(
-        target_user_id=user.id, actor_user_id=user.id
+    result = DeactivateUserCommandHandler(repository).handle(
+        DeactivateUserCommand(target_user_id=user.id, actor_user_id=user.id)
     )
 
     assert result.is_err
@@ -32,8 +39,8 @@ def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -> None
     target.pull_events()
     actor = _register(repository, hasher, "actor@example.com")
 
-    result = DeactivateUserCommand(repository).execute(
-        target_user_id=target.id, actor_user_id=actor.id
+    result = DeactivateUserCommandHandler(repository).handle(
+        DeactivateUserCommand(target_user_id=target.id, actor_user_id=actor.id)
     )
 
     assert result.is_ok

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
@@ -13,22 +15,28 @@ _INVALID_CREDENTIALS = Error(
 )
 
 
+@dataclass(frozen=True)
 class LoginCommand:
     """Аутентификация по email/паролю (ADR TD-01 Фаза 1) — несуществующий
     email и неверный пароль отдают одну и ту же `UNAUTHORIZED`-ошибку, чтобы
     не раскрывать вызывающему факт существования аккаунта."""
 
+    email: str
+    password: str
+
+
+class LoginCommandHandler:
     def __init__(
         self, user_repository: UserRepository, password_hasher: PasswordHasher
     ) -> None:
         self._user_repository = user_repository
         self._password_hasher = password_hasher
 
-    def execute(self, email: str, password: str) -> Result[User]:
-        email_vo = Email(email)
+    def handle(self, command: LoginCommand) -> Result[User]:
+        email_vo = Email(command.email)
         user = self._user_repository.get_by_email(email_vo)
         if user is None or not self._password_hasher.verify(
-            password, user.password_hash
+            command.password, user.password_hash
         ):
             return Result.fail(_INVALID_CREDENTIALS)
 

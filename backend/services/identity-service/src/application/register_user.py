@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
@@ -8,29 +10,35 @@ from domain.repositories import UserRepository
 from domain.user import User
 
 
+@dataclass(frozen=True)
 class RegisterUserCommand:
     """Регистрация пользователя (ADR TD-01 Фаза 1) — уникальность email
     проверяется здесь, до конструирования агрегата: `User` не имеет доступа
     к репозиторию и не может проверить это сам."""
 
+    email: str
+    password: str
+
+
+class RegisterUserCommandHandler:
     def __init__(
         self, user_repository: UserRepository, password_hasher: PasswordHasher
     ) -> None:
         self._user_repository = user_repository
         self._password_hasher = password_hasher
 
-    def execute(self, email: str, password: str) -> Result[User]:
-        email_vo = Email(email)
+    def handle(self, command: RegisterUserCommand) -> Result[User]:
+        email_vo = Email(command.email)
         if self._user_repository.exists_by_email(email_vo):
             return Result.fail(
                 Error(
                     code="email_already_registered",
-                    description=f"Email {email!r} уже зарегистрирован",
+                    description=f"Email {command.email!r} уже зарегистрирован",
                     type=ErrorType.CONFLICT,
                 )
             )
 
-        raw_password_result = RawPassword.create(password)
+        raw_password_result = RawPassword.create(command.password)
         if raw_password_result.is_err:
             return Result.fail(raw_password_result.error)
 
