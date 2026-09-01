@@ -1,27 +1,17 @@
 import base64
 import binascii
-from dataclasses import dataclass
 from datetime import datetime
 
-from domain.product import Product
+from domain.repositories import Cursor, PageInfo, ProductPage
 
-# Общие дефолты keyset-пагинации списков продуктов (ADR 0001) — перенесены
-# из монолитного app/pagination.py без изменений в самой схеме курсора.
+# Общие дефолты keyset-пагинации списков продуктов (ADR 0001) — без изменения
+# схемы cursor-контракта.
 DEFAULT_PAGE_LIMIT = 20
 MAX_PAGE_LIMIT = 100
 
 
 class InvalidCursorError(ValueError):
-    """Курсор пагинации не удалось декодировать — вызывающему (будущему API,
-    issue #149) нужно вернуть 400."""
-
-
-@dataclass(frozen=True)
-class Cursor:
-    """Непрозрачная keyset-позиция в списке продуктов: `(created_at, id)`."""
-
-    created_at: datetime
-    id: int
+    """Курсор пагинации не удалось декодировать."""
 
 
 def encode_cursor(created_at: datetime, product_id: int) -> str:
@@ -38,15 +28,13 @@ def decode_cursor(token: str) -> Cursor:
         raise InvalidCursorError("Некорректный курсор пагинации") from exc
 
 
-@dataclass(frozen=True)
-class PageInfo:
-    next_cursor: str | None
-    prev_cursor: str | None
-    has_more: bool
-    has_prev: bool
-
-
-@dataclass(frozen=True)
-class ProductPage:
-    items: list[Product]
-    page_info: PageInfo
+__all__ = [
+    "DEFAULT_PAGE_LIMIT",
+    "MAX_PAGE_LIMIT",
+    "Cursor",
+    "InvalidCursorError",
+    "PageInfo",
+    "ProductPage",
+    "decode_cursor",
+    "encode_cursor",
+]

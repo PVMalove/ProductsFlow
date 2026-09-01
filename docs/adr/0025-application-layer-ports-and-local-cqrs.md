@@ -1,106 +1,14 @@
-# 0025. Application владеет use case и портами; CQRS — локальная опция
+# 0025. Application владеет use case; CQRS — локальная опция
 
-**Статус:** Accepted\
+**Статус:** Superseded [ADR 0027](0027-domain-repository-contracts.md)\
 **Дата:** 2026-09-01\
-**Supersedes:** [ADR 0023](0023-repository-ports-in-domain-layer.md)\
 **Связанные issues:** #63, #156–#160, #163
 
-## Контекст
+Этот ADR зафиксировал локальные command/query и handler-правила для
+application-слоя, но ошибочно поместил контракты repository в application.
+Решение о владельце repository-контрактов заменено ADR 0027: они принадлежат
+domain bounded context, а application использует их как зависимости use case.
 
-В кодовой базе уже есть две разные трактовки границы. `identity-service`
-держит `UserRepository` как `Protocol` в `application/`, а
-`catalog-service` вызывает SQLAlchemy-репозиторий прямо из FastAPI-роутера.
-ADR 0023 предлагала перенести repository-порты в `domain/`; одновременно
-issues #156–#158 предлагали вынести универсальные CQRS-Protocol в
-`kernel-domain` и заставить все endpoint-ы принять эту форму.
-
-Оба хода смешивают разные обязанности. Контракт repository или внешнего
-gateway нужен use case для исполнения прикладного сценария; он не является
-термином предметной модели `User` или `Product`. Универсальный handler-
-контракт также не даёт полезной работы сам по себе и противоречит выводу
-исследования #63: без диспетчера он становится ещё одной формой, которую надо
-поддерживать. Сам диспетчер/реестр в проекте не нужен.
-
-В качестве внешнего референса использован
-[FastAPI Microservice Template](https://github.com/onlythompson/fastapi-microservice-template):
-его архитектурный документ отделяет domain, application, infrastructure и
-presentation, помещает interfaces рядом с application и применяет CQRS для
-конкретных сложных или нагруженных доменов, а не как глобальное требование.
-
-## Решение
-
-### Границы слоёв
-
-- `domain/` содержит только бизнес-модель bounded context: агрегаты, entity,
-  value object, доменные события и политики. Он не знает про persistence,
-  FastAPI, SQLAlchemy, AMQP, HTTP-клиенты или application.
-- `application/` владеет use case: command/query data, handler-ами и
-  `Protocol`-портами, которые нужны этим handler-ам. Порты располагаются в
-  `application/ports/`.
-- `infrastructure/` реализует application-порты и владеет SQLAlchemy,
-  транзакциями, внешними API, брокером и хранилищем.
-- `presentation/` — внешний адаптер: преобразует HTTP/AMQP во входные данные
-  use case и результат — в HTTP/сообщение. Его DI-фабрики составляют concrete infrastructure
-  adapter с application handler; конкретный адаптер не используется в теле
-  роутера.
-
-Следовательно, `UserRepository` не переносится в `domain/`, а
-`ProductRepository` объявляется как порт в `application/ports/`. То же
-правило применяется к read-model и внешним gateway-портам. Их нельзя переносить
-в `kernel-domain`: они сервис-специфичны и не проходят admission-правило
-ADR 0013.
-
-### CQRS
-
-Command и query допускаются как локальная форма use case, когда она делает
-сложный поток понятнее или когда read/write стороны действительно имеют разные
-модели, требования к консистентности либо масштабированию. Command/query —
-простые данные; handler получает порты в конструкторе. У проекта нет общего
-`ICommand`/`IQuery`, `ICommandHandler`/`IQueryHandler`, диспетчера, реестра или
-pipeline behavior — ни в `kernel-domain`, ни в сервисах.
-
-Синхронный сценарий остаётся синхронным, асинхронный — асинхронным. Форма
-handler-а не меняет сигнатуру ради единообразия.
-
-Полная конвенция, реальное дерево и проверяемые dependency rules описаны в
-[docs/architecture.md](../architecture.md).
-
-## Рассмотренные варианты
-
-- **Порт repository в domain (ADR 0023).** Отклонён: repository описывает
-  потребность application-сценария в сохранении/чтении, а не правило предметной
-  модели. Такой порт заставляет domain знать о технической категории
-  persistence и размывает направление зависимостей.
-- **Общие CQRS-протоколы в `kernel-domain`.** Отклонены: они не дают поведения,
-  не имеют двух независимых потребителей и создают связность между bounded
-  contexts. Это сохраняет вывод #63 против маркерных интерфейсов и MediatR-like
-  диспетчера.
-- **Прямой вызов SQLAlchemy из роутера.** Отклонён: HTTP-адаптер начинает
-  владеть транзакционной и бизнес-оркестрацией, а use case невозможно тестировать
-  без FastAPI/БД.
-- **Обязательный CQRS для каждого CRUD-endpoint.** Отклонён: CQRS приносит
-  стоимость дополнительных типов и eventual consistency только там, где это
-  нужно. Простая операция может остаться одним application use case.
-
-## Последствия
-
-- ADR 0023 сохраняется исторически, но больше не задаёт место repository-
-  портов.
-- Issues #156–#160 должны быть пересмотрены: общая CQRS-библиотека исключается,
-  порты #159/#160 принадлежат application, а #157/#158 используют локальные
-  handler-ы без базового Protocol.
-- `presentation/routes/products.py` постепенно становится тонким адаптером. Его
-  текущие вызовы `AsyncSession`, repository, owner read model и identity
-  переносятся за application-порты в handler-ы; HTTP-контракт не меняется.
-- Новые shared-абстракции всё ещё требуют двух подтверждённых потребителей по
-  ADR 0013. Этот ADR не создаёт каталоги и классы заранее.
-
-## Пересмотр
-
-Пересмотреть решение, если один и тот же порт подтверждённо нужен двум
-независимым bounded contexts (тогда применить admission-правило ADR 0013),
-либо если конкретная read-сторона получает отдельную модель, SLA или механизм
-доставки событий. Во втором случае принять отдельный ADR для этого контекста:
-зафиксировать источник истины write-side, путь события, окно eventual
-consistency, обработку отказов и метрики результата. Само появление нового
-CRUD-endpoint не является поводом для пересмотра.
+CQRS остаётся локальной опцией для сложных или нагруженных сценариев. В
+проекте нет общего `ICommand`/`IQuery`, handler-Protocol, dispatcher, registry
+или pipeline behavior.

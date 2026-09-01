@@ -16,18 +16,21 @@ from domain.events import (
 )
 from domain.product import Product
 from domain.product_id import ProductId
-from infrastructure.db.models import ProductModel
-from infrastructure.db.owner_read_model import OwnerReadModelRow
-from infrastructure.db.pagination import (
+from domain.repositories import (
     Cursor,
     PageInfo,
     ProductPage,
-    encode_cursor,
 )
+from domain.repositories import (
+    ProductRepository as ProductRepositoryPort,
+)
+from infrastructure.db.models import ProductModel
+from infrastructure.db.owner_read_model import OwnerReadModelRow
+from infrastructure.db.pagination import encode_cursor
 
 _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
-# Алиас, а не `list[ProductModel]` напрямую в аннотациях `ProductRepository`:
+# Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:
 # метод `list` (AC issue #148) одноимённый с builtin'ом внутри той же
 # области видимости класса — mypy резолвит голый `list[...]` в аннотациях
 # методов этого класса в сам метод, а не в builtin (известная особенность
@@ -276,3 +279,8 @@ class ProductRepository:
     async def _drain_outbox(self, product: Product) -> None:
         for event in product.pull_events():
             self.session.add(_to_outbox_message(event))
+
+
+# Static structural check: mypy verifies that the concrete implementation
+# satisfies every operation required by the domain repository contract.
+_product_repository_implementation: type[ProductRepositoryPort] = ProductRepository

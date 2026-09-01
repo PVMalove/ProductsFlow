@@ -1,6 +1,6 @@
 # 0023. Репозитории: порт в domain-слое, реализация в infrastructure
 
-> **Superseded решением [ADR 0025](0025-application-layer-ports-and-local-cqrs.md).**
+> **Уточнено решением [ADR 0027](0027-domain-repository-contracts.md).**
 
 > Исторический текст ниже сохранён без переписывания и описывает прежнее
 > решение размещать repository и gateway-порты в domain-слое.
