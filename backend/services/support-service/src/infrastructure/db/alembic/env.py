@@ -1,11 +1,11 @@
 import asyncio
 
+from alembic import context
 from kernel_platform.outbox.models import Base
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
 from core.settings import settings
 from infrastructure.db import models as _models  # noqa: F401
 
