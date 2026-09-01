@@ -46,7 +46,7 @@ def scan(root: Path) -> list[Finding]:
 
     findings: list[Finding] = []
     for layer in ("domain", "application"):
-        for path in sorted(root.rglob(f"src/{layer}/*.py")):
+        for path in sorted(root.rglob(f"src/{layer}/**/*.py")):
             if path.name == "__init__.py":
                 continue
             findings.extend(_layer_import_findings(root, path, layer))
@@ -69,15 +69,17 @@ def _layer_import_findings(root: Path, path: Path, layer: str) -> list[Finding]:
         else:
             continue
         for name in names:
-            top_level = name.split(".", maxsplit=1)[0]
-            if top_level in forbidden:
+            dependency = next(
+                (part for part in name.split(".") if part in forbidden), None
+            )
+            if dependency is not None:
                 findings.append(
                     Finding(
                         rule="forbidden-layer-import",
                         path=path,
                         line=node.lineno,
                         blocking=True,
-                        message=f"{layer} imports {top_level}",
+                        message=f"{layer} imports {dependency}",
                     )
                 )
     return findings

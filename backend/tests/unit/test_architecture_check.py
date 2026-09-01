@@ -22,10 +22,10 @@ def test_scan_reports_currently_mixed_application_modules() -> None:
 
 
 def test_scan_marks_forbidden_layer_imports_as_blocking(tmp_path: Path) -> None:
-    application = tmp_path / "services/example/src/application"
+    application = tmp_path / "services/example/src/application/commands"
     application.mkdir(parents=True)
     (application / "bad.py").write_text(
-        "from infrastructure.db.models import UserModel\n", encoding="utf-8"
+        "from service.infrastructure.db.models import UserModel\n", encoding="utf-8"
     )
 
     findings = scan(tmp_path)

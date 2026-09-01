@@ -18,7 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
       - run: python scripts/check_architecture.py --strict
+      - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py -q
 
   backend-lint:
     name: Lint (${{ matrix.member }})

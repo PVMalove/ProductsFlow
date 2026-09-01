@@ -20,7 +20,7 @@ _require-pkg:
 	$(if $(member_dir),,$(error пакет '$(pkg)' не найден ни в libs/, ни в services/))
 
 architecture-check: ## Проверить направление зависимостей и вывести CQRS-аудит
-	python scripts/check_architecture.py --strict
+	uv run --project services/identity-service python ../../scripts/check_architecture.py --strict
 
 # uv run --project <dir> из backend/ (а не `cd <dir> && uv run`): mypy
 # --explicit-package-bases выводит имя модуля из позиционного пути относительно
