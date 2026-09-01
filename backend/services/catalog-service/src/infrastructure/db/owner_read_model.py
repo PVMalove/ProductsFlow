@@ -17,7 +17,7 @@ COLD_START_SENTINEL_VERSION = 0
 class OwnerReadModelRow(Base):
     """Локальная read-модель Владельца в catalog (issue #148 миграция,
     issue #149 — первый писатель/читатель): наполняется событиями
-    `user.*.v1` консьюмером (issue #151, ещё не реализован) и синхронным
+    `user.*.v1` консьюмером (issue #151) и синхронным
     добором на холодном промахе (ADR 0012/0019)."""
 
     __tablename__ = "owner_read_model"
@@ -38,24 +38,36 @@ async def upsert_owner_read_model(
     session: AsyncSession,
     *,
     user_id: uuid.UUID,
-    role: str,
-    is_active: bool,
+    role: str | None,
+    is_active: bool | None,
     last_applied_outbox_id: int,
+    commit: bool = True,
 ) -> None:
     """Один атомарный upsert, версионированный по `last_applied_outbox_id`
     (ADR 0019) — не read-then-write: конкурентные писатели (событийный
     консьюмер и синхронный добор) не открывают окно гонки между ними."""
+    # Identity's activation/deactivation events carry only the changed field.
+    # Defaults make a cold insert valid; the conflict expressions preserve the
+    # other field when an existing owner row receives a partial event.
+    insert_role = role if role is not None else "user"
+    insert_is_active = is_active if is_active is not None else True
     stmt = insert(OwnerReadModelRow).values(
         user_id=user_id,
-        role=role,
-        is_active=is_active,
+        role=insert_role,
+        is_active=insert_is_active,
         last_applied_outbox_id=last_applied_outbox_id,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[OwnerReadModelRow.user_id],
         set_={
-            "role": stmt.excluded.role,
-            "is_active": stmt.excluded.is_active,
+            "role": (
+                stmt.excluded.role if role is not None else OwnerReadModelRow.role
+            ),
+            "is_active": (
+                stmt.excluded.is_active
+                if is_active is not None
+                else OwnerReadModelRow.is_active
+            ),
             "last_applied_outbox_id": stmt.excluded.last_applied_outbox_id,
         },
         where=(
@@ -64,7 +76,8 @@ async def upsert_owner_read_model(
         ),
     )
     await session.execute(stmt)
-    await session.commit()
+    if commit:
+        await session.commit()
 
 
 class SqlOwnerReadModel:

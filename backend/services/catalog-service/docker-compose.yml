@@ -18,6 +18,16 @@ services:
       minio:
         condition: service_healthy
 
+  catalog-worker:
+    build:
+      context: ../..
+      dockerfile: services/catalog-service/Dockerfile
+    command: ["python", "-m", "presentation.worker"]
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL:-}
+      CATALOG_AMQP_URL: ${CATALOG_AMQP_URL:-amqp://guest:guest@localhost:5672/}
+
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
