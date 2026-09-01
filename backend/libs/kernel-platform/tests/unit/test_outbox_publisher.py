@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import UTC, datetime
 
 from aio_pika import DeliveryMode
@@ -11,7 +12,7 @@ def _row(**overrides: object) -> OutboxMessage:
     defaults: dict[str, object] = {
         "id": 42,
         "aggregate_type": "User",
-        "aggregate_id": 7,
+        "aggregate_id": uuid.uuid4(),
         "event_type": "user.registered.v1",
         "payload": {"id": 7, "username": "alice"},
         "occurred_at": datetime(2026, 8, 29, tzinfo=UTC),

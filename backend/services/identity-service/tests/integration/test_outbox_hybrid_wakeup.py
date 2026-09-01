@@ -1,4 +1,5 @@
 import time
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -107,7 +108,7 @@ async def events_exchange(
 async def _insert_row(session_factory: async_sessionmaker) -> OutboxMessage:
     row = OutboxMessage(
         aggregate_type="User",
-        aggregate_id=7,
+        aggregate_id=uuid.uuid4(),
         event_type=ROUTED_ROUTING_KEY,
         payload={"id": 7, "username": "alice"},
         occurred_at=datetime.now(UTC),

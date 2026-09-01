@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
@@ -70,7 +71,7 @@ async def _insert_row(
 ) -> OutboxMessage:
     row = OutboxMessage(
         aggregate_type="User",
-        aggregate_id=7,
+        aggregate_id=uuid.uuid4(),
         event_type=event_type,
         payload={"id": 7, "username": "alice"},
         occurred_at=datetime.now(UTC),
