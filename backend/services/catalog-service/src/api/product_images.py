@@ -29,9 +29,9 @@ _MAX_IMAGE_SIZE = 5 * 1024 * 1024
 async def get_product_image(
     product_id: uuid.UUID,
     auth: OptionalAuth,
-    use_case: GetProductImageDI,
+    handler: GetProductImageDI,
 ) -> ProductImageResponse:
-    view = await use_case.handle(
+    view = await handler.handle(
         GetProductImageQuery(
             product_id=product_id,
             actor=to_actor(auth) if auth is not None else None,
@@ -44,7 +44,7 @@ async def get_product_image(
 async def upload_product_image(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: UpsertProductImageDI,
+    handler: UpsertProductImageDI,
     response: Response,
     file: Annotated[UploadFile, File(description="JPEG/PNG/WEBP, до 5 МБ")],
 ) -> ProductImageResponse:
@@ -60,7 +60,7 @@ async def upload_product_image(
             detail="Файл больше 5 МБ",
         )
 
-    mutation: ProductImageMutation = await use_case.handle(
+    mutation: ProductImageMutation = await handler.handle(
         UpsertProductImageCommand(
             product_id=product_id,
             actor=to_actor(auth),
@@ -78,9 +78,9 @@ async def upload_product_image(
 async def delete_product_image(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: DeleteProductImageDI,
+    handler: DeleteProductImageDI,
 ) -> None:
-    await use_case.handle(
+    await handler.handle(
         DeleteProductImageCommand(product_id=product_id, actor=to_actor(auth))
     )
 

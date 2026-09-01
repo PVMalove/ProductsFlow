@@ -79,7 +79,7 @@ ApplicationIdentityGatewayDI = Annotated[
 ]
 
 
-def get_create_product_use_case(
+def get_create_product_handler(
     repository: ProductRepositoryDI,
     owner_read_model: OwnerReadModelDI,
     identity: ApplicationIdentityGatewayDI,
@@ -88,22 +88,20 @@ def get_create_product_use_case(
 
 
 CreateProductDI = Annotated[
-    CreateProductCommandHandler, Depends(get_create_product_use_case)
+    CreateProductCommandHandler, Depends(get_create_product_handler)
 ]
 
 
-def get_list_products_use_case(
+def get_list_products_handler(
     repository: ProductRepositoryDI,
 ) -> ListProductsQueryHandler:
     return ListProductsQueryHandler(repository)
 
 
-ListProductsDI = Annotated[
-    ListProductsQueryHandler, Depends(get_list_products_use_case)
-]
+ListProductsDI = Annotated[ListProductsQueryHandler, Depends(get_list_products_handler)]
 
 
-def get_product_use_case(
+def get_product_handler(
     repository: ProductRepositoryDI,
     owner_read_model: OwnerReadModelDI,
     identity: ApplicationIdentityGatewayDI,
@@ -111,54 +109,54 @@ def get_product_use_case(
     return GetProductQueryHandler(repository, owner_read_model, identity)
 
 
-GetProductDI = Annotated[GetProductQueryHandler, Depends(get_product_use_case)]
+GetProductDI = Annotated[GetProductQueryHandler, Depends(get_product_handler)]
 
 
-def get_update_product_use_case(
+def get_update_product_handler(
     repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
 ) -> UpdateProductCommandHandler:
     return UpdateProductCommandHandler(repository, identity)
 
 
 UpdateProductDI = Annotated[
-    UpdateProductCommandHandler, Depends(get_update_product_use_case)
+    UpdateProductCommandHandler, Depends(get_update_product_handler)
 ]
 
 
-def get_activate_product_use_case(
+def get_activate_product_handler(
     repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
 ) -> ActivateProductCommandHandler:
     return ActivateProductCommandHandler(repository, identity)
 
 
 ActivateProductDI = Annotated[
-    ActivateProductCommandHandler, Depends(get_activate_product_use_case)
+    ActivateProductCommandHandler, Depends(get_activate_product_handler)
 ]
 
 
-def get_deactivate_product_use_case(
+def get_deactivate_product_handler(
     repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
 ) -> DeactivateProductCommandHandler:
     return DeactivateProductCommandHandler(repository, identity)
 
 
 DeactivateProductDI = Annotated[
-    DeactivateProductCommandHandler, Depends(get_deactivate_product_use_case)
+    DeactivateProductCommandHandler, Depends(get_deactivate_product_handler)
 ]
 
 
-def get_delete_product_use_case(
+def get_delete_product_handler(
     repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
 ) -> DeleteProductCommandHandler:
     return DeleteProductCommandHandler(repository, identity)
 
 
 DeleteProductDI = Annotated[
-    DeleteProductCommandHandler, Depends(get_delete_product_use_case)
+    DeleteProductCommandHandler, Depends(get_delete_product_handler)
 ]
 
 
-def get_product_audit_use_case(
+def get_product_audit_handler(
     repository: ProductRepositoryDI,
     audit_reader: ProductAuditReaderDI,
     identity: ApplicationIdentityGatewayDI,
@@ -167,11 +165,11 @@ def get_product_audit_use_case(
 
 
 GetProductAuditDI = Annotated[
-    GetProductAuditQueryHandler, Depends(get_product_audit_use_case)
+    GetProductAuditQueryHandler, Depends(get_product_audit_handler)
 ]
 
 
-def get_product_image_use_case(
+def get_product_image_handler(
     repository: ProductRepositoryDI,
     owner_read_model: OwnerReadModelDI,
     identity: ApplicationIdentityGatewayDI,
@@ -187,11 +185,11 @@ def get_product_image_use_case(
 
 
 GetProductImageDI = Annotated[
-    GetProductImageQueryHandler, Depends(get_product_image_use_case)
+    GetProductImageQueryHandler, Depends(get_product_image_handler)
 ]
 
 
-def get_upsert_product_image_use_case(
+def get_upsert_product_image_handler(
     repository: ProductRepositoryDI,
     identity: ApplicationIdentityGatewayDI,
     storage: StorageDI,
@@ -202,11 +200,11 @@ def get_upsert_product_image_use_case(
 
 
 UpsertProductImageDI = Annotated[
-    UpsertProductImageCommandHandler, Depends(get_upsert_product_image_use_case)
+    UpsertProductImageCommandHandler, Depends(get_upsert_product_image_handler)
 ]
 
 
-def get_delete_product_image_use_case(
+def get_delete_product_image_handler(
     repository: ProductRepositoryDI,
     identity: ApplicationIdentityGatewayDI,
     storage: StorageDI,
@@ -217,7 +215,7 @@ def get_delete_product_image_use_case(
 
 
 DeleteProductImageDI = Annotated[
-    DeleteProductImageCommandHandler, Depends(get_delete_product_image_use_case)
+    DeleteProductImageCommandHandler, Depends(get_delete_product_image_handler)
 ]
 
 

@@ -50,9 +50,9 @@ router = APIRouter(prefix="/api/v1/products", tags=["products"])
 async def create_product(
     request: ProductCreateRequest,
     auth: RequiredAuth,
-    use_case: CreateProductDI,
+    handler: CreateProductDI,
 ) -> ProductResponse:
-    result = await use_case.handle(
+    result = await handler.handle(
         CreateProductCommand(
             actor=to_actor(auth),
             name=request.name,
@@ -68,7 +68,7 @@ async def create_product(
 
 @router.get("", response_model=ProductListResponse)
 async def list_products(
-    use_case: ListProductsDI,
+    handler: ListProductsDI,
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     after: str | None = Query(default=None),
     before: str | None = Query(default=None),
@@ -78,7 +78,7 @@ async def list_products(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    page = await use_case.handle(
+    page = await handler.handle(
         ListProductsQuery(
             limit=limit,
             after=_parse_cursor(after),
@@ -92,9 +92,9 @@ async def list_products(
 async def get_product(
     product_id: uuid.UUID,
     auth: OptionalAuth,
-    use_case: GetProductDI,
+    handler: GetProductDI,
 ) -> ProductResponse:
-    product = await use_case.handle(
+    product = await handler.handle(
         GetProductQuery(
             product_id=product_id,
             actor=to_actor(auth) if auth is not None else None,
@@ -108,9 +108,9 @@ async def update_product(
     product_id: uuid.UUID,
     request: ProductUpdateRequest,
     auth: RequiredAuth,
-    use_case: UpdateProductDI,
+    handler: UpdateProductDI,
 ) -> None:
-    result = await use_case.handle(
+    result = await handler.handle(
         UpdateProductCommand(
             product_id=product_id,
             actor=to_actor(auth),
@@ -125,9 +125,9 @@ async def update_product(
 async def activate_product(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: ActivateProductDI,
+    handler: ActivateProductDI,
 ) -> ProductResponse:
-    result = await use_case.handle(
+    result = await handler.handle(
         ActivateProductCommand(product_id=product_id, actor=to_actor(auth))
     )
     if result.is_err:
@@ -139,9 +139,9 @@ async def activate_product(
 async def deactivate_product(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: DeactivateProductDI,
+    handler: DeactivateProductDI,
 ) -> ProductResponse:
-    result = await use_case.handle(
+    result = await handler.handle(
         DeactivateProductCommand(product_id=product_id, actor=to_actor(auth))
     )
     if result.is_err:
@@ -153,9 +153,9 @@ async def deactivate_product(
 async def delete_product(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: DeleteProductDI,
+    handler: DeleteProductDI,
 ) -> None:
-    await use_case.handle(
+    await handler.handle(
         DeleteProductCommand(product_id=product_id, actor=to_actor(auth))
     )
 
@@ -164,9 +164,9 @@ async def delete_product(
 async def get_product_audit(
     product_id: uuid.UUID,
     auth: RequiredAuth,
-    use_case: GetProductAuditDI,
+    handler: GetProductAuditDI,
 ) -> list[ProductAuditLogResponse]:
-    entries = await use_case.handle(
+    entries = await handler.handle(
         GetProductAuditQuery(product_id=product_id, actor=to_actor(auth))
     )
     return [ProductAuditLogResponse.from_entry(entry) for entry in entries]
