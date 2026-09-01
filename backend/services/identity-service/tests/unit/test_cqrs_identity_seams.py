@@ -3,7 +3,7 @@ from application.commands.deactivate_user import (
     ActivateUserCommandHandler,
 )
 from application.ports import UserReadModel
-from application.queries import GetUserQuery, GetUserQueryHandler
+from application.queries.get_user import GetUserQuery, GetUserQueryHandler
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.user_id import UserId
 from tests.unit.fake_password_hasher import FakePasswordHasher

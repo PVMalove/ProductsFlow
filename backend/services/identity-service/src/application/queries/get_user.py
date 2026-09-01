@@ -1,4 +1,4 @@
-"""Identity query DTOs and read-only handlers."""
+"""Get-user query and read-only handler."""
 
 from dataclasses import dataclass
 

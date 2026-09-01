@@ -14,8 +14,9 @@ application layer. Registration, login, password changes, and activation or
 deactivation therefore retain their existing domain and outbox contracts while
 having an explicit command-side seam.
 
-Identity reads use immutable DTOs in `application/queries.py` and
-`GetUserQueryHandler`, which accepts only `UserQueryPort`. The query port has
+Identity reads use immutable DTOs in `application/queries/`, with one module per
+query and a package-level public facade. `GetUserQueryHandler` accepts only
+`UserQueryPort`. The query port has
 no `add` or `save` operation, so a query handler cannot accidentally mutate the
 aggregate through its declared dependency. The old per-operation module paths
 remain thin re-export adapters for callers during the migration.

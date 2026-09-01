@@ -35,12 +35,10 @@ query-side через command-side.
   read model/projection и не открывает command-side путь.
 
 Новый код использует layout `application/commands/` и
-`application/queries/` (если запросов достаточно для отдельного пакета) с
-одним bounded-context модулем на связанную группу сценариев и отдельными
-handler-типами. Для небольшого количества запросов допустим один файл
-`application/queries.py`. Пакет `application/commands/` обязан иметь
-`__init__.py`, который является фасадом публичных command-типов; реализации
-живут в отдельных модулях по операции, например:
+`application/queries/` с одним bounded-context модулем на связанную группу
+сценариев и отдельными handler-типами. Оба пакета обязаны иметь
+`__init__.py`, который является фасадом публичных типов; реализации живут в
+отдельных модулях по операции, например:
 
 ```text
 application/commands/
@@ -49,11 +47,14 @@ application/commands/
 ├── login.py
 ├── change_password.py
 └── deactivate_user.py
+application/queries/
+├── __init__.py
+└── get_user.py
 ```
 
-Такой layout сохраняет небольшой внешний интерфейс пакета, повышает locality
-изменений каждой команды и не превращает один файл в shallow-модуль с
-растущим списком несвязанных сценариев. Старые пути импорта могут временно
+Такой layout сохраняет небольшой внешний интерфейс пакетов, повышает locality
+изменений каждой команды и запроса и не превращает один файл в shallow-модуль
+с растущим списком несвязанных сценариев. Старые пути импорта могут временно
 оставаться compatibility adapters, делегирующими в пакет. Общие
 `ICommand`/`IQuery`, глобальный dispatcher и event sourcing не требуются.
 
@@ -103,7 +104,7 @@ class ListTicketsQueryHandler:
 
 | Область | Найдено | Решение в baseline |
 | --- | --- | --- |
-| `identity-service/src/application` | команды identity выделены в пакет `commands/`, по одному модулю на операцию; старые файлы оставлены compatibility adapters | считать identity эталонным примером пакетного command-side layout |
+| `identity-service/src/application` | команды и запросы identity выделены в пакеты `commands/` и `queries/`, по одному модулю на операцию; старые command-файлы оставлены compatibility adapters | считать identity эталонным примером пакетного CQRS layout |
 | `catalog-service/src/application/product_use_cases.py` | `Create/Update/Activate/Deactivate/Delete` смешаны с `Get/List/GetAudit` | migration finding; разделить в #187 |
 | `catalog-service/src/application/product_image_use_cases.py` | `GetProductImage` смешан с `UpsertProductImage/DeleteProductImage` | migration finding; разделить в #187 |
 | `support-service/src/application/ticket_use_cases.py` | `CreateTicket` смешан с `GetTicket/ListTickets/ListAdminTickets` | migration finding; разделить в #188 |
