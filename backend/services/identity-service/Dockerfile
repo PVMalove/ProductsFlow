@@ -17,9 +17,9 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.14-slim
 WORKDIR /srv
 
-COPY --from=builder /srv/services/identity-service/.venv /srv/.venv
+COPY --from=builder /srv/services/identity-service/.venv /srv/services/identity-service/.venv
 COPY --from=builder /srv/services/identity-service/src/infrastructure/db /srv/infrastructure/db
-ENV PATH="/srv/.venv/bin:$PATH"
+ENV PATH="/srv/services/identity-service/.venv/bin:$PATH"
 
 EXPOSE 8000
 CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

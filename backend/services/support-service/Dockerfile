@@ -11,8 +11,8 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.14-slim
 WORKDIR /srv
 
-COPY --from=builder /srv/services/support-service/.venv /srv/.venv
-ENV PATH="/srv/.venv/bin:$PATH"
+COPY --from=builder /srv/services/support-service/.venv /srv/services/support-service/.venv
+ENV PATH="/srv/services/support-service/.venv/bin:$PATH"
 
 # The scaffold exposes the canonical presentation entrypoint until the
 # support-specific HTTP surface is implemented.

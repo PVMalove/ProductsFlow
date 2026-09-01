@@ -21,9 +21,9 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.14-slim
 WORKDIR /srv
 
-COPY --from=builder /srv/services/catalog-service/.venv /srv/.venv
+COPY --from=builder /srv/services/catalog-service/.venv /srv/services/catalog-service/.venv
 COPY --from=builder /srv/services/catalog-service/src/infrastructure/db /srv/infrastructure/db
-ENV PATH="/srv/.venv/bin:$PATH"
+ENV PATH="/srv/services/catalog-service/.venv/bin:$PATH"
 
 # HTTP entrypoint lives in the canonical presentation package (ADR 0026).
 EXPOSE 8000
