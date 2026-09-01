@@ -1,7 +1,9 @@
 from typing import Any, Protocol
 
+import httpx
 from kernel_platform.security.identity_client import CurrentUserInfo
 
+from application.errors import IdentityUnavailableError
 from application.ports import (
     IdentityGateway as ApplicationIdentityGateway,
 )
@@ -26,7 +28,10 @@ class IdentityGatewayAdapter:
         self._gateway = gateway
 
     async def fetch_current_user(self, token: str) -> IdentityUser:
-        info = await self._gateway.fetch_current_user(token)
+        try:
+            info = await self._gateway.fetch_current_user(token)
+        except httpx.HTTPError as exc:
+            raise IdentityUnavailableError from exc
         return IdentityUser(id=info.id, role=info.role, is_active=info.is_active)
 
 

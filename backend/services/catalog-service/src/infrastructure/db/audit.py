@@ -1,4 +1,3 @@
-import enum
 from datetime import datetime
 
 from kernel_platform.outbox.models import Base
@@ -8,16 +7,12 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
-from application.ports import ProductAuditEntry, ProductAuditReader
+from application.ports import (
+    ProductAuditAction,
+    ProductAuditEntry,
+    ProductAuditReader,
+)
 from infrastructure.db.models import ProductModel
-
-
-class ProductAuditAction(enum.StrEnum):
-    CREATED = "created"
-    UPDATED = "updated"
-    DELETED = "deleted"
-    ACTIVATED = "activated"
-    DEACTIVATED = "deactivated"
 
 
 class ProductAuditLog(Base):
@@ -145,7 +140,7 @@ class SqlProductAuditReader:
                 id=row.id,
                 product_id=row.product_id,
                 actor_user_id=row.actor_user_id,
-                action=str(row.action),
+                action=ProductAuditAction(str(row.action)),
                 description=row.description,
                 created_at=row.created_at,
             )

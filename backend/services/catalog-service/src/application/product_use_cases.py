@@ -1,15 +1,10 @@
 from kernel_domain.result import Result
 
 from application.authorization import ProductAuthorizer
-from application.errors import (
-    IdentityUnavailableError,
-    ProductAccessDeniedError,
-    ProductNotFoundError,
-)
+from application.errors import ProductAccessDeniedError, ProductNotFoundError
 from application.ports import (
     Actor,
     IdentityGateway,
-    IdentityUser,
     OwnerReadModel,
     OwnerSnapshot,
     ProductAuditEntry,
@@ -20,13 +15,6 @@ from domain.product_id import ProductId
 from domain.repositories import Cursor, ProductPage, ProductRepository
 from domain.viewer import Viewer
 from domain.visibility import ProductVisibilityPolicy
-
-
-async def _fetch_current_user(identity: IdentityGateway, token: str) -> IdentityUser:
-    try:
-        return await identity.fetch_current_user(token)
-    except Exception as exc:
-        raise IdentityUnavailableError from exc
 
 
 class CreateProduct:
@@ -50,7 +38,7 @@ class CreateProduct:
         category: str,
     ) -> Result[Product]:
         if await self._owner_read_model.get(actor.user_id) is None:
-            info = await _fetch_current_user(self._identity, actor.token)
+            info = await self._identity.fetch_current_user(actor.token)
             await self._owner_read_model.upsert(
                 OwnerSnapshot(
                     user_id=info.id,
@@ -91,7 +79,7 @@ class GetProduct:
     ) -> None:
         self._repository = repository
         self._owner_read_model = owner_read_model
-        self._identity = identity
+        self._authorizer = ProductAuthorizer(identity)
         self._visibility = ProductVisibilityPolicy()
 
     async def execute(self, product_id: int, *, actor: Actor | None) -> Product:
@@ -101,7 +89,7 @@ class GetProduct:
 
         if actor is not None and actor.user_id == product.user_id:
             if await self._owner_read_model.get(actor.user_id) is None:
-                info = await _fetch_current_user(self._identity, actor.token)
+                info = await self._authorizer.fetch_current_user(actor)
                 await self._owner_read_model.upsert(
                     OwnerSnapshot(info.id, info.role, info.is_active, 0)
                 )
@@ -118,9 +106,7 @@ class GetProduct:
         ):
             return product
 
-        if actor is not None and await ProductAuthorizer(self._identity).is_admin(
-            actor
-        ):
+        if actor is not None and await self._authorizer.is_admin(actor):
             return product
         raise ProductNotFoundError
 

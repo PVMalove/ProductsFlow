@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from application.ports import ProductAuditEntry
+from application.ports import ProductAuditAction, ProductAuditEntry
 from domain.product import Product
 from domain.repositories import PageInfo, ProductPage
 
@@ -80,7 +80,7 @@ class ProductAuditLogResponse(BaseModel):
     id: int
     product_id: int
     actor_user_id: int | None
-    action: str
+    action: ProductAuditAction
     description: str
     created_at: datetime
 

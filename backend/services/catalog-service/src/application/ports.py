@@ -1,9 +1,8 @@
+import enum
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
-
-from domain.repositories import ProductRepository
 
 
 @dataclass(frozen=True)
@@ -41,12 +40,20 @@ class IdentityGateway(Protocol):
     async def fetch_current_user(self, token: str) -> IdentityUser: ...
 
 
+class ProductAuditAction(enum.StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    DELETED = "deleted"
+    ACTIVATED = "activated"
+    DEACTIVATED = "deactivated"
+
+
 @dataclass(frozen=True)
 class ProductAuditEntry:
     id: int
     product_id: int
     actor_user_id: int | None
-    action: str
+    action: ProductAuditAction
     description: str
     created_at: datetime
 
@@ -59,9 +66,9 @@ __all__ = [
     "Actor",
     "IdentityGateway",
     "IdentityUser",
+    "ProductAuditAction",
     "OwnerReadModel",
     "OwnerSnapshot",
     "ProductAuditEntry",
     "ProductAuditReader",
-    "ProductRepository",
 ]

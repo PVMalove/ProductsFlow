@@ -5,7 +5,13 @@ import pytest
 from kernel_domain.result import Result
 
 from application.errors import ProductAccessDeniedError, ProductNotFoundError
-from application.ports import Actor, IdentityUser, OwnerSnapshot, ProductAuditEntry
+from application.ports import (
+    Actor,
+    IdentityUser,
+    OwnerSnapshot,
+    ProductAuditAction,
+    ProductAuditEntry,
+)
 from application.product_use_cases import (
     ActivateProduct,
     CreateProduct,
@@ -106,7 +112,7 @@ class FakeAuditReader:
                 id=1,
                 product_id=product_id,
                 actor_user_id=None,
-                action="created",
+                action=ProductAuditAction.CREATED,
                 description="Создан",
                 created_at=datetime.now(timezone.utc),
             )

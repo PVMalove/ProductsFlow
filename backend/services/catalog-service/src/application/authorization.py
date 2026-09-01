@@ -1,5 +1,5 @@
-from application.errors import IdentityUnavailableError, ProductAccessDeniedError
-from application.ports import Actor, IdentityGateway
+from application.errors import ProductAccessDeniedError
+from application.ports import Actor, IdentityGateway, IdentityUser
 from domain.product import Product
 
 
@@ -10,11 +10,11 @@ class ProductAuthorizer:
         self._identity = identity
 
     async def is_admin(self, actor: Actor) -> bool:
-        try:
-            info = await self._identity.fetch_current_user(actor.token)
-        except Exception as exc:
-            raise IdentityUnavailableError from exc
+        info = await self._identity.fetch_current_user(actor.token)
         return info.role == "admin" and info.is_active
+
+    async def fetch_current_user(self, actor: Actor) -> IdentityUser:
+        return await self._identity.fetch_current_user(actor.token)
 
     async def require_owner_or_admin(self, actor: Actor, product: Product) -> None:
         if actor.user_id == product.user_id:
