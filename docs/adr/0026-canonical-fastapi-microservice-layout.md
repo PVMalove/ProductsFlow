@@ -2,7 +2,7 @@
 
 **Статус:** Accepted\
 **Дата:** 2026-09-01\
-**Дополняет:** [ADR 0025](0025-application-layer-ports-and-local-cqrs.md)\
+**Дополняет:** [ADR 0027](0027-domain-repository-contracts.md)\
 **Связанные issues:** #156, #163
 
 ## Контекст

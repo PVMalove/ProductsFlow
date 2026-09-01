@@ -1,16 +1,39 @@
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from kernel_domain.result import Result
 
-from application.pagination import Cursor, ProductPage
 from domain.product import Product
 from domain.product_id import ProductId
 
 
+@dataclass(frozen=True)
+class Cursor:
+    """Keyset-позиция в списке продуктов."""
+
+    created_at: datetime
+    id: int
+
+
+@dataclass(frozen=True)
+class PageInfo:
+    next_cursor: str | None
+    prev_cursor: str | None
+    has_more: bool
+    has_prev: bool
+
+
+@dataclass(frozen=True)
+class ProductPage:
+    items: list[Product]
+    page_info: PageInfo
+
+
 @runtime_checkable
 class ProductRepository(Protocol):
-    """Persistence operations required by catalog product use cases."""
+    """Контракт персистентности агрегата Product (ADR 0023)."""
 
     async def create(
         self,

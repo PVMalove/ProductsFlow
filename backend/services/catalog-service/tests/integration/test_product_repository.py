@@ -9,7 +9,7 @@ from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.owner_read_model import upsert_owner_read_model
 from infrastructure.db.pagination import decode_cursor
-from infrastructure.db.product_repository import SqlAlchemyProductRepository
+from infrastructure.db.product_repository import ProductRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -41,7 +41,7 @@ async def _audit_rows_for(
 async def test_create_persists_product_and_writes_outbox_row_in_same_transaction(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
 
     result = await repo.create(
@@ -73,7 +73,7 @@ async def test_create_persists_product_and_writes_outbox_row_in_same_transaction
 async def test_create_rejects_invalid_product_without_persisting(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
 
     result = await repo.create(
         name="ab",
@@ -88,7 +88,7 @@ async def test_create_rejects_invalid_product_without_persisting(
 
 
 async def test_get_by_id_returns_none_for_unknown_id(db_session: AsyncSession) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
 
     assert await repo.get_by_id(UNKNOWN_PRODUCT_ID) is None
 
@@ -96,7 +96,7 @@ async def test_get_by_id_returns_none_for_unknown_id(db_session: AsyncSession) -
 async def test_update_applies_only_provided_fields_and_writes_outbox_row(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     created = (
         await repo.create(
             name="Исходное имя",
@@ -123,7 +123,7 @@ async def test_update_applies_only_provided_fields_and_writes_outbox_row(
 
 
 async def test_update_unknown_product_returns_none(db_session: AsyncSession) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
 
     assert await repo.update(UNKNOWN_PRODUCT_ID, name="x") is None
 
@@ -131,7 +131,7 @@ async def test_update_unknown_product_returns_none(db_session: AsyncSession) -> 
 async def test_activate_deactivate_toggle_persisted_state(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     created = (
         await repo.create(
             name="Название товара",
@@ -165,7 +165,7 @@ async def test_activate_deactivate_toggle_persisted_state(
 async def test_delete_removes_row_and_writes_outbox_row(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     created = (
         await repo.create(
             name="Название товара",
@@ -192,13 +192,13 @@ async def test_delete_removes_row_and_writes_outbox_row(
 
 
 async def test_delete_unknown_product_returns_none(db_session: AsyncSession) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
 
     assert await repo.delete(UNKNOWN_PRODUCT_ID) is None
 
 
 async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
     await upsert_owner_read_model(
         db_session,
@@ -237,7 +237,7 @@ async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> No
 async def test_list_before_cursor_navigates_back_to_a_newer_page(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
     await upsert_owner_read_model(
         db_session,
@@ -279,7 +279,7 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
 async def test_list_hides_deactivated_products_from_everyone(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
     await upsert_owner_read_model(
         db_session,
@@ -316,7 +316,7 @@ async def test_list_hides_deactivated_products_from_everyone(
 async def test_list_hides_products_of_a_deactivated_owner(
     db_session: AsyncSession,
 ) -> None:
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     owner_id = uuid.uuid4()
     await upsert_owner_read_model(
         db_session,
@@ -343,7 +343,7 @@ async def test_list_hides_products_of_an_unknown_owner(
 ) -> None:
     """Строка ещё не появилась в owner_read_model (ни событием, ни
     синхронным добором) — осторожный дефолт: скрыт, а не показан."""
-    repo = SqlAlchemyProductRepository(db_session)
+    repo = ProductRepository(db_session)
     await repo.create(
         name="Товар без owner_read_model",
         description="",

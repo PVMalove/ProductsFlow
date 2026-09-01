@@ -6,10 +6,7 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.pagination import Cursor, PageInfo, ProductPage, encode_cursor
-from application.ports.product_repository import (
-    ProductRepository as ProductRepositoryPort,
-)
+from application.pagination import encode_cursor
 from domain.events import (
     ProductActivated,
     ProductCreated,
@@ -20,6 +17,14 @@ from domain.events import (
 )
 from domain.product import Product
 from domain.product_id import ProductId
+from domain.repositories import (
+    Cursor,
+    PageInfo,
+    ProductPage,
+)
+from domain.repositories import (
+    ProductRepository as ProductRepositoryPort,
+)
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
 
@@ -77,7 +82,7 @@ def _to_outbox_message(event: DomainEvent) -> OutboxMessage:
     )
 
 
-class SqlAlchemyProductRepository:
+class ProductRepository:
     """CRUD + keyset-пагинация для `Product` (issue #148). `_commit` —
     единственное место, которое видит и доменную сущность, и `AsyncSession`
     (ADR 0021): каждый мутирующий метод сам коммитит свою транзакцию, атомарно
@@ -276,8 +281,6 @@ class SqlAlchemyProductRepository:
             self.session.add(_to_outbox_message(event))
 
 
-# Static structural check: mypy verifies that the concrete adapter satisfies
-# every operation required by the application port.
-_product_repository_implementation: type[ProductRepositoryPort] = (
-    SqlAlchemyProductRepository
-)
+# Static structural check: mypy verifies that the concrete implementation
+# satisfies every operation required by the domain repository contract.
+_product_repository_implementation: type[ProductRepositoryPort] = ProductRepository

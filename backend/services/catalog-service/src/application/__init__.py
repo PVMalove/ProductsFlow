@@ -1,1 +1,1 @@
-"""Use cases and application ports for catalog-service."""
+"""Use cases and application-facing data for catalog-service."""

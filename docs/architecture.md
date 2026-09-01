@@ -6,14 +6,14 @@
 `backend/services/`. Он дополняет решения о границах shared-кода в
 [ADR 0013](adr/0013-kernel-domain-platform-split.md), изолированных пакетных
 окружениях в [ADR 0020](adr/0020-per-package-environments-supersedes-0010.md)
-и уточняет расположение портов и use case в
-[ADR 0025](adr/0025-application-layer-ports-and-local-cqrs.md), а обязательное
+и уточняет расположение repository-контрактов и use case в
+[ADR 0027](adr/0027-domain-repository-contracts.md), а обязательное
 дерево проекта — в [ADR 0026](adr/0026-canonical-fastapi-microservice-layout.md).
 
 Референсная модель —
 [FastAPI Microservice Template](https://github.com/onlythompson/fastapi-microservice-template):
-она разделяет domain, application, infrastructure и presentation, направляет
-зависимости внутрь и размещает интерфейсы, нужные use case, в application.
+она разделяет domain, application, infrastructure и presentation и направляет
+зависимости внутрь. В проекте repository-контракт агрегата закреплён в domain.
 Мы берём его структуру и границы, но не копируем автоматически необязательные
 технологии (Kafka, Redis, gRPC, GraphQL) или их реализацию.
 
@@ -22,9 +22,9 @@
 ```text
 backend/services/<service>/              # независимо разворачиваемый сервис
   src/
-    application/                         # use case, команды/запросы, порты
-      ports/
-    domain/                              # модель bounded context
+    application/                         # use case, команды/запросы
+    domain/                              # модель и repository-контракты bounded context
+      repositories.py
       events/
     infrastructure/                      # SQLAlchemy, AMQP, HTTP/S3-адаптеры
     presentation/                        # FastAPI/AMQP-адаптеры и DI wiring
@@ -78,23 +78,23 @@ backend/services/<service>/              # независимо разворач
 ```text
 HTTP / AMQP adapter (presentation) ──> application ──> domain
                   │                       │
-                  └── composition root ───┴──> application ports <── infrastructure
+                  └── composition root ───┴──> domain repository <── infrastructure
 ```
 
-- `domain` содержит агрегаты, value objects, доменные события и политики. Он
-  не импортирует FastAPI, SQLAlchemy, HTTP-клиенты, AMQP или application.
-- `application` выражает use case и оркестрирует доменную модель. Здесь живут
-  `Protocol`-порты, которые нужны этим сценариям: repository, read-model
-  gateway, identity/storage/messaging gateway. Слой может импортировать domain
-  и `kernel-domain`, но не FastAPI, SQLAlchemy или конкретные адаптеры.
-- `infrastructure` реализует application-порты и владеет транзакцией,
+- `domain` содержит агрегаты, value objects, доменные события, политики и
+  repository-контракты. Он не импортирует FastAPI, SQLAlchemy, HTTP-клиенты,
+  AMQP или application.
+- `application` выражает use case и оркестрирует доменную модель. Он импортирует
+  domain-контракты для типизации зависимостей, но не FastAPI, SQLAlchemy или
+  конкретные адаптеры.
+- `infrastructure` реализует domain repository-контракты и владеет транзакцией,
   SQLAlchemy-моделями, внешними клиентами и брокером. Она может импортировать
   application и domain, но её конкретные классы не должны быть типами в
   use case.
 - `presentation` преобразует HTTP/AMQP во входные данные сценария и результат
   — в HTTP/сообщение. В `presentation/dependencies.py` или равнозначной
   DI-фабрике на внешней границе допустимо создать конкретный инфраструктурный
-  адаптер и вернуть его как application-порт; в самом роуте этого импорта и
+  адаптер и вернуть его как domain repository; в самом роуте этого импорта и
   бизнес-оркестрации быть не должно.
 - `core` хранит только кросс-срезную политику *одного* сервиса: feature flags,
   resilience, secrets и rate limiting. `common` — локальные константы и
@@ -102,9 +102,9 @@ HTTP / AMQP adapter (presentation) ──> application ──> domain
   и не становится межсервисной свалкой.
 
 `kernel-domain` остаётся только для действительно общих, dependency-free
-доменных примитивов. Сервисные repository и gateway-порты не переезжают туда:
-они принадлежат потребляющим их use case и почти всегда отличаются между
-bounded contexts.
+доменных примитивов. Сервисные repository-контракты принадлежат domain
+соответствующего bounded context и не становятся shared-примитивами без
+отдельного решения.
 
 ## Use case и CQRS
 
