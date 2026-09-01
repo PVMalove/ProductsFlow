@@ -53,6 +53,21 @@ services:
     networks:
       - backend-network
 
+  catalog-worker:
+    # User-event projection worker (ADR 0010/0019) — тот же образ catalog,
+    # отдельный процесс и CMD, что и catalog-api.
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    container_name: catalog-worker
+    command: ["python", "-m", "presentation.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_AMQP_URL: ${CATALOG_AMQP_URL}
+    networks:
+      - backend-network
+
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"

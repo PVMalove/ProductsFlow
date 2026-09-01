@@ -41,6 +41,7 @@ async def upsert_owner_read_model(
     role: str,
     is_active: bool,
     last_applied_outbox_id: int,
+    commit: bool = True,
 ) -> None:
     """Один атомарный upsert, версионированный по `last_applied_outbox_id`
     (ADR 0019) — не read-then-write: конкурентные писатели (событийный
@@ -64,7 +65,8 @@ async def upsert_owner_read_model(
         ),
     )
     await session.execute(stmt)
-    await session.commit()
+    if commit:
+        await session.commit()
 
 
 class SqlOwnerReadModel:

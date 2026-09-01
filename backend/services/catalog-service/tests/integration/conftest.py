@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 # не используется, только его сторонний эффект на импорте.
 from infrastructure import db as _db  # noqa: F401
 from infrastructure.db import owner_read_model as _owner_read_model  # noqa: F401
+from infrastructure.db import processed_messages as _processed_messages  # noqa: F401
 from infrastructure.db.session import get_db_session
 from infrastructure.security.auth import get_identity_gateway
 from infrastructure.storage import get_storage
