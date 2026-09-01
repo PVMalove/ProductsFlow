@@ -14,6 +14,7 @@ from application.pagination import (
 )
 from domain.repositories import PageInfo, ProductPage
 
+
 __all__ = [
     "DEFAULT_PAGE_LIMIT",
     "MAX_PAGE_LIMIT",

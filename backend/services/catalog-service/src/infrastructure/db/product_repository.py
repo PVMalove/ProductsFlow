@@ -28,6 +28,7 @@ from domain.repositories import (
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
 
+
 _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
 # Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:
