@@ -7,13 +7,13 @@ from fastapi.responses import JSONResponse
 from kernel_platform.security.identity_client import IdentityClient
 from observability.middleware import RequestContextMiddleware
 
+from api.errors import to_http_exception
+from api.product_images import router as product_images_router
+from api.products import router as products_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
 from infrastructure.storage import ensure_minio_buckets
-from presentation.errors import to_http_exception
-from presentation.product_images import router as product_images_router
-from presentation.products import router as products_router
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
 # экземпляр verifier'а при регистрации (app.add_middleware), до того как

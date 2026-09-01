@@ -1,0 +1,385 @@
+diff --git a/docs/adr/0023-repository-ports-in-domain-layer.md b/docs/adr/0023-repository-ports-in-domain-layer.md
+index f3f33a5..a322e69 100644
+--- a/docs/adr/0023-repository-ports-in-domain-layer.md
++++ b/docs/adr/0023-repository-ports-in-domain-layer.md
+@@ -1,8 +1,9 @@
+ # 0023. Репозитории: порт в domain-слое, реализация в infrastructure
+ 
+ > **Superseded решением [ADR 0025](0025-application-layer-ports-and-local-cqrs.md).**
+-> Исторический текст ниже сохранён без переписывания: repository и gateway
+-> порты принадлежат application-слою — потребителю use case, а не domain-модели.
++
++> Исторический текст ниже сохранён без переписывания и описывает прежнее
++> решение размещать repository и gateway-порты в domain-слое.
+ 
+ `identity-service` уже завёл `UserRepository` как `Protocol` (issue #140/#143) — но в `identity/application/user_repository.py`, не в `domain/`. `catalog-service` (#148/#149) не завёл абстракции вовсе: `ProductRepository` — конкретный SQLAlchemy-класс в `catalog/infrastructure/db/product_repository.py`, и HTTP-роутер (`catalog/api/products.py`) конструирует и вызывает именно его, напрямую. В обоих случаях application/presentation-код видит либо порт, лежащий не на своём месте, либо саму инфраструктуру — то есть зависимость идёт от «правил» (domain) к «деталям» (SQLAlchemy), а не наоборот, что и есть нарушение инверсии зависимостей (DIP), которую распил на микросервисы призван соблюдать.
+ 
+diff --git a/docs/adr/0025-application-layer-ports-and-local-cqrs.md b/docs/adr/0025-application-layer-ports-and-local-cqrs.md
+new file mode 100644
+index 0000000..b76a917
+--- /dev/null
++++ b/docs/adr/0025-application-layer-ports-and-local-cqrs.md
+@@ -0,0 +1,106 @@
++# 0025. Application владеет use case и портами; CQRS — локальная опция
++
++**Статус:** Accepted\
++**Дата:** 2026-09-01\
++**Supersedes:** [ADR 0023](0023-repository-ports-in-domain-layer.md)\
++**Связанные issues:** #63, #156–#160, #163
++
++## Контекст
++
++В кодовой базе уже есть две разные трактовки границы. `identity-service`
++держит `UserRepository` как `Protocol` в `application/`, а
++`catalog-service` вызывает SQLAlchemy-репозиторий прямо из FastAPI-роутера.
++ADR 0023 предлагала перенести repository-порты в `domain/`; одновременно
++issues #156–#158 предлагали вынести универсальные CQRS-Protocol в
++`kernel-domain` и заставить все endpoint-ы принять эту форму.
++
++Оба хода смешивают разные обязанности. Контракт repository или внешнего
++gateway нужен use case для исполнения прикладного сценария; он не является
++термином предметной модели `User` или `Product`. Универсальный handler-
++контракт также не даёт полезной работы сам по себе и противоречит выводу
++исследования #63: без диспетчера он становится ещё одной формой, которую надо
++поддерживать. Сам диспетчер/реестр в проекте не нужен.
++
++В качестве внешнего референса использован
++[FastAPI Microservice Template](https://github.com/onlythompson/fastapi-microservice-template):
++его архитектурный документ отделяет domain, application, infrastructure и
++presentation, помещает interfaces рядом с application и применяет CQRS для
++конкретных сложных или нагруженных доменов, а не как глобальное требование.
++
++## Решение
++
++### Границы слоёв
++
++- `domain/` содержит только бизнес-модель bounded context: агрегаты, entity,
++  value object, доменные события и политики. Он не знает про persistence,
++  FastAPI, SQLAlchemy, AMQP, HTTP-клиенты или application.
++- `application/` владеет use case: command/query data, handler-ами и
++  `Protocol`-портами, которые нужны этим handler-ам. Порты располагаются в
++  `application/ports/`.
++- `infrastructure/` реализует application-порты и владеет SQLAlchemy,
++  транзакциями, внешними API, брокером и хранилищем.
++- `presentation/` — внешний адаптер: преобразует HTTP/AMQP во входные данные
++  use case и результат — в HTTP/сообщение. Его DI-фабрики составляют concrete infrastructure
++  adapter с application handler; конкретный адаптер не используется в теле
++  роутера.
++
++Следовательно, `UserRepository` не переносится в `domain/`, а
++`ProductRepository` объявляется как порт в `application/ports/`. То же
++правило применяется к read-model и внешним gateway-портам. Их нельзя переносить
++в `kernel-domain`: они сервис-специфичны и не проходят admission-правило
++ADR 0013.
++
++### CQRS
++
++Command и query допускаются как локальная форма use case, когда она делает
++сложный поток понятнее или когда read/write стороны действительно имеют разные
++модели, требования к консистентности либо масштабированию. Command/query —
++простые данные; handler получает порты в конструкторе. У проекта нет общего
++`ICommand`/`IQuery`, `ICommandHandler`/`IQueryHandler`, диспетчера, реестра или
++pipeline behavior — ни в `kernel-domain`, ни в сервисах.
++
++Синхронный сценарий остаётся синхронным, асинхронный — асинхронным. Форма
++handler-а не меняет сигнатуру ради единообразия.
++
++Полная конвенция, реальное дерево и проверяемые dependency rules описаны в
++[docs/architecture.md](../architecture.md).
++
++## Рассмотренные варианты
++
++- **Порт repository в domain (ADR 0023).** Отклонён: repository описывает
++  потребность application-сценария в сохранении/чтении, а не правило предметной
++  модели. Такой порт заставляет domain знать о технической категории
++  persistence и размывает направление зависимостей.
++- **Общие CQRS-протоколы в `kernel-domain`.** Отклонены: они не дают поведения,
++  не имеют двух независимых потребителей и создают связность между bounded
++  contexts. Это сохраняет вывод #63 против маркерных интерфейсов и MediatR-like
++  диспетчера.
++- **Прямой вызов SQLAlchemy из роутера.** Отклонён: HTTP-адаптер начинает
++  владеть транзакционной и бизнес-оркестрацией, а use case невозможно тестировать
++  без FastAPI/БД.
++- **Обязательный CQRS для каждого CRUD-endpoint.** Отклонён: CQRS приносит
++  стоимость дополнительных типов и eventual consistency только там, где это
++  нужно. Простая операция может остаться одним application use case.
++
++## Последствия
++
++- ADR 0023 сохраняется исторически, но больше не задаёт место repository-
++  портов.
++- Issues #156–#160 должны быть пересмотрены: общая CQRS-библиотека исключается,
++  порты #159/#160 принадлежат application, а #157/#158 используют локальные
++  handler-ы без базового Protocol.
++- `presentation/routes/products.py` постепенно становится тонким адаптером. Его
++  текущие вызовы `AsyncSession`, repository, owner read model и identity
++  переносятся за application-порты в handler-ы; HTTP-контракт не меняется.
++- Новые shared-абстракции всё ещё требуют двух подтверждённых потребителей по
++  ADR 0013. Этот ADR не создаёт каталоги и классы заранее.
++
++## Пересмотр
++
++Пересмотреть решение, если один и тот же порт подтверждённо нужен двум
++независимым bounded contexts (тогда применить admission-правило ADR 0013),
++либо если конкретная read-сторона получает отдельную модель, SLA или механизм
++доставки событий. Во втором случае принять отдельный ADR для этого контекста:
++зафиксировать источник истины write-side, путь события, окно eventual
++consistency, обработку отказов и метрики результата. Само появление нового
++CRUD-endpoint не является поводом для пересмотра.
+diff --git a/docs/adr/0026-canonical-fastapi-microservice-layout.md b/docs/adr/0026-canonical-fastapi-microservice-layout.md
+new file mode 100644
+index 0000000..0383570
+--- /dev/null
++++ b/docs/adr/0026-canonical-fastapi-microservice-layout.md
+@@ -0,0 +1,112 @@
++# 0026. Каноническая структура каждого FastAPI-микросервиса
++
++**Статус:** Accepted\
++**Дата:** 2026-09-01\
++**Дополняет:** [ADR 0025](0025-application-layer-ports-and-local-cqrs.md)\
++**Связанные issues:** #156, #163
++
++## Контекст
++
++В `backend/services/*` исторически сосуществуют разные раскладки: исходный
++код лежит в `src/<package>/`, HTTP-адаптер называется `api/`, а `core`/`common`,
++performance, `k8s`, service-local CI и `scripts` не имеют единого места. Это
++затрудняет навигацию между сервисами и не выражает выбранную Clean Architecture
++границу в физическом дереве.
++
++Пользователь выбрал структуру проекта из
++[FastAPI Microservice Template](https://github.com/onlythompson/fastapi-microservice-template):
++`src/application`, `src/domain/events`, `src/infrastructure`,
++`src/presentation`, `src/core`, `src/common`, а также `tests/performance`,
++`k8s`, `docs`, `ci` и `scripts` в корне микросервиса.
++
++## Решение
++
++Каждый независимо разворачиваемый сервис в `backend/services/<service>/` обязан
++иметь следующую структуру. Это шаблон **сервиса**, а не замена существующей
++мультисервисной раскладки `backend/services/`.
++
++```text
++<service>/
++  src/
++    application/
++    domain/
++      events/
++    infrastructure/
++    presentation/
++    core/
++      feature_flags.py
++      resilience.py
++      secrets.py
++      rate_limiter.py
++    common/
++  tests/
++    unit/
++    integration/
++    e2e/
++    performance/
++      locustfile.py
++  k8s/
++    deployment.yaml
++    service.yaml
++    ingress.yaml
++  docs/
++    api.md
++    architecture.md
++    adr/
++  ci/
++    Jenkinsfile
++    github-actions-workflow.yml
++  scripts/
++    secret_rotation.sh
++  .env
++  .env.example
++  .gitignore
++  docker-compose.yml
++  Dockerfile
++  pyproject.toml
++  README.md
++  requirements.txt
++```
++
++`presentation` заменяет прежнее имя `api`: в нём находятся FastAPI-роутеры,
++HTTP-схемы, AMQP-консьюмеры и composition root для DI. `core` — только
++кросс-срезная политика данного сервиса; `common` — его локальные простые
++утилиты. Общий код между сервисами по-прежнему проходит admission-правило
++ADR 0013 и живёт только в `backend/libs/`.
++
++Это целевое состояние после выполнения механической миграции из issue #163.
++До её завершения действуют текущие legacy-пути и репозиторный CI; service-local
++`ci/` и остальные элементы дерева не подменяют общий GitHub Actions-процесс.
++
++`application` владеет use case и портами, `domain` — предметной моделью,
++`infrastructure` — адаптерами, согласно ADR 0025. Физическая структура не
++отменяет правило направлений зависимостей.
++
++## Рассмотренные варианты
++
++- **Оставить `src/<package>/api` и документировать его как второй допустимый
++  стиль.** Отклонён: параллельные названия одного слоя создают постоянную цену
++  поиска и превращают правила архитектуры в предпочтение, а не контракт.
++- **Собрать все сервисы под одним `backend/src/`.** Отклонён: разрушает
++  изоляцию пакетов, их окружений, Docker-образов и миграций из
++  ADR 0020.
++- **Копировать из референса Kafka, Redis, Kubernetes-реализацию и CI-пайплайны
++  вместе с деревом.** Отклонён: структура не доказывает необходимость этих
++  технологий. Их внедрение требует отдельного ADR.
++
++## Последствия
++
++- Появляется один целевой путь для переноса существующего кода и для новых
++  сервисов; миграцию выполняет issue #163 до предметных рефакторингов #157–#160.
++- Абсолютные импорты, `pyproject.toml`, точки входа Docker, Alembic и тесты
++  меняются согласованно в пределах каждого сервиса; миграция не меняет HTTP,
++  AMQP или persistence-контракт.
++- Репозиторная документация `docs/` остаётся местом межсервисных ADR; сервисные
++  документы дублируют только информацию, относящуюся к одному сервису.
++
++## Пересмотр
++
++Пересмотреть только при появлении нового типа независимо разворачиваемого
++компонента, для которого доказано, что эта структура не применима. Обычная
++потребность в новой библиотеке или технологии не является поводом добавлять
++ещё один каталог верхнего уровня.
+diff --git a/docs/architecture.md b/docs/architecture.md
+new file mode 100644
+index 0000000..52b7359
+--- /dev/null
++++ b/docs/architecture.md
+@@ -0,0 +1,133 @@
++# Архитектура backend-сервисов
++
++## Статус и область действия
++
++Этот документ — рабочая конвенция для новых и рефакторимых сервисов в
++`backend/services/`. Он дополняет решения о границах shared-кода в
++[ADR 0013](adr/0013-kernel-domain-platform-split.md), изолированных пакетных
++окружениях в [ADR 0020](adr/0020-per-package-environments-supersedes-0010.md)
++и уточняет расположение портов и use case в
++[ADR 0025](adr/0025-application-layer-ports-and-local-cqrs.md), а обязательное
++дерево проекта — в [ADR 0026](adr/0026-canonical-fastapi-microservice-layout.md).
++
++Референсная модель —
++[FastAPI Microservice Template](https://github.com/onlythompson/fastapi-microservice-template):
++она разделяет domain, application, infrastructure и presentation, направляет
++зависимости внутрь и размещает интерфейсы, нужные use case, в application.
++Мы берём его структуру и границы, но не копируем автоматически необязательные
++технологии (Kafka, Redis, gRPC, GraphQL) или их реализацию.
++
++## Структура сервиса
++
++```text
++backend/services/<service>/              # независимо разворачиваемый сервис
++  src/
++    application/                         # use case, команды/запросы, порты
++      ports/
++    domain/                              # модель bounded context
++      events/
++    infrastructure/                      # SQLAlchemy, AMQP, HTTP/S3-адаптеры
++    presentation/                        # FastAPI/AMQP-адаптеры и DI wiring
++      routes/
++      schemas/
++      dependencies.py
++      main.py
++    core/                                # кросс-срезная политика сервиса
++      feature_flags.py
++      resilience.py
++      secrets.py
++      rate_limiter.py
++    common/                              # локальные константы и утилиты
++  tests/
++    unit/
++    integration/
++    e2e/
++    performance/
++      locustfile.py
++  k8s/
++    deployment.yaml
++    service.yaml
++    ingress.yaml
++  docs/
++    api.md
++    architecture.md
++    adr/
++  ci/
++    Jenkinsfile
++    github-actions-workflow.yml
++  scripts/
++    secret_rotation.sh
++  .env
++  .env.example
++  .gitignore
++  docker-compose.yml
++  Dockerfile
++  pyproject.toml
++  README.md
++  requirements.txt
++```
++
++Это целевая обязательная раскладка **каждого** сервиса, а не новый единый
++пакет на уровне `backend/`. Репозиторные `docs/adr/` продолжают хранить
++межсервисные решения; `<service>/docs/` хранит документы, относящиеся только к
++этому сервису. До завершения миграции #163 текущие пути являются legacy и не
++образуют второй архитектурный вариант.
++
++## Направление зависимостей
++
++```text
++HTTP / AMQP adapter (presentation) ──> application ──> domain
++                  │                       │
++                  └── composition root ───┴──> application ports <── infrastructure
++```
++
++- `domain` содержит агрегаты, value objects, доменные события и политики. Он
++  не импортирует FastAPI, SQLAlchemy, HTTP-клиенты, AMQP или application.
++- `application` выражает use case и оркестрирует доменную модель. Здесь живут
++  `Protocol`-порты, которые нужны этим сценариям: repository, read-model
++  gateway, identity/storage/messaging gateway. Слой может импортировать domain
++  и `kernel-domain`, но не FastAPI, SQLAlchemy или конкретные адаптеры.
++- `infrastructure` реализует application-порты и владеет транзакцией,
++  SQLAlchemy-моделями, внешними клиентами и брокером. Она может импортировать
++  application и domain, но её конкретные классы не должны быть типами в
++  use case.
++- `presentation` преобразует HTTP/AMQP во входные данные сценария и результат
++  — в HTTP/сообщение. В `presentation/dependencies.py` или равнозначной
++  DI-фабрике на внешней границе допустимо создать конкретный инфраструктурный
++  адаптер и вернуть его как application-порт; в самом роуте этого импорта и
++  бизнес-оркестрации быть не должно.
++- `core` хранит только кросс-срезную политику *одного* сервиса: feature flags,
++  resilience, secrets и rate limiting. `common` — локальные константы и
++  короткие утилиты. Ни один из них не заменяет `kernel-domain`/`kernel-platform`
++  и не становится межсервисной свалкой.
++
++`kernel-domain` остаётся только для действительно общих, dependency-free
++доменных примитивов. Сервисные repository и gateway-порты не переезжают туда:
++они принадлежат потребляющим их use case и почти всегда отличаются между
++bounded contexts.
++
++## Use case и CQRS
++
++Команда или запрос — данные входа use case; handler получает зависимости через
++конструктор и выполняет один сценарий. Его можно тестировать напрямую, без
++FastAPI и без реальной инфраструктуры.
++
++CQRS применяется локально и только когда это упрощает задачу: write- и
++read-модель имеют разные правила, требования к консистентности или независимо
++масштабируются. Для простого CRUD не требуется ни искусственно разносить
++одинаковую логику, ни заводить общий `ICommand`/`IQuery`, handler Protocol,
++диспетчер или глобальный реестр. FastAPI `Depends()` остаётся явной точкой
++связывания входа, handler и адаптеров.
++
++## Проверка границы
++
++Перед PR проверьте, что:
++
++- unit-тесты handler-ов используют фейки application-портов и не поднимают
++  FastAPI или БД;
++- integration-тесты проверяют реализацию инфраструктурного порта;
++- HTTP/AMQP-тесты проверяют контракт `presentation`-адаптера и DI-wiring;
++- `tests/performance/locustfile.py` фиксирует воспроизводимый вход для
++  нагрузочных сценариев, а `k8s/`, `ci/` и `scripts/` принадлежат сервису;
++- из `domain/` и `application/` нет импортов конкретных модулей
++  `infrastructure/`, FastAPI или SQLAlchemy.

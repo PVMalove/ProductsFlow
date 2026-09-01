@@ -35,9 +35,10 @@ packages = [
     "src/application",
     "src/domain",
     "src/infrastructure",
-    "src/presentation",
+    "src/api",
     "src/core",
     "src/common",
+    "src/catalog",
 ]
 
 [dependency-groups]
@@ -71,6 +72,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["src"]
 
 [tool.vulture]
 exclude = [".venv/", "*/alembic/versions/"]

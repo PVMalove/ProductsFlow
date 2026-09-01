@@ -2,14 +2,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from application.pagination import (
-    DEFAULT_PAGE_LIMIT,
-    MAX_PAGE_LIMIT,
-    Cursor,
-    InvalidCursorError,
-    decode_cursor,
-)
-from presentation.dependencies import (
+from api.dependencies import (
     ActivateProductDI,
     CreateProductDI,
     DeactivateProductDI,
@@ -22,13 +15,20 @@ from presentation.dependencies import (
     UpdateProductDI,
     to_actor,
 )
-from presentation.errors import to_http_exception
-from presentation.schemas import (
+from api.errors import to_http_exception
+from api.schemas import (
     ProductAuditLogResponse,
     ProductCreateRequest,
     ProductListResponse,
     ProductResponse,
     ProductUpdateRequest,
+)
+from application.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    Cursor,
+    InvalidCursorError,
+    decode_cursor,
 )
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])

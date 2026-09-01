@@ -34,6 +34,6 @@ __all__ = [
     "MAX_PAGE_LIMIT",
     "Cursor",
     "InvalidCursorError",
-    "decode_cursor",
+    "decode_cursor",        
     "encode_cursor",
 ]

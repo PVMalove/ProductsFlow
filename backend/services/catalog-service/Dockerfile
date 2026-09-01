@@ -25,6 +25,6 @@ COPY --from=builder /srv/services/catalog-service/.venv /srv/services/catalog-se
 COPY --from=builder /srv/services/catalog-service/src/infrastructure/db /srv/infrastructure/db
 ENV PATH="/srv/services/catalog-service/.venv/bin:$PATH"
 
-# HTTP entrypoint lives in the canonical presentation package (ADR 0026).
+# HTTP entrypoint is provided by the service API package.
 EXPOSE 8000
-CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,6 +1,6 @@
 # Architecture
 
-`presentation` owns HTTP entrypoints, schemas, and the FastAPI composition
+`api` owns HTTP entrypoints, schemas, and the FastAPI composition
 root. Product HTTP handlers only translate requests and responses; the eight
 product use cases live in `src/application/product_use_cases.py`:
 `CreateProduct`, `ListProducts`, `GetProduct`, `UpdateProduct`,
@@ -10,10 +10,10 @@ product use cases live in `src/application/product_use_cases.py`:
 Application code depends on `ProductRepository` from `domain.repositories` and
 on explicit ports for the owner read model, identity lookup, and audit reads.
 `ProductVisibilityPolicy` remains in `domain`. SQLAlchemy implementations are
-assembled only in `presentation/dependencies.py`, while `presentation` maps
+assembled only in `api/dependencies.py`, while `api` maps
 application errors to the unchanged HTTP status and response contract.
 
-The same `presentation` layer owns `presentation.worker`, the second process of
+The same `api` layer owns `api.worker`, the second process of
 the catalog service image (ADR 0010). It declares the `catalog.user-events`
 topology through `kernel-platform`, consumes the four supported `user.*.v1`
 events (including the sparse payloads emitted by the current identity domain),

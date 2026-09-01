@@ -3,8 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
-from application.product_image_use_cases import ProductImageMutation
-from presentation.dependencies import (
+from api.dependencies import (
     DeleteProductImageDI,
     GetProductImageDI,
     OptionalAuth,
@@ -12,7 +11,8 @@ from presentation.dependencies import (
     UpsertProductImageDI,
     to_actor,
 )
-from presentation.schemas import ProductImageResponse
+from api.schemas import ProductImageResponse
+from application.product_image_use_cases import ProductImageMutation
 
 router = APIRouter(prefix="/api/v1/products", tags=["product-images"])
 

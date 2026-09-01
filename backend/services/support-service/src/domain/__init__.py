@@ -1,1 +1,1 @@
-"""Domain model for support-service."""
+"""Support ticket domain model."""

@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: services/identity-service/Dockerfile
     container_name: identity-worker
-    command: ["python", "-m", "presentation.worker"]
+    command: ["python", "-m", "api.worker"]
     environment:
       APP_ENV: ${APP_ENV}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
@@ -60,7 +60,7 @@ services:
       context: .
       dockerfile: services/catalog-service/Dockerfile
     container_name: catalog-worker
-    command: ["python", "-m", "presentation.worker"]
+    command: ["python", "-m", "api.worker"]
     environment:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}

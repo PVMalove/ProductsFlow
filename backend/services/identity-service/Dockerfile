@@ -22,4 +22,4 @@ COPY --from=builder /srv/services/identity-service/src/infrastructure/db /srv/in
 ENV PATH="/srv/services/identity-service/.venv/bin:$PATH"
 
 EXPOSE 8000
-CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

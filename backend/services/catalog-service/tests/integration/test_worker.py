@@ -13,9 +13,9 @@ from kernel_platform.topology import declare_topology
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from api.worker import build_user_event_handler
 from infrastructure.db.owner_read_model import OwnerReadModelRow
 from infrastructure.db.processed_messages import ProcessedMessage
-from presentation.worker import build_user_event_handler
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

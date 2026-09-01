@@ -22,7 +22,7 @@ services:
     build:
       context: ../..
       dockerfile: services/catalog-service/Dockerfile
-    command: ["python", "-m", "presentation.worker"]
+    command: ["python", "-m", "api.worker"]
     environment:
       APP_ENV: ${APP_ENV:-dev}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL:-}
