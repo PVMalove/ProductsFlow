@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from application.ports import PasswordHasher, UserCommandPort
+from application.ports import PasswordHasher
 from domain.email import Email
 from domain.raw_password import RawPassword
+from domain.repositories import UserRepository
 from domain.user import User
 from domain.user_id import UserId
 
@@ -19,7 +20,7 @@ class RegisterUserCommand:
 
 
 class RegisterUserCommandHandler:
-    def __init__(self, users: UserCommandPort, password_hasher: PasswordHasher) -> None:
+    def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
@@ -49,7 +50,7 @@ class LoginCommand:
 
 
 class LoginCommandHandler:
-    def __init__(self, users: UserCommandPort, password_hasher: PasswordHasher) -> None:
+    def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
@@ -84,7 +85,7 @@ class ChangePasswordCommand:
 
 
 class ChangePasswordCommandHandler:
-    def __init__(self, users: UserCommandPort, password_hasher: PasswordHasher) -> None:
+    def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
@@ -117,7 +118,7 @@ class DeactivateUserCommand:
 
 
 class DeactivateUserCommandHandler:
-    def __init__(self, users: UserCommandPort) -> None:
+    def __init__(self, users: UserRepository) -> None:
         self._users = users
 
     def handle(self, command: DeactivateUserCommand) -> Result[User]:
@@ -151,7 +152,7 @@ class ActivateUserCommand:
 
 
 class ActivateUserCommandHandler:
-    def __init__(self, users: UserCommandPort) -> None:
+    def __init__(self, users: UserRepository) -> None:
         self._users = users
 
     def handle(self, command: ActivateUserCommand) -> Result[User]:

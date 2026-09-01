@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from domain.email import Email
-from domain.repositories import UserRepository
 from domain.role import Role
 from domain.user_id import UserId
 
@@ -23,10 +22,6 @@ class UserQueryPort(Protocol):
     """Read-only access to the identity read model."""
 
     def get_by_id(self, user_id: UserId) -> UserReadModel | None: ...
-
-
-class UserCommandPort(UserRepository, Protocol):
-    """Command-side view of the domain-owned user repository contract."""
 
 
 class PasswordHasher(Protocol):

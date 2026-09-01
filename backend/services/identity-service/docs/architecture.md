@@ -7,8 +7,8 @@ and `core` owns service-local security and configuration policy.
 ## CQRS application boundary
 
 Identity writes are defined in `application/commands.py` as immutable command
-DTOs and dedicated command handlers. They depend on `UserCommandPort` and
-`PasswordHasher`; concrete persistence and hashing adapters stay outside the
+DTOs and dedicated command handlers. They depend on the domain-owned
+`UserRepository` contract and `PasswordHasher`; concrete persistence and hashing adapters stay outside the
 application layer. Registration, login, password changes, and activation or
 deactivation therefore retain their existing domain and outbox contracts while
 having an explicit command-side seam.
