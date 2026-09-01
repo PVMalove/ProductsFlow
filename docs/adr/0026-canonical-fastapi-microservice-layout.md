@@ -40,6 +40,9 @@ performance, `k8s`, service-local CI и `scripts` не имеют единого
       rate_limiter.py
     common/
   tests/
+    unit/
+    integration/
+    e2e/
     performance/
       locustfile.py
   k8s/
@@ -70,6 +73,10 @@ HTTP-схемы, AMQP-консьюмеры и composition root для DI. `core`
 кросс-срезная политика данного сервиса; `common` — его локальные простые
 утилиты. Общий код между сервисами по-прежнему проходит admission-правило
 ADR 0013 и живёт только в `backend/libs/`.
+
+Это целевое состояние после выполнения механической миграции из issue #163.
+До её завершения действуют текущие legacy-пути и репозиторный CI; service-local
+`ci/` и остальные элементы дерева не подменяют общий GitHub Actions-процесс.
 
 `application` владеет use case и портами, `domain` — предметной моделью,
 `infrastructure` — адаптерами, согласно ADR 0025. Физическая структура не
