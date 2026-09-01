@@ -4,9 +4,21 @@ version = "0.1.0"
 description = "support-service (TD-01, Фаза 5) — пустой каркас, наполняется начиная с Фазы 5."
 requires-python = ">=3.14"
 dependencies = [
+    "alembic>=1.19.1",
     "fastapi>=0.141.1",
+    "cryptography>=50.0.0",
+    "kernel-domain",
+    "kernel-platform",
+    "pydantic-settings>=2.0.0",
+    "pyjwt>=2.13.0",
+    "sqlalchemy[asyncio]>=2.0",
     "uvicorn>=0.35.0",
 ]
+
+[tool.uv.sources]
+kernel-domain = { path = "../../libs/kernel-domain", editable = true }
+kernel-platform = { path = "../../libs/kernel-platform", editable = true }
+test-support = { path = "../../libs/test-support", editable = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -17,15 +29,18 @@ packages = [
     "src/application",
     "src/domain",
     "src/infrastructure",
-    "src/presentation",
+    "src/api",
     "src/core",
     "src/common",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "test-support",
     "ruff>=0.16.1",
     "vulture>=2.14",
 ]
@@ -42,6 +57,8 @@ exclude = ["^whitelist\\.py$", "^\\.venv/"]
 # конфиг-файлом и продолжает подниматься вверх по дереву каталогов в поисках
 # другого. Нет async-тестов — asyncio_mode здесь не нужен.
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
 
 [tool.vulture]
 exclude = [".venv/"]
