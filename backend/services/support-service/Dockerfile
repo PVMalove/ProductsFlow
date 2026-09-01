@@ -2,6 +2,10 @@ FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 WORKDIR /srv
 
 COPY services/support-service/pyproject.toml services/support-service/uv.lock services/support-service/
+COPY libs/kernel-domain /srv/libs/kernel-domain
+COPY libs/kernel-platform /srv/libs/kernel-platform
+# uv resolves path sources even when the dependency is excluded by --no-dev.
+COPY libs/test-support/pyproject.toml libs/test-support/pyproject.toml
 WORKDIR /srv/services/support-service
 RUN uv sync --locked --no-dev --no-install-project
 
@@ -14,7 +18,7 @@ WORKDIR /srv
 COPY --from=builder /srv/services/support-service/.venv /srv/services/support-service/.venv
 ENV PATH="/srv/services/support-service/.venv/bin:$PATH"
 
-# The scaffold exposes the canonical presentation entrypoint until the
+# The scaffold exposes the API entrypoint until the
 # support-specific HTTP surface is implemented.
 EXPOSE 8000
-CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,57 @@
+import uuid
+
+from fastapi.testclient import TestClient
+
+from api.dependencies import get_create_ticket_use_case
+from api.main import app
+from domain.ticket import Ticket
+from infrastructure.security.auth import get_required_auth
+
+
+def test_create_ticket_requires_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/tickets",
+            json={"subject": "Subject", "first_message": "Message"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_create_ticket_rejects_invalid_token() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/tickets",
+            headers={"Authorization": "Bearer definitely-invalid"},
+            json={"subject": "Subject", "first_message": "Message"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_create_ticket_returns_created_resource() -> None:
+    author_id = uuid.uuid4()
+
+    class FakeUseCase:
+        async def execute(
+            self, *, author_id: uuid.UUID, subject: str, first_message: str
+        ) -> Ticket:
+            return Ticket.create(
+                author_id=author_id, subject=subject, first_message=first_message
+            )
+
+    app.dependency_overrides[get_required_auth] = lambda: author_id
+    app.dependency_overrides[get_create_ticket_use_case] = lambda: FakeUseCase()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/tickets",
+                json={"subject": "  Subject  ", "first_message": "  Message  "},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert response.json()["author_id"] == str(author_id)
+    assert response.json()["subject"] == "Subject"
+    assert response.json()["messages"][0]["body"] == "Message"
