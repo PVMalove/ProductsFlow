@@ -4,8 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 from observability.context import actor_id_var
 
-from identity.infrastructure.security.tokens import create_access_token
-from identity.main import app
+from core.security.tokens import create_access_token
+from presentation.main import app
 
 pytestmark = pytest.mark.usefixtures("configured_key_path")
 

@@ -1,7 +1,7 @@
-from identity.domain.email import Email
-from identity.domain.events import UserRegistered
-from identity.domain.role import Role
-from identity.domain.user import User
+from domain.email import Email
+from domain.events import UserRegistered
+from domain.role import Role
+from domain.user import User
 
 
 def test_register_succeeds_with_an_active_user_role() -> None:

@@ -54,23 +54,23 @@ keys: ## Сгенерировать локальную RS256-пару для ide
 
 db-revision: _require-pkg ## Создать ревизию через autogenerate (make db-revision pkg=<service> msg="add foo")
 	cd $(member_dir) && uv sync
-	cd $(member_dir) && uv run alembic -c alembic.ini revision --autogenerate -m "$(msg)"
+	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini revision --autogenerate -m "$(msg)"
 
 db-upgrade: _require-pkg ## Применить все непримененные миграции сервиса до head (make db-upgrade pkg=<service>)
 	cd $(member_dir) && uv sync
-	cd $(member_dir) && uv run alembic -c alembic.ini upgrade head
+	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini upgrade head
 
 db-downgrade: _require-pkg ## Откатить последнюю миграцию сервиса на один шаг (make db-downgrade pkg=<service>)
 	cd $(member_dir) && uv sync
-	cd $(member_dir) && uv run alembic -c alembic.ini downgrade -1
+	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini downgrade -1
 
 db-current: _require-pkg ## Показать текущую ревизию БД сервиса (make db-current pkg=<service>)
 	cd $(member_dir) && uv sync
-	cd $(member_dir) && uv run alembic -c alembic.ini current
+	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini current
 
 db-history: _require-pkg ## Показать всю историю миграций сервиса (make db-history pkg=<service>)
 	cd $(member_dir) && uv sync
-	cd $(member_dir) && uv run alembic -c alembic.ini history
+	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini history
 
 up_dev: ## Поднять dev-конфигурацию (docker-compose.yml + docker-compose.dev.yml; make up_dev service=identity-api)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d $(service)

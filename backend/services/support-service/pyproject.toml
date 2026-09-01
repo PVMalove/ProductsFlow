@@ -3,14 +3,24 @@ name = "support-service"
 version = "0.1.0"
 description = "support-service (TD-01, Фаза 5) — пустой каркас, наполняется начиная с Фазы 5."
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fastapi>=0.141.1",
+    "uvicorn>=0.35.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/support"]
+packages = [
+    "src/application",
+    "src/domain",
+    "src/infrastructure",
+    "src/presentation",
+    "src/core",
+    "src/common",
+]
 
 [dependency-groups]
 dev = [

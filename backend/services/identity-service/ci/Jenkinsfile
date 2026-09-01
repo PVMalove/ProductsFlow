@@ -1,0 +1,8 @@
+pipeline {
+    agent any
+    stages {
+        stage('Checks') {
+            steps { echo 'Use the repository backend quality gate.' }
+        }
+    }
+}

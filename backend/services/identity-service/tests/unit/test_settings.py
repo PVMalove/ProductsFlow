@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from identity.settings import Settings
+from core.settings import Settings
 
 
 def test_settings_defaults_are_safe_for_a_fresh_clone(

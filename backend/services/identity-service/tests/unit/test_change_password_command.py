@@ -1,8 +1,8 @@
 from kernel_domain.errors import ErrorType
 
-from identity.application.change_password import ChangePasswordCommand
-from identity.application.register_user import RegisterUserCommand
-from identity.domain.events import PasswordChanged
+from application.change_password import ChangePasswordCommand
+from application.register_user import RegisterUserCommand
+from domain.events import PasswordChanged
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 

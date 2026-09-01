@@ -1,4 +1,4 @@
-from identity.application.password_hasher import PasswordHasher
+from application.password_hasher import PasswordHasher
 
 _PREFIX = "hashed::"
 

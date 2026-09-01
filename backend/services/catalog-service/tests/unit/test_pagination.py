@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from catalog.infrastructure.db.pagination import (
+from infrastructure.db.pagination import (
     Cursor,
     InvalidCursorError,
     decode_cursor,

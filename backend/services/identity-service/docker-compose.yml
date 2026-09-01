@@ -1,0 +1,12 @@
+services:
+  identity-api:
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    env_file: .env
+  identity-worker:
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    command: ["python", "-m", "presentation.worker"]
+    env_file: .env

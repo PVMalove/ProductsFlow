@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import pytest
 from observability.formatters import ColorFormatter, JsonFormatter
 
-from identity.logging_config import configure_logging
+from core.logging_config import configure_logging
 
 
 @pytest.fixture

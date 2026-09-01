@@ -16,20 +16,15 @@ COPY libs/kernel-domain/src /srv/libs/kernel-domain/src
 COPY libs/kernel-platform/src /srv/libs/kernel-platform/src
 COPY libs/observability/src /srv/libs/observability/src
 COPY services/catalog-service/src /srv/services/catalog-service/src
-COPY services/catalog-service/alembic.ini /srv/services/catalog-service/alembic.ini
-COPY services/catalog-service/alembic /srv/services/catalog-service/alembic
 RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.14-slim
 WORKDIR /srv
 
 COPY --from=builder /srv/services/catalog-service/.venv /srv/.venv
-COPY --from=builder /srv/services/catalog-service/alembic.ini alembic.ini
-COPY --from=builder /srv/services/catalog-service/alembic alembic
+COPY --from=builder /srv/services/catalog-service/src/infrastructure/db /srv/infrastructure/db
 ENV PATH="/srv/.venv/bin:$PATH"
 
-# main.py и uvicorn/fastapi как зависимость появятся вместе с HTTP-слоем
-# сервиса (issue #149) — до этого момента CMD ниже нерабочий (это ожидаемо,
-# доменный/персистентностный код issue #148 не включает HTTP-слой).
+# HTTP entrypoint lives in the canonical presentation package (ADR 0026).
 EXPOSE 8000
-CMD ["uvicorn", "catalog.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000"]

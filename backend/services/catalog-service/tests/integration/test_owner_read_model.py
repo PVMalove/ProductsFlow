@@ -3,7 +3,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from catalog.infrastructure.db.owner_read_model import (
+from infrastructure.db.owner_read_model import (
     get_owner_read_model,
     upsert_owner_read_model,
 )

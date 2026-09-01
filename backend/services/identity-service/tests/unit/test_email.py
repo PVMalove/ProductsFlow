@@ -1,6 +1,6 @@
 import pytest
 
-from identity.domain.email import Email
+from domain.email import Email
 
 
 def test_emails_with_the_same_value_are_equal() -> None:

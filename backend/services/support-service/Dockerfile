@@ -14,7 +14,7 @@ WORKDIR /srv
 COPY --from=builder /srv/services/support-service/.venv /srv/.venv
 ENV PATH="/srv/.venv/bin:$PATH"
 
-# main.py и uvicorn как зависимость появятся вместе с доменным кодом сервиса —
-# до этого момента CMD ниже нерабочий (это ожидаемо для каркасного тикета #74).
+# The scaffold exposes the canonical presentation entrypoint until the
+# support-specific HTTP surface is implemented.
 EXPOSE 8000
-CMD ["uvicorn", "support.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "presentation.main:app", "--host", "0.0.0.0", "--port", "8000"]

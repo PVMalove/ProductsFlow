@@ -1,7 +1,7 @@
-from identity.application.user_repository import UserRepository
-from identity.domain.email import Email
-from identity.domain.user import User
-from identity.domain.user_id import UserId
+from application.user_repository import UserRepository
+from domain.email import Email
+from domain.user import User
+from domain.user_id import UserId
 
 
 class FakeUserRepository(UserRepository):

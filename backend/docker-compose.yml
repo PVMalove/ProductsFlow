@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: services/identity-service/Dockerfile
     container_name: identity-worker
-    command: ["python", "-m", "identity.worker"]
+    command: ["python", "-m", "presentation.worker"]
     environment:
       APP_ENV: ${APP_ENV}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}

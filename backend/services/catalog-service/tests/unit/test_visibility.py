@@ -1,9 +1,9 @@
 import uuid
 
-from catalog.domain.product import Product
-from catalog.domain.product_id import ProductId
-from catalog.domain.viewer import Viewer
-from catalog.domain.visibility import ProductVisibilityPolicy
+from domain.product import Product
+from domain.product_id import ProductId
+from domain.viewer import Viewer
+from domain.visibility import ProductVisibilityPolicy
 
 OWNER_ID = uuid.uuid4()
 OTHER_ID = uuid.uuid4()

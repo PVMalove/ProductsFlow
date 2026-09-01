@@ -1,0 +1,8 @@
+name: identity-service
+on:
+  workflow_dispatch:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Use the repository CI workflow for the full matrix."

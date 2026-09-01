@@ -1,8 +1,8 @@
-from identity.domain.email import Email
-from identity.domain.events import Activated, Deactivated
-from identity.domain.role import Role
-from identity.domain.user import User
-from identity.domain.user_id import UserId
+from domain.email import Email
+from domain.events import Activated, Deactivated
+from domain.role import Role
+from domain.user import User
+from domain.user_id import UserId
 
 
 def _user(*, is_active: bool) -> User:
