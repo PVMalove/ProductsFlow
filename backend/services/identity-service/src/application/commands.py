@@ -104,7 +104,10 @@ class ChangePasswordCommandHandler:
         if password.is_err:
             return Result.fail(password.error)
         result = user.change_password(self._password_hasher.hash(password.value.value))
-        return Result.fail(result.error) if result.is_err else Result.ok(user)
+        if result.is_err:
+            return Result.fail(result.error)
+        self._users.save(user)
+        return Result.ok(user)
 
 
 @dataclass(frozen=True)

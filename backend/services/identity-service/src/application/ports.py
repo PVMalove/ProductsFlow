@@ -1,32 +1,32 @@
 """Application ports used to keep identity command and query sides separate."""
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from domain.email import Email
-from domain.user import User
+from domain.repositories import UserRepository
+from domain.role import Role
 from domain.user_id import UserId
+
+
+@dataclass(frozen=True)
+class UserReadModel:
+    """Immutable projection returned by the identity read side."""
+
+    id: UserId
+    email: Email
+    role: Role
+    is_active: bool
 
 
 class UserQueryPort(Protocol):
     """Read-only access to the identity read model."""
 
-    def get_by_id(self, user_id: UserId) -> User | None: ...
-
-    def get_by_email(self, email: Email) -> User | None: ...
+    def get_by_id(self, user_id: UserId) -> UserReadModel | None: ...
 
 
-class UserCommandPort(Protocol):
-    """Persistence boundary required by identity command handlers."""
-
-    def exists_by_email(self, email: Email) -> bool: ...
-
-    def get_by_email(self, email: Email) -> User | None: ...
-
-    def get_by_id(self, user_id: UserId) -> User | None: ...
-
-    def add(self, user: User) -> None: ...
-
-    def save(self, user: User) -> None: ...
+class UserCommandPort(UserRepository, Protocol):
+    """Command-side view of the domain-owned user repository contract."""
 
 
 class PasswordHasher(Protocol):

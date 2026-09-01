@@ -1,9 +1,25 @@
 from application.commands import ActivateUserCommand, ActivateUserCommandHandler
+from application.ports import UserReadModel
 from application.queries import GetUserQuery, GetUserQueryHandler
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.user_id import UserId
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
+
+
+class ReadOnlyUserProjection:
+    def __init__(self, repository: FakeUserRepository) -> None:
+        self._repository = repository
+
+    def get_by_id(self, user_id: UserId) -> UserReadModel | None:
+        user = self._repository.get_by_id(user_id)
+        return (
+            None
+            if user is None
+            else UserReadModel(
+                id=user.id, email=user.email, role=user.role, is_active=user.is_active
+            )
+        )
 
 
 def test_get_user_query_reads_through_a_read_handler() -> None:
@@ -12,16 +28,21 @@ def test_get_user_query_reads_through_a_read_handler() -> None:
         RegisterUserCommand("user@example.com", "password1")
     )
 
-    result = GetUserQueryHandler(repository).handle(GetUserQuery(registered.value.id))
+    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).handle(
+        GetUserQuery(registered.value.id)
+    )
 
     assert result.is_ok
-    assert result.value is registered.value
+    assert result.value.id == registered.value.id
+    assert result.value.is_active is True
 
 
 def test_get_user_query_returns_not_found_without_mutating_the_repository() -> None:
     repository = FakeUserRepository()
 
-    result = GetUserQueryHandler(repository).handle(GetUserQuery(UserId.generate()))
+    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).handle(
+        GetUserQuery(UserId.generate())
+    )
 
     assert result.is_err
     assert result.error.code == "user_not_found"

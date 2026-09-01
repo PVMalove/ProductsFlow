@@ -5,8 +5,7 @@ from dataclasses import dataclass
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from application.ports import UserQueryPort
-from domain.user import User
+from application.ports import UserQueryPort, UserReadModel
 from domain.user_id import UserId
 
 
@@ -19,9 +18,9 @@ class GetUserQueryHandler:
     def __init__(self, users: UserQueryPort) -> None:
         self._users = users
 
-    def handle(self, query: GetUserQuery) -> Result[User]:
-        user = self._users.get_by_id(query.user_id)
-        if user is None:
+    def handle(self, query: GetUserQuery) -> Result[UserReadModel]:
+        read_model = self._users.get_by_id(query.user_id)
+        if read_model is None:
             return Result.fail(
                 Error(
                     code="user_not_found",
@@ -29,4 +28,4 @@ class GetUserQueryHandler:
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(user)
+        return Result.ok(read_model)
