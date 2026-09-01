@@ -4,6 +4,18 @@ from datetime import datetime, timezone
 import pytest
 from kernel_domain.result import Result
 
+from application.commands import (
+    ActivateProductCommand,
+    ActivateProductCommandHandler,
+    CreateProductCommand,
+    CreateProductCommandHandler,
+    DeactivateProductCommand,
+    DeactivateProductCommandHandler,
+    DeleteProductCommand,
+    DeleteProductCommandHandler,
+    UpdateProductCommand,
+    UpdateProductCommandHandler,
+)
 from application.errors import ProductAccessDeniedError, ProductNotFoundError
 from application.ports import (
     Actor,
@@ -12,15 +24,13 @@ from application.ports import (
     ProductAuditAction,
     ProductAuditEntry,
 )
-from application.product_use_cases import (
-    ActivateProduct,
-    CreateProduct,
-    DeactivateProduct,
-    DeleteProduct,
-    GetProduct,
-    GetProductAudit,
-    ListProducts,
-    UpdateProduct,
+from application.queries import (
+    GetProductAuditQuery,
+    GetProductAuditQueryHandler,
+    GetProductQuery,
+    GetProductQueryHandler,
+    ListProductsQuery,
+    ListProductsQueryHandler,
 )
 from domain.product import Product
 from domain.product_id import ProductId
@@ -155,10 +165,16 @@ def _dependencies(
 
 async def test_create_product_seeds_owner_before_creating() -> None:
     repo, owners, identity = _dependencies(product=_product())
-    use_case = CreateProduct(repo, owners, identity)
+    handler = CreateProductCommandHandler(repo, owners, identity)
 
-    result = await use_case.execute(
-        actor=_actor(), name="Товар", description="", price=10.0, category="Категория"
+    result = await handler.handle(
+        CreateProductCommand(
+            actor=_actor(),
+            name="Товар",
+            description="",
+            price=10.0,
+            category="Категория",
+        )
     )
 
     assert result.is_ok
@@ -179,10 +195,12 @@ async def test_get_product_denies_inactive_owner_to_other_viewer() -> None:
         product=product,
         owner=OwnerSnapshot(OWNER_ID, "user", False, 1),
     )
-    use_case = GetProduct(repo, owners, identity)
+    handler = GetProductQueryHandler(repo, owners, identity)
 
     with pytest.raises(ProductNotFoundError):
-        await use_case.execute(product.id.value, actor=_actor(OTHER_ID))
+        await handler.handle(
+            GetProductQuery(product_id=product.id.value, actor=_actor(OTHER_ID))
+        )
 
 
 async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
@@ -190,15 +208,17 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    use_case = UpdateProduct(repo, identity)
+    handler = UpdateProductCommandHandler(repo, identity)
 
-    result = await use_case.execute(
-        product.id.value,
-        actor=_actor(),
-        name=None,
-        description=None,
-        price=42.0,
-        category=None,
+    result = await handler.handle(
+        UpdateProductCommand(
+            product_id=product.id.value,
+            actor=_actor(),
+            name=None,
+            description=None,
+            price=42.0,
+            category=None,
+        )
     )
 
     assert result.is_ok
@@ -215,10 +235,12 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     repo, owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    use_case = DeleteProduct(repo, identity)
+    handler = DeleteProductCommandHandler(repo, identity)
 
     with pytest.raises(ProductAccessDeniedError):
-        await use_case.execute(product.id.value, actor=_actor(OTHER_ID))
+        await handler.handle(
+            DeleteProductCommand(product_id=product.id.value, actor=_actor(OTHER_ID))
+        )
 
     assert repo.deleted is False
     assert owners.upserts == []
@@ -232,14 +254,20 @@ async def test_remaining_use_cases_delegate_to_repository_and_audit_port() -> No
     actor = _actor()
 
     assert (
-        await ActivateProduct(repo, identity).execute(product.id.value, actor=actor)
+        await ActivateProductCommandHandler(repo, identity).handle(
+            ActivateProductCommand(product_id=product.id.value, actor=actor)
+        )
     ).is_ok
     assert (
-        await DeactivateProduct(repo, identity).execute(product.id.value, actor=actor)
+        await DeactivateProductCommandHandler(repo, identity).handle(
+            DeactivateProductCommand(product_id=product.id.value, actor=actor)
+        )
     ).is_ok
-    page = await ListProducts(repo).execute(limit=20, after=None, before=None)
-    audit = await GetProductAudit(repo, FakeAuditReader(), identity).execute(
-        product.id.value, actor=actor
+    page = await ListProductsQueryHandler(repo).handle(
+        ListProductsQuery(limit=20, after=None, before=None)
+    )
+    audit = await GetProductAuditQueryHandler(repo, FakeAuditReader(), identity).handle(
+        GetProductAuditQuery(product_id=product.id.value, actor=actor)
     )
 
     assert page.items == [product]

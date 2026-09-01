@@ -8,7 +8,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.pagination import encode_cursor
-from application.ports import ProductAuditAction
+from application.ports import (
+    ProductAuditAction,
+    ProductCommandPort,
+    ProductQueryPort,
+)
 from domain.events import (
     ProductActivated,
     ProductCreated,
@@ -361,3 +365,5 @@ class ProductRepository:
 # Static structural check: mypy verifies that the concrete implementation
 # satisfies every operation required by the domain repository contract.
 _product_repository_implementation: type[ProductRepositoryPort] = ProductRepository
+_product_command_port_implementation: type[ProductCommandPort] = ProductRepository
+_product_query_port_implementation: type[ProductQueryPort] = ProductRepository

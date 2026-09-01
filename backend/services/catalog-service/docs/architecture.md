@@ -1,14 +1,18 @@
 # Architecture
 
 `api` owns HTTP entrypoints, schemas, and the FastAPI composition
-root. Product HTTP handlers only translate requests and responses; the eight
-product use cases live in `src/application/product_use_cases.py`:
-`CreateProduct`, `ListProducts`, `GetProduct`, `UpdateProduct`,
-`ActivateProduct`, `DeactivateProduct`, `DeleteProduct`, and
-`GetProductAudit`.
+root. Product HTTP handlers only translate requests and responses. Product
+commands live one-per-operation under `src/application/commands/` and product
+queries live one-per-operation under `src/application/queries/`. Each operation
+has an immutable DTO and a dedicated handler with a `handle()` entrypoint.
+The former `product_use_cases.py` and `product_image_use_cases.py` compatibility
+modules were removed after the CQRS migration. Callers use the public command
+and query package facades directly.
 
-Application code depends on `ProductRepository` from `domain.repositories` and
-on explicit ports for the owner read model, identity lookup, and audit reads.
+Application code depends on explicit command/query ports for product access and
+on ports for the owner read model, identity lookup, image storage, and audit
+reads. Command handlers own mutations and query handlers own visibility,
+pagination, audit, and image reads.
 `ProductVisibilityPolicy` remains in `domain`. SQLAlchemy implementations are
 assembled only in `api/dependencies.py`, while `api` maps
 application errors to the unchanged HTTP status and response contract.
