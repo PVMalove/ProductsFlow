@@ -1,6 +1,6 @@
 import uuid
 
-from identity.domain.user_id import UserId
+from domain.user_id import UserId
 
 
 def test_user_ids_with_the_same_value_are_equal() -> None:

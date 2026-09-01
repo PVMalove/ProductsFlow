@@ -1,7 +1,7 @@
 from kernel_domain.errors import ErrorType
 
-from identity.application.login import LoginCommand
-from identity.application.register_user import RegisterUserCommand
+from application.login import LoginCommand
+from application.register_user import RegisterUserCommand
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 

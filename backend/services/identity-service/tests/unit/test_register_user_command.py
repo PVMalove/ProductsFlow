@@ -1,7 +1,7 @@
 from kernel_domain.errors import ErrorType
 
-from identity.application.register_user import RegisterUserCommand
-from identity.domain.role import Role
+from application.register_user import RegisterUserCommand
+from domain.role import Role
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 

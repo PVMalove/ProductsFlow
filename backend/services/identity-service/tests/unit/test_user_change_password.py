@@ -1,10 +1,10 @@
 from kernel_domain.errors import ErrorType
 
-from identity.domain.email import Email
-from identity.domain.events import PasswordChanged
-from identity.domain.role import Role
-from identity.domain.user import User
-from identity.domain.user_id import UserId
+from domain.email import Email
+from domain.events import PasswordChanged
+from domain.role import Role
+from domain.user import User
+from domain.user_id import UserId
 
 
 def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -> None:

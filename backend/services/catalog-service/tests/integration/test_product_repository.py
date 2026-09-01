@@ -5,11 +5,11 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from catalog.domain.product_id import ProductId
-from catalog.infrastructure.db.audit import ProductAuditLog
-from catalog.infrastructure.db.owner_read_model import upsert_owner_read_model
-from catalog.infrastructure.db.pagination import decode_cursor
-from catalog.infrastructure.db.product_repository import ProductRepository
+from domain.product_id import ProductId
+from infrastructure.db.audit import ProductAuditLog
+from infrastructure.db.owner_read_model import upsert_owner_read_model
+from infrastructure.db.pagination import decode_cursor
+from infrastructure.db.product_repository import ProductRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from identity.infrastructure.security.keys import compute_kid, load_private_key
-from identity.main import app
-from identity.settings import settings
+from core.secrets import compute_kid, load_private_key
+from core.settings import settings
+from presentation.main import app
 
 pytestmark = pytest.mark.usefixtures("configured_key_path")
 

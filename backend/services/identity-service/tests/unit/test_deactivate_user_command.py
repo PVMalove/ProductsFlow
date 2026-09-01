@@ -1,8 +1,8 @@
 from kernel_domain.errors import ErrorType
 
-from identity.application.deactivate_user import DeactivateUserCommand
-from identity.application.register_user import RegisterUserCommand
-from identity.domain.events import Deactivated
+from application.deactivate_user import DeactivateUserCommand
+from application.register_user import RegisterUserCommand
+from domain.events import Deactivated
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 

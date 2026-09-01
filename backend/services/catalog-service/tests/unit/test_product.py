@@ -2,15 +2,15 @@ import uuid
 
 from kernel_domain.errors import ErrorType
 
-from catalog.domain.events import (
+from domain.events import (
     ProductActivated,
     ProductCreated,
     ProductDeactivated,
     ProductDeleted,
     ProductUpdated,
 )
-from catalog.domain.product import Product
-from catalog.domain.product_id import ProductId
+from domain.product import Product
+from domain.product_id import ProductId
 
 
 def _create(**overrides: object) -> Product:

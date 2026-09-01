@@ -1,6 +1,6 @@
 from kernel_domain.errors import ErrorType
 
-from identity.domain.raw_password import RawPassword
+from domain.raw_password import RawPassword
 
 
 def test_raw_passwords_with_the_same_value_are_equal() -> None:

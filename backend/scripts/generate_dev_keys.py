@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from identity.infrastructure.security.keys import generate_private_key_pem
+from core.secrets import generate_private_key_pem
 
 _SECRETS_DIR = Path(__file__).resolve().parent.parent / "secrets"
 OUTPUT_PATH = _SECRETS_DIR / "identity_jwt_private_key.pem"

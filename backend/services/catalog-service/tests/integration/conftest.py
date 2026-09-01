@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 # Импорт регистрирует ProductModel/ProductAuditLog на общем Base.metadata
 # (тот же Base, что и kernel_platform.OutboxMessage) — сам модуль напрямую
 # не используется, только его сторонний эффект на импорте.
-from catalog.infrastructure import db as _db  # noqa: F401
-from catalog.infrastructure.db.session import get_db_session
-from catalog.infrastructure.security.auth import get_identity_gateway
+from infrastructure import db as _db  # noqa: F401
+from infrastructure.db.session import get_db_session
+from infrastructure.security.auth import get_identity_gateway
 from tests.integration.fake_identity_gateway import FakeIdentityGateway
 
 
@@ -42,7 +42,7 @@ async def catalog_client(
     """ASGI-тестклиент (ADR 0018, Seam A) поверх настоящего Postgres
     (`db_session`, savepoint на тест) и фейкового `IdentityGateway` —
     HTTP-слой прогоняется целиком, identity-service — нет."""
-    from catalog.main import app
+    from presentation.main import app
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         yield db_session

@@ -3,14 +3,14 @@ from pathlib import Path
 import jwt
 import pytest
 
-from identity.infrastructure.security.keys import compute_kid, load_private_key
-from identity.infrastructure.security.tokens import (
+from core.secrets import compute_kid, load_private_key
+from core.security.tokens import (
     ALGORITHM,
     ISSUER,
     create_access_token,
     decode_access_token,
 )
-from identity.settings import settings
+from core.settings import settings
 from tests.unit.keygen import write_rsa_key_file
 
 pytestmark = pytest.mark.usefixtures("configured_key_path")

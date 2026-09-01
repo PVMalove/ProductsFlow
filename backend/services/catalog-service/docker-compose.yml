@@ -1,0 +1,9 @@
+services:
+  catalog-api:
+    build:
+      context: ../..
+      dockerfile: services/catalog-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL:-}
+      CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL:-http://identity-api:8000}
