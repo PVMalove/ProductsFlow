@@ -1,3 +1,4 @@
+# ruff: noqa: I001 — Alembic's generated environment keeps adapter imports grouped.
 import asyncio
 
 from kernel_platform.outbox.models import Base
