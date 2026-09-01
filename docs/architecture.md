@@ -20,24 +20,24 @@
 ## Структура сервиса
 
 ```text
-backend/services/<service>/              # independently deployable project
+backend/services/<service>/              # независимо разворачиваемый сервис
   src/
-    application/                         # use case, commands/queries, ports
+    application/                         # use case, команды/запросы, порты
       ports/
     domain/                              # модель bounded context
       events/
-    infrastructure/                      # SQLAlchemy, AMQP, HTTP/S3 adapters
-    presentation/                        # FastAPI/AMQP adapters and DI wiring
-      api/
-        routes/
-        schemas/
+    infrastructure/                      # SQLAlchemy, AMQP, HTTP/S3-адаптеры
+    presentation/                        # FastAPI/AMQP-адаптеры и DI wiring
+      routes/
+      schemas/
+      dependencies.py
       main.py
-    core/                                # service-wide cross-cutting policy
+    core/                                # кросс-срезная политика сервиса
       feature_flags.py
       resilience.py
       secrets.py
       rate_limiter.py
-    common/                              # local constants and small utilities
+    common/                              # локальные константы и утилиты
   tests/
     unit/
     integration/
@@ -92,7 +92,7 @@ HTTP / AMQP adapter (presentation) ──> application ──> domain
   application и domain, но её конкретные классы не должны быть типами в
   use case.
 - `presentation` преобразует HTTP/AMQP во входные данные сценария и результат
-  — в HTTP/сообщение. В `presentation/api/dependencies.py` или равнозначной
+  — в HTTP/сообщение. В `presentation/dependencies.py` или равнозначной
   DI-фабрике на внешней границе допустимо создать конкретный инфраструктурный
   адаптер и вернуть его как application-порт; в самом роуте этого импорта и
   бизнес-оркестрации быть не должно.

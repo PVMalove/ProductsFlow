@@ -36,8 +36,7 @@ presentation, помещает interfaces рядом с application и прим�
   FastAPI, SQLAlchemy, AMQP, HTTP-клиенты или application.
 - `application/` владеет use case: command/query data, handler-ами и
   `Protocol`-портами, которые нужны этим handler-ам. Порты располагаются в
-  `application/ports/` (либо временно в осмысленном модуле
-  `application/<port>.py`, пока отдельный каталог не окупается).
+  `application/ports/`.
 - `infrastructure/` реализует application-порты и владеет SQLAlchemy,
   транзакциями, внешними API, брокером и хранилищем.
 - `presentation/` — внешний адаптер: преобразует HTTP/AMQP во входные данные
@@ -90,7 +89,7 @@ handler-а не меняет сигнатуру ради единообрази�
 - Issues #156–#160 должны быть пересмотрены: общая CQRS-библиотека исключается,
   порты #159/#160 принадлежат application, а #157/#158 используют локальные
   handler-ы без базового Protocol.
-- `presentation/api/routes/products.py` постепенно становится тонким адаптером. Его
+- `presentation/routes/products.py` постепенно становится тонким адаптером. Его
   текущие вызовы `AsyncSession`, repository, owner read model и identity
   переносятся за application-порты в handler-ы; HTTP-контракт не меняется.
 - Новые shared-абстракции всё ещё требуют двух подтверждённых потребителей по
