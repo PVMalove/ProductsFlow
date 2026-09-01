@@ -1,7 +1,7 @@
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from application.user_repository import UserRepository
+from domain.repositories import UserRepository
 from domain.user import User
 from domain.user_id import UserId
 
