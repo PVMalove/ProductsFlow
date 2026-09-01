@@ -3,9 +3,9 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from application.ports import ProductAuditAction, ProductAuditEntry
 from domain.product import Product
-from infrastructure.db.audit import ProductAuditAction, ProductAuditLog
-from infrastructure.db.pagination import PageInfo, ProductPage
+from domain.repositories import PageInfo, ProductPage
 
 
 class ProductCreateRequest(BaseModel):
@@ -85,7 +85,7 @@ class ProductAuditLogResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_row(cls, row: ProductAuditLog) -> "ProductAuditLogResponse":
+    def from_entry(cls, row: ProductAuditEntry) -> "ProductAuditLogResponse":
         return cls(
             id=row.id,
             product_id=row.product_id,

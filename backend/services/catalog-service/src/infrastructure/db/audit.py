@@ -1,4 +1,3 @@
-import enum
 from datetime import datetime
 
 from kernel_platform.outbox.models import Base
@@ -8,15 +7,12 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
+from application.ports import (
+    ProductAuditAction,
+    ProductAuditEntry,
+    ProductAuditReader,
+)
 from infrastructure.db.models import ProductModel
-
-
-class ProductAuditAction(enum.StrEnum):
-    CREATED = "created"
-    UPDATED = "updated"
-    DELETED = "deleted"
-    ACTIVATED = "activated"
-    DEACTIVATED = "deactivated"
 
 
 class ProductAuditLog(Base):
@@ -129,3 +125,27 @@ async def get_audit_logs_by_product(
         .order_by(ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc())
     )
     return list(rows.all())
+
+
+class SqlProductAuditReader:
+    """SQL adapter for the application audit-reader port."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_product(self, product_id: int) -> list[ProductAuditEntry]:
+        rows = await get_audit_logs_by_product(self._session, product_id)
+        return [
+            ProductAuditEntry(
+                id=row.id,
+                product_id=row.product_id,
+                actor_user_id=row.actor_user_id,
+                action=ProductAuditAction(str(row.action)),
+                description=row.description,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+
+_product_audit_reader_implementation: type[ProductAuditReader] = SqlProductAuditReader

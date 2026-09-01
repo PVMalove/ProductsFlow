@@ -2,12 +2,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from kernel_platform.security.identity_client import IdentityClient
 from observability.middleware import RequestContextMiddleware
 
+from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
+from presentation.errors import to_http_exception
 from presentation.products import router as products_router
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
@@ -31,5 +34,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(ApplicationError)
+async def application_error_handler(
+    _request: Request, exc: ApplicationError
+) -> JSONResponse:
+    error = to_http_exception(exc)
+    content = {"detail": error.detail}
+    return JSONResponse(status_code=error.status_code, content=content)
+
+
 app.add_middleware(RequestContextMiddleware, verifier=_identity_client)
 app.include_router(products_router)

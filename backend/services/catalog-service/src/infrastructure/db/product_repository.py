@@ -6,6 +6,7 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.pagination import encode_cursor
 from domain.events import (
     ProductActivated,
     ProductCreated,
@@ -26,7 +27,7 @@ from domain.repositories import (
 )
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
-from infrastructure.db.pagination import encode_cursor
+
 
 _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
