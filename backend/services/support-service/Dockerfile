@@ -4,6 +4,8 @@ WORKDIR /srv
 COPY services/support-service/pyproject.toml services/support-service/uv.lock services/support-service/
 COPY libs/kernel-domain /srv/libs/kernel-domain
 COPY libs/kernel-platform /srv/libs/kernel-platform
+# uv resolves path sources even when the dependency is excluded by --no-dev.
+COPY libs/test-support/pyproject.toml libs/test-support/pyproject.toml
 WORKDIR /srv/services/support-service
 RUN uv sync --locked --no-dev --no-install-project
 
