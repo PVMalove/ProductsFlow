@@ -28,7 +28,7 @@ class ProductUpdateRequest(BaseModel):
 
 
 class ProductResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     name: str
     description: str
     price: float
@@ -79,7 +79,7 @@ class ProductListResponse(BaseModel):
 
 class ProductAuditLogResponse(BaseModel):
     id: int
-    product_id: int
+    product_id: uuid.UUID
     actor_user_id: uuid.UUID | None
     action: ProductAuditAction
     description: str

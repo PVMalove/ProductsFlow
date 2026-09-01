@@ -29,7 +29,9 @@ class ProductModel(Base):
         Index("ix_products_is_active_created_at_id", "is_active", "created_at", "id"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(100))
     category: Mapped[str] = mapped_column(String(100))
     price: Mapped[float]
@@ -43,8 +45,8 @@ class ProductImageModel(Base):
     __tablename__ = "product_images"
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    product_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("products.id", ondelete="CASCADE"), unique=True
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), unique=True
     )
     s3_key: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(100))

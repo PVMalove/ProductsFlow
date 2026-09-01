@@ -18,6 +18,7 @@ _PRODUCT_PAYLOAD = {
     "price": 9.99,
     "category": "Категория",
 }
+_UNKNOWN_PRODUCT_ID = uuid.uuid4()
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -107,7 +108,7 @@ async def test_create_product_rejects_invalid_payload(
 async def test_get_unknown_product_returns_404(
     catalog_client: httpx.AsyncClient,
 ) -> None:
-    response = await catalog_client.get("/api/v1/products/999999999")
+    response = await catalog_client.get(f"/api/v1/products/{_UNKNOWN_PRODUCT_ID}")
     assert response.status_code == 404
 
 

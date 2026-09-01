@@ -1,4 +1,5 @@
 import base64
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -14,9 +15,10 @@ from infrastructure.db.pagination import (
 def test_encode_decode_roundtrip() -> None:
     created_at = datetime(2026, 8, 30, 12, 0, 0, tzinfo=UTC)
 
-    token = encode_cursor(created_at, 42)
+    product_id = uuid.uuid4()
+    token = encode_cursor(created_at, product_id)
 
-    assert decode_cursor(token) == Cursor(created_at=created_at, id=42)
+    assert decode_cursor(token) == Cursor(created_at=created_at, id=product_id)
 
 
 def test_decode_invalid_base64_raises_invalid_cursor_error() -> None:

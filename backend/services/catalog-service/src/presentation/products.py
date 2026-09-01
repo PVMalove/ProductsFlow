@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from application.pagination import (
@@ -72,7 +74,7 @@ async def list_products(
 
 @router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: OptionalAuth,
     use_case: GetProductDI,
 ) -> ProductResponse:
@@ -84,7 +86,7 @@ async def get_product(
 
 @router.patch("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def update_product(
-    product_id: int,
+    product_id: uuid.UUID,
     request: ProductUpdateRequest,
     auth: RequiredAuth,
     use_case: UpdateProductDI,
@@ -100,7 +102,7 @@ async def update_product(
 
 @router.patch("/{product_id}/activate", response_model=ProductResponse)
 async def activate_product(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: ActivateProductDI,
 ) -> ProductResponse:
@@ -112,7 +114,7 @@ async def activate_product(
 
 @router.patch("/{product_id}/deactivate", response_model=ProductResponse)
 async def deactivate_product(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: DeactivateProductDI,
 ) -> ProductResponse:
@@ -124,7 +126,7 @@ async def deactivate_product(
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: DeleteProductDI,
 ) -> None:
@@ -133,7 +135,7 @@ async def delete_product(
 
 @router.get("/{product_id}/audit", response_model=list[ProductAuditLogResponse])
 async def get_product_audit(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: GetProductAuditDI,
 ) -> list[ProductAuditLogResponse]:

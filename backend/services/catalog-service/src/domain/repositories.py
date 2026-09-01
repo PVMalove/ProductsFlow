@@ -15,7 +15,7 @@ class Cursor:
     """Keyset-позиция в списке продуктов."""
 
     created_at: datetime
-    id: int
+    id: uuid.UUID
 
 
 @dataclass(frozen=True)

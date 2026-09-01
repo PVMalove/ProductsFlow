@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -48,7 +49,7 @@ class GetProductImage:
         self._bucket_name = bucket_name
 
     async def execute(
-        self, product_id: int, *, actor: Actor | None
+        self, product_id: uuid.UUID, *, actor: Actor | None
     ) -> ProductImageView:
         product = await self._product_reader.execute(product_id, actor=actor)
         image = await self._repository.get_product_image(product.id)
@@ -72,7 +73,7 @@ class UpsertProductImage:
 
     async def execute(
         self,
-        product_id: int,
+        product_id: uuid.UUID,
         *,
         actor: Actor,
         body: bytes,
@@ -117,7 +118,7 @@ class DeleteProductImage:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def execute(self, product_id: int, *, actor: Actor) -> None:
+    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> None:
         product = await _get_product(self._repository, product_id)
         await self._authorizer.require_owner_or_admin(actor, product)
         image = await self._repository.get_product_image(product.id)

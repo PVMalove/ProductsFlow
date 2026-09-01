@@ -13,6 +13,12 @@ from domain.product import Product
 from domain.product_id import ProductId
 
 
+def test_product_id_generate_returns_a_uuid() -> None:
+    product_id = ProductId.generate()
+
+    assert isinstance(product_id.value, uuid.UUID)
+
+
 def _create(**overrides: object) -> Product:
     defaults: dict[str, object] = {
         "name": "Название товара",
@@ -22,7 +28,7 @@ def _create(**overrides: object) -> Product:
         "user_id": uuid.uuid4(),
     }
     defaults.update(overrides)
-    result = Product.create(ProductId(1), **defaults)  # type: ignore[arg-type]
+    result = Product.create(ProductId.generate(), **defaults)  # type: ignore[arg-type]
     assert result.is_ok
     product = result.value
     # ProductCreated проверяется отдельным тестом, здесь очищаем его.
@@ -33,7 +39,7 @@ def _create(**overrides: object) -> Product:
 def test_create_raises_product_created_with_expected_fields() -> None:
     owner_id = uuid.uuid4()
     result = Product.create(
-        ProductId(1),
+        ProductId.generate(),
         name="Название товара",
         description="Описание",
         price=10.0,
@@ -47,7 +53,7 @@ def test_create_raises_product_created_with_expected_fields() -> None:
 
     [event] = product.pull_events()
     assert isinstance(event, ProductCreated)
-    assert event.product_id == ProductId(1)
+    assert event.product_id.value == product.id.value
     assert event.user_id == owner_id
     assert event.name == "Название товара"
     assert event.category == "Категория"
@@ -56,7 +62,7 @@ def test_create_raises_product_created_with_expected_fields() -> None:
 
 def test_create_rejects_too_short_name() -> None:
     result = Product.create(
-        ProductId(1),
+        ProductId.generate(),
         name="ab",
         description="",
         price=10.0,
@@ -71,7 +77,7 @@ def test_create_rejects_too_short_name() -> None:
 
 def test_create_rejects_negative_price() -> None:
     result = Product.create(
-        ProductId(1),
+        ProductId.generate(),
         name="Название товара",
         description="",
         price=-1.0,

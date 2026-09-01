@@ -3,7 +3,7 @@ import uuid
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.result import Result
 from kernel_platform.outbox.models import OutboxMessage
-from sqlalchemy import Select, delete, func, select, text, tuple_
+from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,8 +31,6 @@ from domain.repositories import (
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.models import ProductImageModel, ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
-
-_NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
 # Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:
 # метод `list` (AC issue #148) одноимённый с builtin'ом внутри той же
@@ -79,7 +77,7 @@ def _to_outbox_message(event: DomainEvent) -> OutboxMessage:
     # (Entity не параметризуется по типу события), поэтому здесь нужен явный
     # guard для сужения типа.
     assert isinstance(event, ProductEvent)
-    payload: dict[str, object] = {"product_id": event.product_id.value}
+    payload: dict[str, object] = {"product_id": str(event.product_id.value)}
     if isinstance(event, ProductCreated):
         payload.update(
             user_id=str(event.user_id),
@@ -116,10 +114,8 @@ class ProductRepository:
         category: str,
         user_id: uuid.UUID,
     ) -> Result[Product]:
-        next_id = await self.session.scalar(_NEXT_PRODUCT_ID)
-        assert next_id is not None
         result = Product.create(
-            ProductId(next_id),
+            ProductId.generate(),
             name=name,
             description=description,
             price=price,

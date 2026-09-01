@@ -1,3 +1,5 @@
+import uuid
+
 from kernel_domain.result import Result
 
 from application.authorization import ProductAuthorizer
@@ -82,7 +84,7 @@ class GetProduct:
         self._authorizer = ProductAuthorizer(identity)
         self._visibility = ProductVisibilityPolicy()
 
-    async def execute(self, product_id: int, *, actor: Actor | None) -> Product:
+    async def execute(self, product_id: uuid.UUID, *, actor: Actor | None) -> Product:
         product = await self._repository.get_by_id(ProductId(product_id))
         if product is None:
             raise ProductNotFoundError
@@ -120,7 +122,7 @@ class UpdateProduct:
 
     async def execute(
         self,
-        product_id: int,
+        product_id: uuid.UUID,
         *,
         actor: Actor,
         name: str | None = None,
@@ -149,7 +151,7 @@ class ActivateProduct:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, product_id: int, *, actor: Actor) -> Result[Product]:
+    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> Result[Product]:
         product = await _get_product(self._repository, product_id)
         await self._authorizer.require_owner_or_admin(actor, product)
         result = await self._repository.activate(product.id)
@@ -165,7 +167,7 @@ class DeactivateProduct:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, product_id: int, *, actor: Actor) -> Result[Product]:
+    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> Result[Product]:
         product = await _get_product(self._repository, product_id)
         await self._authorizer.require_owner_or_admin(actor, product)
         result = await self._repository.deactivate(product.id)
@@ -181,7 +183,7 @@ class DeleteProduct:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, product_id: int, *, actor: Actor) -> Product:
+    async def execute(self, product_id: uuid.UUID, *, actor: Actor) -> Product:
         product = await _get_product(self._repository, product_id)
         await self._authorizer.require_owner_or_admin(actor, product)
         deleted = await self._repository.delete(product.id)
@@ -202,7 +204,7 @@ class GetProductAudit:
         self._authorizer = ProductAuthorizer(identity)
 
     async def execute(
-        self, product_id: int, *, actor: Actor
+        self, product_id: uuid.UUID, *, actor: Actor
     ) -> list[ProductAuditEntry]:
         product = await self._repository.get_by_id(ProductId(product_id))
         entries = await self._audit_reader.get_by_product(product_id)
@@ -216,7 +218,7 @@ class GetProductAudit:
         return entries
 
 
-async def _get_product(repository: ProductRepository, product_id: int) -> Product:
+async def _get_product(repository: ProductRepository, product_id: uuid.UUID) -> Product:
     product = await repository.get_by_id(ProductId(product_id))
     if product is None:
         raise ProductNotFoundError

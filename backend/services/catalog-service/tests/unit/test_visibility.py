@@ -11,7 +11,7 @@ OTHER_ID = uuid.uuid4()
 
 def _product(*, is_active: bool) -> Product:
     result = Product.create(
-        ProductId(1),
+        ProductId.generate(),
         name="Название товара",
         description="Описание",
         price=10.0,
