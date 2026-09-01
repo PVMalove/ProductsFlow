@@ -5,7 +5,7 @@ from scripts.check_architecture import scan
 BACKEND = Path(__file__).parents[2]
 
 
-def test_scan_reports_currently_mixed_application_modules() -> None:
+def test_scan_reports_remaining_mixed_application_module() -> None:
     findings = scan(BACKEND)
 
     mixed = {
@@ -14,11 +14,7 @@ def test_scan_reports_currently_mixed_application_modules() -> None:
         if finding.rule == "mixed-use-case-module"
     }
 
-    assert {
-        "services/catalog-service/src/application/product_use_cases.py",
-        "services/catalog-service/src/application/product_image_use_cases.py",
-        "services/support-service/src/application/ticket_use_cases.py",
-    } <= mixed
+    assert mixed == {"services/support-service/src/application/ticket_use_cases.py"}
 
 
 def test_scan_marks_forbidden_layer_imports_as_blocking(tmp_path: Path) -> None:
