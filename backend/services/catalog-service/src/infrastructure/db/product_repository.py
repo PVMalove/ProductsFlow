@@ -3,10 +3,12 @@ import uuid
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.result import Result
 from kernel_platform.outbox.models import OutboxMessage
-from sqlalchemy import Select, select, text, tuple_
+from sqlalchemy import Select, delete, func, select, text, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.pagination import encode_cursor
+from application.ports import ProductAuditAction
 from domain.events import (
     ProductActivated,
     ProductCreated,
@@ -17,6 +19,7 @@ from domain.events import (
 )
 from domain.product import Product
 from domain.product_id import ProductId
+from domain.product_image import ProductImage
 from domain.repositories import (
     Cursor,
     PageInfo,
@@ -25,9 +28,9 @@ from domain.repositories import (
 from domain.repositories import (
     ProductRepository as ProductRepositoryPort,
 )
-from infrastructure.db.models import ProductModel
+from infrastructure.db.audit import ProductAuditLog
+from infrastructure.db.models import ProductImageModel, ProductModel
 from infrastructure.db.owner_read_model import OwnerReadModelRow
-
 
 _NEXT_PRODUCT_ID = text("SELECT nextval(pg_get_serial_sequence('products', 'id'))")
 
@@ -56,6 +59,17 @@ def _to_domain(row: ProductModel) -> Product:
         category=row.category,
         user_id=row.user_id,
         is_active=row.is_active,
+    )
+
+
+def _to_image_domain(row: ProductImageModel) -> ProductImage:
+    return ProductImage(
+        product_id=ProductId(row.product_id),
+        s3_key=row.s3_key,
+        content_type=row.content_type,
+        size_bytes=row.size_bytes,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -194,6 +208,72 @@ class ProductRepository:
         await self.session.delete(row)
         await self.session.commit()
         return product
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None:
+        row = await self.session.scalar(
+            select(ProductImageModel).where(
+                ProductImageModel.product_id == product_id.value
+            )
+        )
+        return _to_image_domain(row) if row is not None else None
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        *,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: uuid.UUID,
+    ) -> ProductImage:
+        insert_stmt = pg_insert(ProductImageModel).values(
+            product_id=product_id.value,
+            s3_key=s3_key,
+            content_type=content_type,
+            size_bytes=size_bytes,
+        )
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[ProductImageModel.product_id],
+            set_={
+                "s3_key": insert_stmt.excluded.s3_key,
+                "content_type": insert_stmt.excluded.content_type,
+                "size_bytes": insert_stmt.excluded.size_bytes,
+                "updated_at": func.now(),
+            },
+        ).returning(ProductImageModel)
+        row = (await self.session.execute(upsert_stmt)).scalar_one()
+        image = _to_image_domain(row)
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_UPDATED,
+                product_id=product_id.value,
+                actor_user_id=str(actor_user_id),
+                description=(
+                    f"Загружена картинка товара (content_type={content_type}, "
+                    f"size_bytes={size_bytes})"
+                ),
+            )
+        )
+        await self.session.commit()
+        return image
+
+    async def delete_product_image(
+        self, product_id: ProductId, *, actor_user_id: uuid.UUID
+    ) -> None:
+        await self.session.execute(
+            delete(ProductImageModel).where(
+                ProductImageModel.product_id == product_id.value
+            )
+        )
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_DELETED,
+                product_id=product_id.value,
+                actor_user_id=str(actor_user_id),
+                description="Удалена картинка товара",
+            )
+        )
+        await self.session.commit()
 
     async def list(
         self,

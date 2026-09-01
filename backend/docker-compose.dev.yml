@@ -12,6 +12,8 @@ services:
   catalog-api:
     environment:
       APP_ENV: dev
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9002
     ports:
       - "9011:8000"
 
@@ -20,3 +22,8 @@ services:
       APP_ENV: dev
     ports:
       - "9012:8000"
+
+  minio:
+    ports:
+      - "9002:9000"
+      - "9003:9001"

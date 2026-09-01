@@ -10,6 +10,11 @@ from application.ports import (
 from application.ports import (
     IdentityGateway as ApplicationIdentityGateway,
 )
+from application.product_image_use_cases import (
+    DeleteProductImage,
+    GetProductImage,
+    UpsertProductImage,
+)
 from application.product_use_cases import (
     ActivateProduct,
     CreateProduct,
@@ -20,6 +25,7 @@ from application.product_use_cases import (
     ListProducts,
     UpdateProduct,
 )
+from core.settings import settings
 from domain.repositories import ProductRepository
 from infrastructure.db.audit import SqlProductAuditReader
 from infrastructure.db.owner_read_model import SqlOwnerReadModel
@@ -34,6 +40,7 @@ from infrastructure.security.auth import (
     OptionalAuth,
     RequiredAuth,
 )
+from infrastructure.storage import StorageDI
 
 
 def get_product_repository(session: DbSessionDI) -> ProductRepository:
@@ -150,6 +157,54 @@ def get_product_audit_use_case(
 GetProductAuditDI = Annotated[GetProductAudit, Depends(get_product_audit_use_case)]
 
 
+def get_product_image_use_case(
+    repository: ProductRepositoryDI,
+    owner_read_model: OwnerReadModelDI,
+    identity: ApplicationIdentityGatewayDI,
+    storage: StorageDI,
+) -> GetProductImage:
+    return GetProductImage(
+        repository,
+        owner_read_model,
+        identity,
+        storage,
+        settings.minio_bucket_name_product,
+    )
+
+
+GetProductImageDI = Annotated[GetProductImage, Depends(get_product_image_use_case)]
+
+
+def get_upsert_product_image_use_case(
+    repository: ProductRepositoryDI,
+    identity: ApplicationIdentityGatewayDI,
+    storage: StorageDI,
+) -> UpsertProductImage:
+    return UpsertProductImage(
+        repository, identity, storage, settings.minio_bucket_name_product
+    )
+
+
+UpsertProductImageDI = Annotated[
+    UpsertProductImage, Depends(get_upsert_product_image_use_case)
+]
+
+
+def get_delete_product_image_use_case(
+    repository: ProductRepositoryDI,
+    identity: ApplicationIdentityGatewayDI,
+    storage: StorageDI,
+) -> DeleteProductImage:
+    return DeleteProductImage(
+        repository, identity, storage, settings.minio_bucket_name_product
+    )
+
+
+DeleteProductImageDI = Annotated[
+    DeleteProductImage, Depends(get_delete_product_image_use_case)
+]
+
+
 __all__ = [
     "ActivateProductDI",
     "CreateProductDI",
@@ -157,11 +212,14 @@ __all__ = [
     "DeleteProductDI",
     "GetProductAuditDI",
     "GetProductDI",
+    "GetProductImageDI",
+    "DeleteProductImageDI",
     "ApplicationIdentityGatewayDI",
     "IdentityGatewayDI",
     "ListProductsDI",
     "OptionalAuth",
     "RequiredAuth",
     "UpdateProductDI",
+    "UpsertProductImageDI",
     "to_actor",
 ]

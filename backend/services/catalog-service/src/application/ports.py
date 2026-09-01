@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from domain.product_image import ProductImage
+
 
 @dataclass(frozen=True)
 class Actor:
@@ -40,19 +42,33 @@ class IdentityGateway(Protocol):
     async def fetch_current_user(self, token: str) -> IdentityUser: ...
 
 
+class ProductImageStorage(Protocol):
+    async def put_object(
+        self, bucket_name: str, key: str, body: bytes, content_type: str
+    ) -> None: ...
+
+    async def delete_object(self, bucket_name: str, key: str) -> None: ...
+
+    async def build_presigned_url(
+        self, bucket_name: str, key: str, expires_in: int = 3600
+    ) -> str: ...
+
+
 class ProductAuditAction(enum.StrEnum):
     CREATED = "created"
     UPDATED = "updated"
     DELETED = "deleted"
     ACTIVATED = "activated"
     DEACTIVATED = "deactivated"
+    IMAGE_UPDATED = "image_updated"
+    IMAGE_DELETED = "image_deleted"
 
 
 @dataclass(frozen=True)
 class ProductAuditEntry:
     id: int
     product_id: int
-    actor_user_id: int | None
+    actor_user_id: uuid.UUID | None
     action: ProductAuditAction
     description: str
     created_at: datetime
@@ -69,6 +85,8 @@ __all__ = [
     "ProductAuditAction",
     "OwnerReadModel",
     "OwnerSnapshot",
+    "ProductImage",
+    "ProductImageStorage",
     "ProductAuditEntry",
     "ProductAuditReader",
 ]

@@ -13,7 +13,7 @@ from observability.middleware import RequestContextMiddleware
 
 
 class FakeTokenVerifier:
-    def __init__(self, sub: int | None = None, raise_error: bool = False) -> None:
+    def __init__(self, sub: int | str | None = None, raise_error: bool = False) -> None:
         self._sub = sub
         self._raise_error = raise_error
 
@@ -66,6 +66,14 @@ async def test_actor_id_var_is_set_for_a_valid_bearer_token() -> None:
         response = await client.get("/echo", headers={"Authorization": "Bearer token"})
 
     assert response.json()["actor_id"] == 7
+
+
+async def test_uuid_actor_id_is_preserved_for_a_valid_bearer_token() -> None:
+    actor_id = "b6e4f82d-3b88-4f54-9ad0-b6d4a0ea9f0a"
+    async with _build_client(FakeTokenVerifier(sub=actor_id)) as client:
+        response = await client.get("/echo", headers={"Authorization": "Bearer token"})
+
+    assert response.json()["actor_id"] == actor_id
 
 
 async def test_request_is_not_blocked_and_actor_id_stays_none_without_a_bearer() -> (

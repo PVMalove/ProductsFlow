@@ -10,7 +10,9 @@ from observability.middleware import RequestContextMiddleware
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
+from infrastructure.storage import ensure_minio_buckets
 from presentation.errors import to_http_exception
+from presentation.product_images import router as product_images_router
 from presentation.products import router as products_router
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
@@ -27,6 +29,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.sessionmaker = build_sessionmaker(settings.catalog_database_url)
     app.state.identity_gateway = _identity_client
     await _identity_client.preload()
+    # Временно выполняем bootstrap MinIO в lifespan; по ADR 0017 это будет
+    # перенесено в отдельный bootstrap-шаг, когда он появится.
+    await ensure_minio_buckets()
     try:
         yield
     finally:
@@ -47,3 +52,4 @@ async def application_error_handler(
 
 app.add_middleware(RequestContextMiddleware, verifier=_identity_client)
 app.include_router(products_router)
+app.include_router(product_images_router)

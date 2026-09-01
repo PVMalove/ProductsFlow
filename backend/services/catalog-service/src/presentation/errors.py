@@ -6,6 +6,7 @@ from application.errors import (
     ProductAccessDeniedError,
     ProductNotFoundError,
 )
+from application.product_image_use_cases import ProductImageNotFoundError
 
 _STATUS_BY_TYPE: dict[ErrorType, int] = {
     ErrorType.VALIDATION: status.HTTP_400_BAD_REQUEST,
@@ -26,6 +27,10 @@ def to_http_exception(error: Error | Exception) -> HTTPException:
     if isinstance(error, ProductAccessDeniedError):
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Нет прав на этот товар"
+        )
+    if isinstance(error, ProductImageNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="У товара нет картинки!"
         )
     if isinstance(error, IdentityUnavailableError):
         return HTTPException(

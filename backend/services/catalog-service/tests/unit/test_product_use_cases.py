@@ -24,6 +24,7 @@ from application.product_use_cases import (
 )
 from domain.product import Product
 from domain.product_id import ProductId
+from domain.product_image import ProductImage
 from domain.repositories import PageInfo, ProductPage
 
 OWNER_ID = uuid.uuid4()
@@ -74,6 +75,25 @@ class FakeRepository:
     async def delete(self, product_id: ProductId) -> Product | None:
         self.deleted = True
         return self.product
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None:
+        return None
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        *,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: uuid.UUID,
+    ) -> ProductImage:
+        raise NotImplementedError
+
+    async def delete_product_image(
+        self, product_id: ProductId, *, actor_user_id: uuid.UUID
+    ) -> None:
+        raise NotImplementedError
 
     async def list(self, **kwargs: object) -> ProductPage:
         return ProductPage(

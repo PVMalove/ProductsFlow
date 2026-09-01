@@ -355,3 +355,90 @@ async def test_list_hides_products_of_an_unknown_owner(
     page = await repo.list(limit=10)
 
     assert page.items == []
+
+
+async def test_upsert_product_image_replaces_the_single_row_and_audits_it(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    actor_id = uuid.uuid4()
+    product = (
+        await repo.create(
+            name="Картинка товара",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=actor_id,
+        )
+    ).value
+
+    first = await repo.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id.value}/image",
+        content_type="image/jpeg",
+        size_bytes=10,
+        actor_user_id=actor_id,
+    )
+    second = await repo.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id.value}/image",
+        content_type="image/png",
+        size_bytes=20,
+        actor_user_id=actor_id,
+    )
+
+    assert first.product_id == product.id
+    assert second.product_id == product.id
+    assert second.content_type == "image/png"
+    assert second.size_bytes == 20
+
+    stored = await repo.get_product_image(product.id)
+    assert stored == second
+
+    rows = await db_session.scalars(
+        select(ProductAuditLog)
+        .where(ProductAuditLog.product_id == product.id.value)
+        .order_by(ProductAuditLog.id)
+    )
+    assert [row.action for row in rows.all()] == [
+        "created",
+        "image_updated",
+        "image_updated",
+    ]
+
+
+async def test_delete_product_image_removes_row_and_writes_explicit_audit(
+    db_session: AsyncSession,
+) -> None:
+    repo = ProductRepository(db_session)
+    actor_id = uuid.uuid4()
+    product = (
+        await repo.create(
+            name="Картинка товара",
+            description="",
+            price=1.0,
+            category="Категория",
+            user_id=actor_id,
+        )
+    ).value
+    await repo.upsert_product_image(
+        product.id,
+        s3_key=f"products/{product.id.value}/image",
+        content_type="image/jpeg",
+        size_bytes=10,
+        actor_user_id=actor_id,
+    )
+
+    await repo.delete_product_image(product.id, actor_user_id=actor_id)
+
+    assert await repo.get_product_image(product.id) is None
+    rows = await db_session.scalars(
+        select(ProductAuditLog)
+        .where(ProductAuditLog.product_id == product.id.value)
+        .order_by(ProductAuditLog.id)
+    )
+    assert [row.action for row in rows.all()] == [
+        "created",
+        "image_updated",
+        "image_deleted",
+    ]
