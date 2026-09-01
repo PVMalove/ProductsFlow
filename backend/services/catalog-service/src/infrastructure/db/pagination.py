@@ -1,32 +1,18 @@
-import base64
-import binascii
-from datetime import datetime
+"""Compatibility exports for the cursor contract.
 
-from domain.repositories import Cursor, PageInfo, ProductPage
+Cursor serialization is an application/API concern; this module remains as a
+stable import path for existing infrastructure tests and callers.
+"""
 
-# Общие дефолты keyset-пагинации списков продуктов (ADR 0001) — без изменения
-# схемы cursor-контракта.
-DEFAULT_PAGE_LIMIT = 20
-MAX_PAGE_LIMIT = 100
-
-
-class InvalidCursorError(ValueError):
-    """Курсор пагинации не удалось декодировать."""
-
-
-def encode_cursor(created_at: datetime, product_id: int) -> str:
-    raw = f"{created_at.isoformat()}|{product_id}"
-    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
-
-
-def decode_cursor(token: str) -> Cursor:
-    try:
-        raw = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
-        created_at_raw, id_raw = raw.split("|")
-        return Cursor(created_at=datetime.fromisoformat(created_at_raw), id=int(id_raw))
-    except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
-        raise InvalidCursorError("Некорректный курсор пагинации") from exc
-
+from application.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    Cursor,
+    InvalidCursorError,
+    decode_cursor,
+    encode_cursor,
+)
+from domain.repositories import PageInfo, ProductPage
 
 __all__ = [
     "DEFAULT_PAGE_LIMIT",

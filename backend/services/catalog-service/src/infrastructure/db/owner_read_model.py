@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from infrastructure.identity_gateway import IdentityGateway
+from application.ports import OwnerReadModel, OwnerSnapshot
 
 # Сентинел синхронного добора (ADR 0012/0019): реальные события несут
 # `outbox_messages.id >= 1` (bigserial), поэтому строка с версией 0 всегда
@@ -67,27 +67,31 @@ async def upsert_owner_read_model(
     await session.commit()
 
 
-async def ensure_owner_read_model_seeded(
-    session: AsyncSession,
-    identity: IdentityGateway,
-    *,
-    user_id: uuid.UUID,
-    token: str,
-) -> None:
-    """Синхронный добор на холодном промахе (ADR 0012/0019, user story 15):
-    вызывается только с токеном самого `user_id` (`GET /api/v1/users/me`
-    отдаёт информацию только о предъявителе токена) — на создании Товара,
-    прежде чем видимость этого Товара станет вопросом для других
-    Наблюдателей. Не трогает уже существующую строку — она либо свежее
-    (событие уже применилось), либо будет перезаписана тем же событием
-    позже, upsert-условие (ADR 0019) само решит, что важнее."""
-    if await get_owner_read_model(session, user_id) is not None:
-        return
-    info = await identity.fetch_current_user(token)
-    await upsert_owner_read_model(
-        session,
-        user_id=info.id,
-        role=info.role,
-        is_active=info.is_active,
-        last_applied_outbox_id=COLD_START_SENTINEL_VERSION,
-    )
+class SqlOwnerReadModel:
+    """SQL adapter for the application owner read-model port."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, user_id: uuid.UUID) -> OwnerSnapshot | None:
+        row = await get_owner_read_model(self._session, user_id)
+        if row is None:
+            return None
+        return OwnerSnapshot(
+            user_id=row.user_id,
+            role=row.role,
+            is_active=row.is_active,
+            last_applied_outbox_id=row.last_applied_outbox_id,
+        )
+
+    async def upsert(self, owner: OwnerSnapshot) -> None:
+        await upsert_owner_read_model(
+            self._session,
+            user_id=owner.user_id,
+            role=owner.role,
+            is_active=owner.is_active,
+            last_applied_outbox_id=owner.last_applied_outbox_id,
+        )
+
+
+_owner_read_model_implementation: type[OwnerReadModel] = SqlOwnerReadModel

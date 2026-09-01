@@ -8,6 +8,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
+from application.ports import ProductAuditEntry, ProductAuditReader
 from infrastructure.db.models import ProductModel
 
 
@@ -129,3 +130,27 @@ async def get_audit_logs_by_product(
         .order_by(ProductAuditLog.created_at.desc(), ProductAuditLog.id.desc())
     )
     return list(rows.all())
+
+
+class SqlProductAuditReader:
+    """SQL adapter for the application audit-reader port."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_product(self, product_id: int) -> list[ProductAuditEntry]:
+        rows = await get_audit_logs_by_product(self._session, product_id)
+        return [
+            ProductAuditEntry(
+                id=row.id,
+                product_id=row.product_id,
+                actor_user_id=row.actor_user_id,
+                action=str(row.action),
+                description=row.description,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+
+_product_audit_reader_implementation: type[ProductAuditReader] = SqlProductAuditReader

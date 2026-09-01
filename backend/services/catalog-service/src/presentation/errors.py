@@ -1,6 +1,12 @@
 from fastapi import HTTPException, status
 from kernel_domain.errors import Error, ErrorType
 
+from application.errors import (
+    IdentityUnavailableError,
+    ProductAccessDeniedError,
+    ProductNotFoundError,
+)
+
 _STATUS_BY_TYPE: dict[ErrorType, int] = {
     ErrorType.VALIDATION: status.HTTP_400_BAD_REQUEST,
     ErrorType.NOT_FOUND: status.HTTP_404_NOT_FOUND,
@@ -12,7 +18,21 @@ _STATUS_BY_TYPE: dict[ErrorType, int] = {
 }
 
 
-def to_http_exception(error: Error) -> HTTPException:
+def to_http_exception(error: Error | Exception) -> HTTPException:
+    if isinstance(error, ProductNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Товар не найден"
+        )
+    if isinstance(error, ProductAccessDeniedError):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Нет прав на этот товар"
+        )
+    if isinstance(error, IdentityUnavailableError):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="identity-service недоступен",
+        )
+    assert isinstance(error, Error)
     return HTTPException(
         status_code=_STATUS_BY_TYPE[error.type], detail=error.description
     )
