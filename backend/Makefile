@@ -6,7 +6,7 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
-.PHONY: check test format lint build up_dev up_prod keys \
+.PHONY: check test format lint architecture-check build up_dev up_prod keys \
 	db-revision db-upgrade db-downgrade db-current db-history help _require-pkg
 
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
@@ -18,6 +18,9 @@ member_dir = $(firstword $(wildcard libs/$(pkg)) $(wildcard services/$(pkg)))
 _require-pkg:
 	$(if $(pkg),,$(error pkg не задан — использование: make check pkg=<member>))
 	$(if $(member_dir),,$(error пакет '$(pkg)' не найден ни в libs/, ни в services/))
+
+architecture-check: ## Проверить направление зависимостей и вывести CQRS-аудит
+	python scripts/check_architecture.py --strict
 
 # uv run --project <dir> из backend/ (а не `cd <dir> && uv run`): mypy
 # --explicit-package-bases выводит имя модуля из позиционного пути относительно
