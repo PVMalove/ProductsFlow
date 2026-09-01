@@ -4,6 +4,7 @@ from datetime import datetime
 from kernel_platform.outbox.models import Base
 from observability.context import actor_id_var
 from sqlalchemy import BigInteger, Identity, Text, event, func, insert, inspect, select
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
@@ -24,7 +25,7 @@ class ProductAuditLog(Base):
     __tablename__ = "product_audit_log"
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    product_id: Mapped[int] = mapped_column(BigInteger)
+    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     # Текст сохраняет и исторические integer actor IDs, и UUID из identity-service.
     actor_user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     action: Mapped[ProductAuditAction] = mapped_column(Text)
@@ -111,7 +112,7 @@ def _on_product_delete(
 
 
 async def get_audit_logs_by_product(
-    session: AsyncSession, product_id: int
+    session: AsyncSession, product_id: uuid.UUID
 ) -> list[ProductAuditLog]:
     """Строки переживают удаление Товара (`product_id` без FK) — доступны и
     для уже удалённого Товара (issue #149)."""
@@ -129,7 +130,7 @@ class SqlProductAuditReader:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_by_product(self, product_id: int) -> list[ProductAuditEntry]:
+    async def get_by_product(self, product_id: uuid.UUID) -> list[ProductAuditEntry]:
         rows = await get_audit_logs_by_product(self._session, product_id)
         return [
             ProductAuditEntry(

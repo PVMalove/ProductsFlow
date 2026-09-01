@@ -31,7 +31,11 @@ OWNER_ID = uuid.uuid4()
 OTHER_ID = uuid.uuid4()
 
 
-def _product(*, product_id: int = 1, user_id: uuid.UUID = OWNER_ID) -> Product:
+def _product(
+    *,
+    product_id: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001"),
+    user_id: uuid.UUID = OWNER_ID,
+) -> Product:
     result = Product.create(
         ProductId(product_id),
         name="Товар",
@@ -126,7 +130,7 @@ class FakeIdentity:
 
 
 class FakeAuditReader:
-    async def get_by_product(self, product_id: int) -> list[ProductAuditEntry]:
+    async def get_by_product(self, product_id: uuid.UUID) -> list[ProductAuditEntry]:
         return [
             ProductAuditEntry(
                 id=1,
@@ -182,13 +186,19 @@ async def test_get_product_denies_inactive_owner_to_other_viewer() -> None:
 
 
 async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
+    product = _product()
     repo, _owners, identity = _dependencies(
-        product=_product(), owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
+        product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
     use_case = UpdateProduct(repo, identity)
 
     result = await use_case.execute(
-        1, actor=_actor(), name=None, description=None, price=42.0, category=None
+        product.id.value,
+        actor=_actor(),
+        name=None,
+        description=None,
+        price=42.0,
+        category=None,
     )
 
     assert result.is_ok
@@ -201,13 +211,14 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
 
 
 async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> None:
+    product = _product()
     repo, owners, identity = _dependencies(
-        product=_product(), owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
+        product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
     use_case = DeleteProduct(repo, identity)
 
     with pytest.raises(ProductAccessDeniedError):
-        await use_case.execute(1, actor=_actor(OTHER_ID))
+        await use_case.execute(product.id.value, actor=_actor(OTHER_ID))
 
     assert repo.deleted is False
     assert owners.upserts == []
@@ -220,11 +231,15 @@ async def test_remaining_use_cases_delegate_to_repository_and_audit_port() -> No
     )
     actor = _actor()
 
-    assert (await ActivateProduct(repo, identity).execute(1, actor=actor)).is_ok
-    assert (await DeactivateProduct(repo, identity).execute(1, actor=actor)).is_ok
+    assert (
+        await ActivateProduct(repo, identity).execute(product.id.value, actor=actor)
+    ).is_ok
+    assert (
+        await DeactivateProduct(repo, identity).execute(product.id.value, actor=actor)
+    ).is_ok
     page = await ListProducts(repo).execute(limit=20, after=None, before=None)
     audit = await GetProductAudit(repo, FakeAuditReader(), identity).execute(
-        1, actor=actor
+        product.id.value, actor=actor
     )
 
     assert page.items == [product]

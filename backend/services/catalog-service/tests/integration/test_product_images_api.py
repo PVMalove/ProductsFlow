@@ -113,7 +113,7 @@ async def test_visible_product_without_image_has_distinct_not_found_message(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "У товара нет картинки!"
-    unknown = await catalog_client.get("/api/v1/products/999999999/image")
+    unknown = await catalog_client.get(f"/api/v1/products/{uuid.uuid4()}/image")
     assert unknown.json()["detail"] == "Товар не найден"
 
 
@@ -252,8 +252,8 @@ async def test_seed_object_is_not_deleted(
     owner_token, _ = _register_owner(identity_gateway)
     product = await _create_product(catalog_client, owner_token)
     raw_product_id = product["id"]
-    assert isinstance(raw_product_id, int)
-    product_id = raw_product_id
+    assert isinstance(raw_product_id, str)
+    product_id = uuid.UUID(raw_product_id)
     await ProductRepository(db_session).upsert_product_image(
         ProductId(product_id),
         s3_key="seed/placeholder.jpg",

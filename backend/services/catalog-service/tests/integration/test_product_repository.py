@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
@@ -7,17 +8,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
+from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import upsert_owner_read_model
 from infrastructure.db.pagination import decode_cursor
 from infrastructure.db.product_repository import ProductRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
-UNKNOWN_PRODUCT_ID = ProductId(999_999_999)
+UNKNOWN_PRODUCT_ID = ProductId(uuid.uuid4())
+PAGINATION_PRODUCT_IDS = (
+    uuid.UUID("00000000-0000-0000-0000-000000000001"),
+    uuid.UUID("00000000-0000-0000-0000-000000000002"),
+    uuid.UUID("00000000-0000-0000-0000-000000000003"),
+)
+
+
+async def _seed_pagination_products(session: AsyncSession, owner_id: uuid.UUID) -> None:
+    created_at = datetime(2026, 8, 30, 12, 0, 0)
+    session.add_all(
+        [
+            ProductModel(
+                id=product_id,
+                name=f"Товар {product_id}",
+                category="Категория",
+                price=1.0,
+                description="",
+                user_id=owner_id,
+                created_at=created_at,
+            )
+            for product_id in PAGINATION_PRODUCT_IDS
+        ]
+    )
+    await session.commit()
 
 
 async def _outbox_rows_for(
-    session: AsyncSession, aggregate_id: int
+    session: AsyncSession, aggregate_id: uuid.UUID
 ) -> list[OutboxMessage]:
     rows = await session.scalars(
         select(OutboxMessage)
@@ -28,7 +54,7 @@ async def _outbox_rows_for(
 
 
 async def _audit_rows_for(
-    session: AsyncSession, product_id: int
+    session: AsyncSession, product_id: uuid.UUID
 ) -> list[ProductAuditLog]:
     rows = await session.scalars(
         select(ProductAuditLog)
@@ -207,30 +233,19 @@ async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> No
         is_active=True,
         last_applied_outbox_id=1,
     )
-    created_ids = []
-    for i in range(3):
-        product = (
-            await repo.create(
-                name=f"Товар {i}",
-                description="",
-                price=1.0,
-                category="Категория",
-                user_id=owner_id,
-            )
-        ).value
-        created_ids.append(product.id.value)
-
-    newest_first = list(reversed(created_ids))
+    await _seed_pagination_products(db_session, owner_id)
 
     first_page = await repo.list(limit=2)
-    assert [p.id.value for p in first_page.items] == newest_first[:2]
+    first_page_ids = [p.id.value for p in first_page.items]
+    assert first_page_ids == list(reversed(PAGINATION_PRODUCT_IDS[1:]))
     assert first_page.page_info.has_more is True
     assert first_page.page_info.next_cursor is not None
 
     second_page = await repo.list(
         limit=2, after=decode_cursor(first_page.page_info.next_cursor)
     )
-    assert [p.id.value for p in second_page.items] == newest_first[2:]
+    second_page_ids = [p.id.value for p in second_page.items]
+    assert second_page_ids == [PAGINATION_PRODUCT_IDS[0]]
     assert second_page.page_info.has_more is False
 
 
@@ -246,20 +261,7 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
         is_active=True,
         last_applied_outbox_id=1,
     )
-    created_ids = []
-    for i in range(3):
-        product = (
-            await repo.create(
-                name=f"Товар {i}",
-                description="",
-                price=1.0,
-                category="Категория",
-                user_id=owner_id,
-            )
-        ).value
-        created_ids.append(product.id.value)
-
-    newest_first = list(reversed(created_ids))
+    await _seed_pagination_products(db_session, owner_id)
 
     first_page = await repo.list(limit=2)
     assert first_page.page_info.next_cursor is not None
@@ -272,7 +274,9 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
         limit=2, before=decode_cursor(second_page.page_info.prev_cursor)
     )
 
-    assert [p.id.value for p in page_before.items] == newest_first[:2]
+    assert [p.id.value for p in page_before.items] == list(
+        reversed(PAGINATION_PRODUCT_IDS[1:])
+    )
     assert page_before.page_info.has_more is True
 
 

@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
@@ -21,7 +22,7 @@ _MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 @router.get("/{product_id}/image", response_model=ProductImageResponse)
 async def get_product_image(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: OptionalAuth,
     use_case: GetProductImageDI,
 ) -> ProductImageResponse:
@@ -33,7 +34,7 @@ async def get_product_image(
 
 @router.post("/{product_id}/image", response_model=ProductImageResponse)
 async def upload_product_image(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: UpsertProductImageDI,
     response: Response,
@@ -65,7 +66,7 @@ async def upload_product_image(
 
 @router.delete("/{product_id}/image", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product_image(
-    product_id: int,
+    product_id: uuid.UUID,
     auth: RequiredAuth,
     use_case: DeleteProductImageDI,
 ) -> None:

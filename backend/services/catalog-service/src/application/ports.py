@@ -67,7 +67,7 @@ class ProductAuditAction(enum.StrEnum):
 @dataclass(frozen=True)
 class ProductAuditEntry:
     id: int
-    product_id: int
+    product_id: uuid.UUID
     actor_user_id: uuid.UUID | None
     action: ProductAuditAction
     description: str
@@ -75,7 +75,9 @@ class ProductAuditEntry:
 
 
 class ProductAuditReader(Protocol):
-    async def get_by_product(self, product_id: int) -> list[ProductAuditEntry]: ...
+    async def get_by_product(
+        self, product_id: uuid.UUID
+    ) -> list[ProductAuditEntry]: ...
 
 
 __all__ = [
