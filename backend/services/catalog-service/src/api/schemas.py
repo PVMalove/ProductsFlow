@@ -3,8 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from application.image_dto import ProductImageView
 from application.ports import ProductAuditAction, ProductAuditEntry
-from application.product_image_use_cases import ProductImageView
 from domain.product import Product
 from domain.repositories import PageInfo, ProductPage
 

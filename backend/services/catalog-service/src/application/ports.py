@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from kernel_domain.result import Result
+
+from domain.product import Product
+from domain.product_id import ProductId
 from domain.product_image import ProductImage
+from domain.repositories import Cursor, ProductPage
 
 
 @dataclass(frozen=True)
@@ -28,6 +33,14 @@ class OwnerSnapshot:
 class OwnerReadModel(Protocol):
     async def get(self, user_id: uuid.UUID) -> OwnerSnapshot | None: ...
 
+    async def upsert(self, owner: OwnerSnapshot) -> None: ...
+
+
+class OwnerQueryPort(Protocol):
+    async def get(self, user_id: uuid.UUID) -> OwnerSnapshot | None: ...
+
+
+class OwnerProjectionWriter(Protocol):
     async def upsert(self, owner: OwnerSnapshot) -> None: ...
 
 
@@ -80,15 +93,77 @@ class ProductAuditReader(Protocol):
     ) -> list[ProductAuditEntry]: ...
 
 
+class ProductCommandPort(Protocol):
+    async def create(
+        self,
+        *,
+        name: str,
+        description: str,
+        price: float,
+        category: str,
+        user_id: uuid.UUID,
+    ) -> Result[Product]: ...
+
+    async def update(
+        self,
+        product_id: ProductId,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        price: float | None = None,
+        category: str | None = None,
+    ) -> Result[Product] | None: ...
+
+    async def activate(self, product_id: ProductId) -> Result[Product] | None: ...
+
+    async def deactivate(self, product_id: ProductId) -> Result[Product] | None: ...
+
+    async def delete(self, product_id: ProductId) -> Product | None: ...
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None: ...
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        *,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: uuid.UUID,
+    ) -> ProductImage: ...
+
+    async def delete_product_image(
+        self, product_id: ProductId, *, actor_user_id: uuid.UUID
+    ) -> None: ...
+
+
+class ProductQueryPort(Protocol):
+    async def get_by_id(self, product_id: ProductId) -> Product | None: ...
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None: ...
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        after: Cursor | None = None,
+        before: Cursor | None = None,
+    ) -> ProductPage: ...
+
+
 __all__ = [
     "Actor",
     "IdentityGateway",
     "IdentityUser",
     "ProductAuditAction",
     "OwnerReadModel",
+    "OwnerProjectionWriter",
+    "OwnerQueryPort",
     "OwnerSnapshot",
+    "ProductCommandPort",
     "ProductImage",
     "ProductImageStorage",
     "ProductAuditEntry",
     "ProductAuditReader",
+    "ProductQueryPort",
 ]

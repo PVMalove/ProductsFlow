@@ -12,7 +12,12 @@ from api.dependencies import (
     to_actor,
 )
 from api.schemas import ProductImageResponse
-from application.product_image_use_cases import ProductImageMutation
+from application.commands import (
+    DeleteProductImageCommand,
+    UpsertProductImageCommand,
+)
+from application.image_dto import ProductImageMutation
+from application.queries import GetProductImageQuery
 
 router = APIRouter(prefix="/api/v1/products", tags=["product-images"])
 
@@ -26,8 +31,11 @@ async def get_product_image(
     auth: OptionalAuth,
     use_case: GetProductImageDI,
 ) -> ProductImageResponse:
-    view = await use_case.execute(
-        product_id, actor=to_actor(auth) if auth is not None else None
+    view = await use_case.handle(
+        GetProductImageQuery(
+            product_id=product_id,
+            actor=to_actor(auth) if auth is not None else None,
+        )
     )
     return ProductImageResponse.from_view(view)
 
@@ -52,11 +60,13 @@ async def upload_product_image(
             detail="Файл больше 5 МБ",
         )
 
-    mutation: ProductImageMutation = await use_case.execute(
-        product_id,
-        actor=to_actor(auth),
-        body=body,
-        content_type=file.content_type,
+    mutation: ProductImageMutation = await use_case.handle(
+        UpsertProductImageCommand(
+            product_id=product_id,
+            actor=to_actor(auth),
+            body=body,
+            content_type=file.content_type,
+        )
     )
     response.status_code = (
         status.HTTP_200_OK if mutation.replaced else status.HTTP_201_CREATED
@@ -70,7 +80,9 @@ async def delete_product_image(
     auth: RequiredAuth,
     use_case: DeleteProductImageDI,
 ) -> None:
-    await use_case.execute(product_id, actor=to_actor(auth))
+    await use_case.handle(
+        DeleteProductImageCommand(product_id=product_id, actor=to_actor(auth))
+    )
 
 
 __all__ = ["router"]

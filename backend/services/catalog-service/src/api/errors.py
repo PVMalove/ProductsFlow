@@ -4,9 +4,9 @@ from kernel_domain.errors import Error, ErrorType
 from application.errors import (
     IdentityUnavailableError,
     ProductAccessDeniedError,
+    ProductImageNotFoundError,
     ProductNotFoundError,
 )
-from application.product_image_use_cases import ProductImageNotFoundError
 
 _STATUS_BY_TYPE: dict[ErrorType, int] = {
     ErrorType.VALIDATION: status.HTTP_400_BAD_REQUEST,

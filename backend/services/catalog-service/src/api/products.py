@@ -23,12 +23,24 @@ from api.schemas import (
     ProductResponse,
     ProductUpdateRequest,
 )
+from application.commands import (
+    ActivateProductCommand,
+    CreateProductCommand,
+    DeactivateProductCommand,
+    DeleteProductCommand,
+    UpdateProductCommand,
+)
 from application.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
     Cursor,
     InvalidCursorError,
     decode_cursor,
+)
+from application.queries import (
+    GetProductAuditQuery,
+    GetProductQuery,
+    ListProductsQuery,
 )
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
@@ -40,12 +52,14 @@ async def create_product(
     auth: RequiredAuth,
     use_case: CreateProductDI,
 ) -> ProductResponse:
-    result = await use_case.execute(
-        actor=to_actor(auth),
-        name=request.name,
-        description=request.description,
-        price=request.price,
-        category=request.category,
+    result = await use_case.handle(
+        CreateProductCommand(
+            actor=to_actor(auth),
+            name=request.name,
+            description=request.description,
+            price=request.price,
+            category=request.category,
+        )
     )
     if result.is_err:
         raise to_http_exception(result.error)
@@ -64,10 +78,12 @@ async def list_products(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    page = await use_case.execute(
-        limit=limit,
-        after=_parse_cursor(after),
-        before=_parse_cursor(before),
+    page = await use_case.handle(
+        ListProductsQuery(
+            limit=limit,
+            after=_parse_cursor(after),
+            before=_parse_cursor(before),
+        )
     )
     return ProductListResponse.from_domain(page)
 
@@ -78,8 +94,11 @@ async def get_product(
     auth: OptionalAuth,
     use_case: GetProductDI,
 ) -> ProductResponse:
-    product = await use_case.execute(
-        product_id, actor=to_actor(auth) if auth is not None else None
+    product = await use_case.handle(
+        GetProductQuery(
+            product_id=product_id,
+            actor=to_actor(auth) if auth is not None else None,
+        )
     )
     return ProductResponse.from_domain(product)
 
@@ -91,10 +110,12 @@ async def update_product(
     auth: RequiredAuth,
     use_case: UpdateProductDI,
 ) -> None:
-    result = await use_case.execute(
-        product_id,
-        actor=to_actor(auth),
-        **request.model_dump(exclude_unset=True),
+    result = await use_case.handle(
+        UpdateProductCommand(
+            product_id=product_id,
+            actor=to_actor(auth),
+            **request.model_dump(exclude_unset=True),
+        )
     )
     if result.is_err:
         raise to_http_exception(result.error)
@@ -106,7 +127,9 @@ async def activate_product(
     auth: RequiredAuth,
     use_case: ActivateProductDI,
 ) -> ProductResponse:
-    result = await use_case.execute(product_id, actor=to_actor(auth))
+    result = await use_case.handle(
+        ActivateProductCommand(product_id=product_id, actor=to_actor(auth))
+    )
     if result.is_err:
         raise to_http_exception(result.error)
     return ProductResponse.from_domain(result.value)
@@ -118,7 +141,9 @@ async def deactivate_product(
     auth: RequiredAuth,
     use_case: DeactivateProductDI,
 ) -> ProductResponse:
-    result = await use_case.execute(product_id, actor=to_actor(auth))
+    result = await use_case.handle(
+        DeactivateProductCommand(product_id=product_id, actor=to_actor(auth))
+    )
     if result.is_err:
         raise to_http_exception(result.error)
     return ProductResponse.from_domain(result.value)
@@ -130,7 +155,9 @@ async def delete_product(
     auth: RequiredAuth,
     use_case: DeleteProductDI,
 ) -> None:
-    await use_case.execute(product_id, actor=to_actor(auth))
+    await use_case.handle(
+        DeleteProductCommand(product_id=product_id, actor=to_actor(auth))
+    )
 
 
 @router.get("/{product_id}/audit", response_model=list[ProductAuditLogResponse])
@@ -139,7 +166,9 @@ async def get_product_audit(
     auth: RequiredAuth,
     use_case: GetProductAuditDI,
 ) -> list[ProductAuditLogResponse]:
-    entries = await use_case.execute(product_id, actor=to_actor(auth))
+    entries = await use_case.handle(
+        GetProductAuditQuery(product_id=product_id, actor=to_actor(auth))
+    )
     return [ProductAuditLogResponse.from_entry(entry) for entry in entries]
 
 
