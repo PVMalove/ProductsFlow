@@ -21,6 +21,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM outbox_messages) THEN
+                RAISE EXCEPTION
+                    'outbox_messages must be empty before changing aggregate_id to UUID; drain or delete legacy messages first';
+            END IF;
+        END
+        $$;
+        """
+    )
     op.alter_column(
         "outbox_messages",
         "aggregate_id",
@@ -35,6 +47,18 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM outbox_messages) THEN
+                RAISE EXCEPTION
+                    'outbox_messages must be empty before downgrading aggregate_id from UUID to BIGINT';
+            END IF;
+        END
+        $$;
+        """
+    )
     op.alter_column(
         "outbox_messages",
         "aggregate_id",
