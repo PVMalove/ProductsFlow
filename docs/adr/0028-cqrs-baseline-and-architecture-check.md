@@ -34,8 +34,27 @@ query-side через command-side.
   outbox атомарно в одной транзакции репозитория. Query-handler использует
   read model/projection и не открывает command-side путь.
 
-Новый код использует layout `application/commands.py`, `application/queries.py`
-или более глубокие bounded-context модули с отдельными handler-типами. Общие
+Новый код использует layout `application/commands/` и
+`application/queries/` (если запросов достаточно для отдельного пакета) с
+одним bounded-context модулем на связанную группу сценариев и отдельными
+handler-типами. Для небольшого количества запросов допустим один файл
+`application/queries.py`. Пакет `application/commands/` обязан иметь
+`__init__.py`, который является фасадом публичных command-типов; реализации
+живут в отдельных модулях по операции, например:
+
+```text
+application/commands/
+├── __init__.py
+├── register_user.py
+├── login.py
+├── change_password.py
+└── deactivate_user.py
+```
+
+Такой layout сохраняет небольшой внешний интерфейс пакета, повышает locality
+изменений каждой команды и не превращает один файл в shallow-модуль с
+растущим списком несвязанных сценариев. Старые пути импорта могут временно
+оставаться compatibility adapters, делегирующими в пакет. Общие
 `ICommand`/`IQuery`, глобальный dispatcher и event sourcing не требуются.
 
 ### Пример команды
@@ -84,7 +103,7 @@ class ListTicketsQueryHandler:
 
 | Область | Найдено | Решение в baseline |
 | --- | --- | --- |
-| `identity-service/src/application` | `register_user.py`, `login.py`, `change_password.py`, `deactivate_user.py` уже содержат явные Command + CommandHandler | сохранить как совместимый текущий вариант; при миграции привести layout к единому convention |
+| `identity-service/src/application` | команды identity выделены в пакет `commands/`, по одному модулю на операцию; старые файлы оставлены compatibility adapters | считать identity эталонным примером пакетного command-side layout |
 | `catalog-service/src/application/product_use_cases.py` | `Create/Update/Activate/Deactivate/Delete` смешаны с `Get/List/GetAudit` | migration finding; разделить в #187 |
 | `catalog-service/src/application/product_image_use_cases.py` | `GetProductImage` смешан с `UpsertProductImage/DeleteProductImage` | migration finding; разделить в #187 |
 | `support-service/src/application/ticket_use_cases.py` | `CreateTicket` смешан с `GetTicket/ListTickets/ListAdminTickets` | migration finding; разделить в #188 |

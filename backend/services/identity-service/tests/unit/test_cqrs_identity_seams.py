@@ -1,4 +1,7 @@
-from application.commands import ActivateUserCommand, ActivateUserCommandHandler
+from application.commands.deactivate_user import (
+    ActivateUserCommand,
+    ActivateUserCommandHandler,
+)
 from application.ports import UserReadModel
 from application.queries import GetUserQuery, GetUserQueryHandler
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
