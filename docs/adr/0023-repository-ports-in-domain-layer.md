@@ -1,8 +1,8 @@
 # 0023. Репозитории: порт в domain-слое, реализация в infrastructure
 
 > **Superseded решением [ADR 0025](0025-application-layer-ports-and-local-cqrs.md).**
-> Исторический текст ниже сохранён без переписывания: repository и gateway
-> порты принадлежат application-слою — потребителю use case, а не domain-модели.
+> Исторический текст ниже сохранён без переписывания и описывает прежнее
+> решение размещать repository и gateway-порты в domain-слое.
 
 `identity-service` уже завёл `UserRepository` как `Protocol` (issue #140/#143) — но в `identity/application/user_repository.py`, не в `domain/`. `catalog-service` (#148/#149) не завёл абстракции вовсе: `ProductRepository` — конкретный SQLAlchemy-класс в `catalog/infrastructure/db/product_repository.py`, и HTTP-роутер (`catalog/api/products.py`) конструирует и вызывает именно его, напрямую. В обоих случаях application/presentation-код видит либо порт, лежащий не на своём месте, либо саму инфраструктуру — то есть зависимость идёт от «правил» (domain) к «деталям» (SQLAlchemy), а не наоборот, что и есть нарушение инверсии зависимостей (DIP), которую распил на микросервисы призван соблюдать.
 
