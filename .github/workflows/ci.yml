@@ -9,6 +9,26 @@ permissions:
   contents: read # нужно для checkout
 
 jobs:
+  backend-architecture:
+    name: Architecture boundaries
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - run: python scripts/check_architecture.py --strict
+      - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py -q
+
   backend-lint:
     name: Lint (${{ matrix.member }})
     runs-on: ubuntu-latest
