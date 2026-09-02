@@ -3,6 +3,7 @@ import uuid
 import pytest
 
 from domain.events.ticket_created import TicketCreated
+from domain.events.ticket_message_added import TicketMessageAdded
 from domain.events.ticket_message_deleted import TicketMessageDeleted
 from domain.events.ticket_message_edited import TicketMessageEdited
 from domain.ticket import (
@@ -154,6 +155,7 @@ def test_ticket_rejects_editing_system_and_deleted_messages() -> None:
         actor_category="admin",
         is_system=True,
     )
+    assert system_message.author_id is not None
     with pytest.raises(ValueError):
         ticket.edit_message(
             message_id=system_message.id,
@@ -191,3 +193,33 @@ def test_admin_can_soft_delete_a_message_after_ticket_closure() -> None:
     )
 
     assert ticket.messages[0].is_deleted is True
+
+
+def test_user_deletion_anonymizes_ticket_and_closes_it_once() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    ticket.pull_events()
+
+    affected = ticket.anonymize_deleted_user(author_id)
+
+    assert affected is True
+    assert ticket.author_id is None
+    assert ticket.status is TicketStatus.CLOSED
+    assert ticket.messages[0].author_id is None
+    assert len(ticket.messages) == 2
+    system_message = ticket.messages[-1]
+    assert system_message.author_id is None
+    assert system_message.is_system is True
+    assert system_message.body == "[Пользователь удалён]"
+    events = ticket.pull_events()
+    assert [getattr(event, "event_type", None) for event in events] == [
+        "ticket.status_changed.v1",
+        "ticket.message_added.v1",
+    ]
+    assert isinstance(events[1], TicketMessageAdded)
+    assert not hasattr(events[1], "body")
+
+    assert ticket.anonymize_deleted_user(author_id) is False
+    assert len(ticket.messages) == 2

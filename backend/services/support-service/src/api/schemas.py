@@ -34,15 +34,16 @@ class TicketStatusChangeRequest(BaseModel):
 
 class TicketMessageResponse(BaseModel):
     id: uuid.UUID
-    author_id: uuid.UUID
+    author_id: uuid.UUID | None
     body: str
     created_at: datetime
+    is_system: bool
     is_deleted: bool
 
 
 class TicketResponse(BaseModel):
     id: uuid.UUID
-    author_id: uuid.UUID
+    author_id: uuid.UUID | None
     subject: str
     status: str
     messages: list[TicketMessageResponse]
@@ -67,6 +68,7 @@ class TicketResponse(BaseModel):
                     author_id=message.author_id,
                     body=message.body,
                     created_at=message.created_at,
+                    is_system=message.is_system,
                     is_deleted=message.is_deleted,
                 )
                 for message in source_messages

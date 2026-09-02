@@ -96,6 +96,19 @@ services:
     networks:
       - backend-network
 
+  support-worker:
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    container_name: support-worker
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+      SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL}
+    networks:
+      - backend-network
+
 networks:
   backend-network:
     driver: bridge

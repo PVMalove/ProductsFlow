@@ -14,6 +14,14 @@ class TicketCommandPort(Protocol):
     async def create(self, ticket: Ticket) -> Ticket: ...
 
 
+class UserDeletionPort(Protocol):
+    """Atomic application boundary for identity deletion events."""
+
+    async def process_user_deleted(
+        self, *, message_id: int, user_id: uuid.UUID
+    ) -> bool: ...
+
+
 class TicketMutationPort(Protocol):
     """Serialized ticket mutation operations used by command handlers."""
 
@@ -86,4 +94,9 @@ class TicketQueryPort(Protocol):
     ) -> MessagePage: ...
 
 
-__all__ = ["TicketCommandPort", "TicketMutationPort", "TicketQueryPort"]
+__all__ = [
+    "TicketCommandPort",
+    "TicketMutationPort",
+    "TicketQueryPort",
+    "UserDeletionPort",
+]

@@ -107,6 +107,7 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
     )
     repository = FakeMutationRepository(ticket)
     message_id = ticket.messages[0].id
+    assert ticket.author_id is not None
 
     result = await EditTicketMessageCommandHandler(repository).execute(
         EditTicketMessageCommand(

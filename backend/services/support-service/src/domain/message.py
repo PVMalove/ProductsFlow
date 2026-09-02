@@ -9,7 +9,7 @@ DELETED_MESSAGE_MARKER = "[Сообщение удалено]"
 class TicketMessage:
     id: uuid.UUID
     ticket_id: uuid.UUID
-    author_id: uuid.UUID
+    author_id: uuid.UUID | None
     body: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     is_system: bool = False
@@ -20,7 +20,7 @@ class TicketMessage:
             self.ticket_id, uuid.UUID
         ):
             raise ValueError("message identifiers must be UUIDs")
-        if not isinstance(self.author_id, uuid.UUID):
+        if self.author_id is not None and not isinstance(self.author_id, uuid.UUID):
             raise ValueError("message author must be a UUID")
         object.__setattr__(
             self,

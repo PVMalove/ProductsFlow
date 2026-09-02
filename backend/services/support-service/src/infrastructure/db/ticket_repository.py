@@ -3,6 +3,7 @@ import uuid
 from kernel_domain.domain_event import DomainEvent
 from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, tuple_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.events import (
@@ -14,7 +15,7 @@ from domain.events import (
 from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket, TicketStatus
-from infrastructure.db.models import TicketMessageModel, TicketModel
+from infrastructure.db.models import ProcessedMessage, TicketMessageModel, TicketModel
 
 
 class TicketRepository:
@@ -32,20 +33,63 @@ class TicketRepository:
         )
         await self._session.flush()
         for message in ticket.messages:
-            self._session.add(
-                TicketMessageModel(
-                    id=message.id,
-                    ticket_id=message.ticket_id,
-                    author_id=message.author_id,
-                    body=message.body,
-                    created_at=message.created_at,
-                    is_system=message.is_system,
-                )
-            )
+            self._session.add(_to_message_model(message))
         for event in ticket.pull_events():
             self._session.add(_to_outbox(event))
         await self._session.commit()
         return ticket
+
+    async def process_user_deleted(
+        self, *, message_id: int, user_id: uuid.UUID
+    ) -> bool:
+        """Apply one identity deletion atomically and idempotently."""
+        try:
+            inserted_id = await self._session.scalar(
+                insert(ProcessedMessage)
+                .values(message_id=message_id)
+                .on_conflict_do_nothing()
+                .returning(ProcessedMessage.message_id)
+            )
+            if inserted_id is None:
+                await self._session.rollback()
+                return False
+
+            ticket_rows = list(
+                (
+                    await self._session.scalars(
+                        select(TicketModel)
+                        .where(TicketModel.author_id == user_id)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            for row in ticket_rows:
+                ticket = await self._to_domain(row)
+                ticket.anonymize_deleted_user(user_id)
+                row.author_id = ticket.author_id
+                row.status = ticket.status.value
+                message_rows = list(
+                    (
+                        await self._session.scalars(
+                            select(TicketMessageModel).where(
+                                TicketMessageModel.ticket_id == ticket.id
+                            )
+                        )
+                    ).all()
+                )
+                existing_rows = {message.id: message for message in message_rows}
+                for message in ticket.messages:
+                    message_row = existing_rows.get(message.id)
+                    if message_row is None:
+                        self._session.add(_to_message_model(message))
+                    else:
+                        message_row.author_id = message.author_id
+                await self._drain_outbox(ticket)
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+        return True
 
     async def add_message(
         self,
@@ -68,16 +112,7 @@ class TicketRepository:
                 actor_category="admin" if is_admin else "user",
             )
             row.status = ticket.status.value
-            self._session.add(
-                TicketMessageModel(
-                    id=message.id,
-                    ticket_id=message.ticket_id,
-                    author_id=message.author_id,
-                    body=message.body,
-                    created_at=message.created_at,
-                    is_system=message.is_system,
-                )
-            )
+            self._session.add(_to_message_model(message))
             await self._drain_outbox(ticket)
             await self._session.commit()
         except Exception:
@@ -420,3 +455,15 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
 
 
 SqlTicketRepository = TicketRepository
+
+
+def _to_message_model(message: TicketMessage) -> TicketMessageModel:
+    return TicketMessageModel(
+        id=message.id,
+        ticket_id=message.ticket_id,
+        author_id=message.author_id,
+        body=message.body,
+        created_at=message.created_at,
+        is_system=message.is_system,
+        is_deleted=message.is_deleted,
+    )

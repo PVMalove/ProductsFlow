@@ -8,8 +8,9 @@ migrations.
 
 ## CQRS application boundary
 
-The command side exposes `CreateTicketCommand`, `AddTicketMessageCommand`, and
-`ChangeTicketStatusCommand` with handlers under `application/commands/`.
+The command side exposes `CreateTicketCommand`, `AddTicketMessageCommand`,
+`ChangeTicketStatusCommand`, and `ProcessUserDeletionCommand` with handlers
+under `application/commands/`.
 Creation uses `TicketCommandPort`; mutations use the separate
 `TicketMutationPort`, whose repository adapter locks the ticket row, applies
 the domain rule, and commits the aggregate change and outbox rows as one
@@ -25,7 +26,9 @@ the existing `api` adapter and routes.
 Unread counters, assignment of a staff member, and a local user read model are
 outside Phase 5. Request identity and roles come from a locally validated JWT;
 the identity-event consumer exists solely to anonymize retained tickets after a
-user deletion.
+user deletion. `api.worker:main` is its runnable composition root; it declares
+the shared `user.*.v1` topology as `support-service.user-events` and uses the
+kernel retry ladder.
 
 Ticket mutations and their domain events share one database transaction. The
 repository writes the existing `kernel_platform.outbox.OutboxMessage` rows;
@@ -37,6 +40,13 @@ Ordinary callers receive `404` for tickets they cannot access. All ticket
 mutations serialize on the ticket row, including the user-deletion workflow.
 Published ticket events contain identifiers, state and actor category, but no
 subject or message text.
+
+The worker inserts the incoming outbox message id into the service-local
+`processed_messages` inbox before changing tickets. The receipt, nullable
+author links, closure, system message, and technical outbox rows commit as one
+transaction. Repeated delivery therefore produces no second system message;
+active tickets receive one immutable `[Пользователь удалён]` note, while already
+closed tickets are only anonymized.
 
 The Ticket aggregate moves through `OPEN → IN_PROGRESS → RESOLVED → CLOSED`.
 A new author message reopens only a resolved Ticket to `IN_PROGRESS`; a closed
