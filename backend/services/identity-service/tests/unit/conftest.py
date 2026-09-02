@@ -10,6 +10,16 @@ from tests.unit.counting_transport import CountingTransport
 from tests.unit.keygen import write_rsa_key_file
 
 
+@pytest.fixture(autouse=True)
+def configured_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give lifespan-based unit tests a parseable DB URL without connecting."""
+    monkeypatch.setattr(
+        settings,
+        "identity_database_url",
+        "postgresql+asyncpg://identity:identity@localhost/identity",
+    )
+
+
 @pytest.fixture
 def configured_key_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     key_path = tmp_path / "identity_jwt_private_key.pem"
