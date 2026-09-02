@@ -230,10 +230,5 @@ __marimo__/
 .harness
 
 skills-lock.json
-/AGENTS.md
 /SPEC.md
-/docs/*
-!/docs/adr/
-!/docs/architecture.md
-!/docs/research/
-!/docs/research/*.md
+/docs/tasks/
