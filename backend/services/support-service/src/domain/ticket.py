@@ -8,7 +8,7 @@ from kernel_domain.entity import Entity
 from domain.events.ticket_created import TicketCreated
 from domain.events.ticket_message_added import TicketMessageAdded
 from domain.events.ticket_status_changed import TicketStatusChanged
-from domain.message import TicketMessage, validate_plaintext
+from domain.message import DELETED_MESSAGE_MARKER, TicketMessage, validate_plaintext
 
 
 class TicketClosedError(ValueError):
@@ -17,6 +17,18 @@ class TicketClosedError(ValueError):
 
 class InvalidStatusTransitionError(ValueError):
     """Raised when a status skips or reverses the normal lifecycle."""
+
+
+class TicketMessageNotFoundError(LookupError):
+    """Raised when a message is not part of the ticket."""
+
+
+class TicketMessageImmutableError(ValueError):
+    """Raised when a system message is mutated."""
+
+
+class TicketMessageAlreadyDeletedError(ValueError):
+    """Raised when a deleted message is mutated again."""
 
 
 class TicketStatus(StrEnum):
@@ -88,7 +100,12 @@ class Ticket(Entity[uuid.UUID]):
         return ticket
 
     def add_message(
-        self, *, author_id: uuid.UUID, body: str, actor_category: str
+        self,
+        *,
+        author_id: uuid.UUID,
+        body: str,
+        actor_category: str,
+        is_system: bool = False,
     ) -> TicketMessage:
         if self.status is TicketStatus.CLOSED:
             raise TicketClosedError("closed tickets cannot receive messages")
@@ -98,6 +115,7 @@ class Ticket(Entity[uuid.UUID]):
             ticket_id=self.id,
             author_id=author_id,
             body=body,
+            is_system=is_system,
         )
         self.messages.append(message)
         self.add_domain_event(
@@ -122,6 +140,76 @@ class Ticket(Entity[uuid.UUID]):
 
     def change_status(self, status: TicketStatus, *, actor_category: str) -> None:
         self._change_status(status, actor_category=actor_category)
+
+    def edit_message(
+        self,
+        *,
+        message_id: uuid.UUID,
+        author_id: uuid.UUID,
+        body: str,
+        actor_category: str,
+    ) -> TicketMessage:
+        if self.status is TicketStatus.CLOSED:
+            raise TicketClosedError("closed tickets cannot edit messages")
+        message = self._message_by_id(message_id)
+        if message.author_id != author_id:
+            raise TicketMessageNotFoundError("message is owned by another author")
+        if message.is_system:
+            raise TicketMessageImmutableError("system messages cannot be edited")
+        if message.is_deleted:
+            raise TicketMessageAlreadyDeletedError("deleted messages cannot be edited")
+
+        object.__setattr__(
+            message,
+            "body",
+            validate_plaintext(body, field_name="body", maximum=10_000),
+        )
+        from domain.events.ticket_message_edited import TicketMessageEdited
+
+        self.add_domain_event(
+            TicketMessageEdited(
+                ticket_id=self.id,
+                message_id=message.id,
+                actor_category=actor_category,
+            )
+        )
+        return message
+
+    def delete_message(
+        self,
+        *,
+        message_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        actor_category: str,
+    ) -> TicketMessage:
+        if self.status is TicketStatus.CLOSED and actor_category != "admin":
+            raise TicketClosedError("closed tickets cannot delete messages")
+        message = self._message_by_id(message_id)
+        if actor_category != "admin" and message.author_id != actor_id:
+            raise TicketMessageNotFoundError("message is owned by another author")
+        if message.is_system:
+            raise TicketMessageImmutableError("system messages cannot be deleted")
+        if message.is_deleted:
+            raise TicketMessageAlreadyDeletedError("message is already deleted")
+
+        object.__setattr__(message, "body", DELETED_MESSAGE_MARKER)
+        object.__setattr__(message, "is_deleted", True)
+        from domain.events.ticket_message_deleted import TicketMessageDeleted
+
+        self.add_domain_event(
+            TicketMessageDeleted(
+                ticket_id=self.id,
+                message_id=message.id,
+                actor_category=actor_category,
+            )
+        )
+        return message
+
+    def _message_by_id(self, message_id: uuid.UUID) -> TicketMessage:
+        for message in self.messages:
+            if message.id == message_id:
+                return message
+        raise TicketMessageNotFoundError("message does not belong to the ticket")
 
     def _change_status(
         self,

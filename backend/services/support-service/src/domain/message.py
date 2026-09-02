@@ -2,6 +2,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+DELETED_MESSAGE_MARKER = "[Сообщение удалено]"
+
 
 @dataclass(frozen=True, slots=True)
 class TicketMessage:
@@ -11,6 +13,7 @@ class TicketMessage:
     body: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     is_system: bool = False
+    is_deleted: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, uuid.UUID) or not isinstance(

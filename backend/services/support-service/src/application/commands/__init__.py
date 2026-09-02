@@ -12,12 +12,24 @@ from application.commands.create_ticket import (
     CreateTicketCommand,
     CreateTicketCommandHandler,
 )
+from application.commands.delete_ticket_message import (
+    DeleteTicketMessageCommand,
+    DeleteTicketMessageCommandHandler,
+)
+from application.commands.edit_ticket_message import (
+    EditTicketMessageCommand,
+    EditTicketMessageCommandHandler,
+)
 
 __all__ = [
     "AddTicketMessageCommand",
     "AddTicketMessageCommandHandler",
     "ChangeTicketStatusCommand",
     "ChangeTicketStatusCommandHandler",
+    "DeleteTicketMessageCommand",
+    "DeleteTicketMessageCommandHandler",
     "CreateTicketCommand",
     "CreateTicketCommandHandler",
+    "EditTicketMessageCommand",
+    "EditTicketMessageCommandHandler",
 ]

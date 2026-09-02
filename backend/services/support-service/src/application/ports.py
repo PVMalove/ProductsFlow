@@ -30,6 +30,25 @@ class TicketMutationPort(Protocol):
         self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None: ...
 
+    async def edit_message(
+        self,
+        *,
+        ticket_id: uuid.UUID,
+        message_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        body: str,
+        is_admin: bool = False,
+    ) -> Ticket | None: ...
+
+    async def delete_message(
+        self,
+        *,
+        ticket_id: uuid.UUID,
+        message_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        is_admin: bool,
+    ) -> Ticket | None: ...
+
 
 class TicketQueryPort(Protocol):
     """Read-only persistence operations used by query handlers."""

@@ -10,7 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from application.pagination import decode_cursor
-from domain.ticket import Ticket, TicketStatus
+from domain.ticket import (
+    Ticket,
+    TicketMessageImmutableError,
+    TicketStatus,
+)
 from infrastructure.db.models import TicketMessageModel, TicketModel
 from infrastructure.db.ticket_repository import SqlTicketRepository
 
@@ -229,3 +233,168 @@ async def test_concurrent_admin_messages_are_serialized(
         "First reply",
         "Second reply",
     }
+
+
+async def test_message_edit_and_admin_moderation_are_transactional(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="Original message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+    message_id = ticket.messages[0].id
+
+    edited = await repository.edit_message(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        actor_id=author_id,
+        body="Corrected message",
+    )
+    deleted = await repository.delete_message(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        actor_id=uuid.uuid4(),
+        is_admin=True,
+    )
+
+    stored = await db_session.get(TicketMessageModel, message_id)
+    events = list(
+        (
+            await db_session.scalars(
+                select(OutboxMessage)
+                .where(OutboxMessage.aggregate_id == ticket.id)
+                .order_by(OutboxMessage.id)
+            )
+        ).all()
+    )
+    assert edited is not None
+    assert deleted is not None
+    assert stored is not None
+    assert stored.body == "[Сообщение удалено]"
+    assert stored.is_deleted is True
+    assert [event.event_type for event in events] == [
+        "ticket.created.v1",
+        "ticket.message_edited.v1",
+        "ticket.message_deleted.v1",
+    ]
+    assert all("body" not in event.payload for event in events)
+
+
+async def test_author_can_edit_and_soft_delete_their_own_message(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="Original message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+    message_id = ticket.messages[0].id
+
+    edited = await repository.edit_message(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        actor_id=author_id,
+        body="Corrected message",
+    )
+    deleted = await repository.delete_message(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        actor_id=author_id,
+        is_admin=False,
+    )
+
+    assert edited is not None
+    assert deleted is not None
+    stored = await db_session.get(TicketMessageModel, message_id)
+    assert stored is not None
+    assert stored.body == "[Сообщение удалено]"
+    assert stored.is_deleted is True
+
+
+async def test_admin_can_edit_their_own_message_in_a_foreign_ticket(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    admin_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+    admin_message = await repository.add_message(
+        ticket_id=ticket.id,
+        actor_id=admin_id,
+        body="Admin reply",
+        is_admin=True,
+    )
+    assert admin_message is not None
+    message_id = admin_message.messages[-1].id
+
+    edited = await repository.edit_message(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        actor_id=admin_id,
+        body="Corrected admin reply",
+        is_admin=True,
+    )
+
+    assert edited is not None
+    assert edited.messages[-1].body == "Corrected admin reply"
+
+
+async def test_message_moderation_rejects_closed_and_system_messages(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+    await repository.change_status(
+        ticket_id=ticket.id, actor_id=uuid.uuid4(), status=TicketStatus.IN_PROGRESS
+    )
+    await repository.change_status(
+        ticket_id=ticket.id, actor_id=uuid.uuid4(), status=TicketStatus.RESOLVED
+    )
+    await repository.change_status(
+        ticket_id=ticket.id, actor_id=uuid.uuid4(), status=TicketStatus.CLOSED
+    )
+
+    deleted = await repository.delete_message(
+        ticket_id=ticket.id,
+        message_id=ticket.messages[0].id,
+        actor_id=uuid.uuid4(),
+        is_admin=True,
+    )
+    assert deleted is not None
+
+    system_ticket = Ticket.create(
+        author_id=author_id, subject="System subject", first_message="First message"
+    )
+    await repository.create(system_ticket)
+    system_message_id = uuid.uuid4()
+    system_message = TicketMessageModel(
+        id=system_message_id,
+        ticket_id=system_ticket.id,
+        author_id=uuid.uuid4(),
+        body="System message",
+        created_at=datetime.now(UTC),
+        is_system=True,
+    )
+    db_session.add(system_message)
+    await db_session.commit()
+    with pytest.raises(TicketMessageImmutableError):
+        await repository.delete_message(
+            ticket_id=system_ticket.id,
+            message_id=system_message_id,
+            actor_id=uuid.uuid4(),
+            is_admin=True,
+        )
+
+    stored_system = await db_session.get(TicketMessageModel, system_message_id)
+    assert stored_system is not None
+    assert stored_system.is_deleted is False

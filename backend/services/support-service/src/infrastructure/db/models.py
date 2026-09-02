@@ -60,4 +60,9 @@ class TicketMessageModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    is_system: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    is_system: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="false"
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="false"
+    )

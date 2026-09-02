@@ -3,6 +3,8 @@ import uuid
 import pytest
 
 from domain.events.ticket_created import TicketCreated
+from domain.events.ticket_message_deleted import TicketMessageDeleted
+from domain.events.ticket_message_edited import TicketMessageEdited
 from domain.ticket import (
     InvalidStatusTransitionError,
     Ticket,
@@ -68,6 +70,59 @@ def test_ticket_author_message_reopens_resolved_ticket() -> None:
     assert all(not hasattr(event, "body") for event in events)
 
 
+def test_ticket_author_can_edit_their_message_without_exposing_text_in_event() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="Original message"
+    )
+    ticket.pull_events()
+
+    ticket.edit_message(
+        message_id=ticket.messages[0].id,
+        author_id=author_id,
+        body="Corrected message",
+        actor_category="user",
+    )
+
+    assert ticket.messages[0].body == "Corrected message"
+    event = ticket.pull_events()[0]
+    assert isinstance(event, TicketMessageEdited)
+    assert event.message_id == ticket.messages[0].id
+    assert not hasattr(event, "body")
+
+
+def test_ticket_can_soft_delete_a_message_and_preserve_its_thread_position() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="Original message"
+    )
+    ticket.pull_events()
+    second = ticket.add_message(
+        author_id=author_id, body="Second message", actor_category="user"
+    )
+    ticket.pull_events()
+    original_created_at = ticket.messages[0].created_at
+    original_id = ticket.messages[0].id
+
+    ticket.delete_message(
+        message_id=original_id,
+        actor_id=uuid.uuid4(),
+        actor_category="admin",
+    )
+
+    deleted = ticket.messages[0]
+    assert deleted.id == original_id
+    assert deleted.author_id == author_id
+    assert deleted.created_at == original_created_at
+    assert deleted.body == "[Сообщение удалено]"
+    assert deleted.is_deleted is True
+    assert ticket.messages[1] is second
+    event = ticket.pull_events()[0]
+    assert isinstance(event, TicketMessageDeleted)
+    assert event.message_id == original_id
+    assert not hasattr(event, "body")
+
+
 def test_ticket_rejects_skipped_status_and_closed_mutations() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
@@ -86,3 +141,53 @@ def test_ticket_rejects_skipped_status_and_closed_mutations() -> None:
         )
     with pytest.raises(TicketClosedError):
         ticket.change_status(TicketStatus.IN_PROGRESS, actor_category="admin")
+
+
+def test_ticket_rejects_editing_system_and_deleted_messages() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    system_message = ticket.add_message(
+        author_id=uuid.uuid4(),
+        body="System message",
+        actor_category="admin",
+        is_system=True,
+    )
+    with pytest.raises(ValueError):
+        ticket.edit_message(
+            message_id=system_message.id,
+            author_id=system_message.author_id,
+            body="Changed",
+            actor_category="admin",
+        )
+
+    ticket.delete_message(
+        message_id=ticket.messages[0].id,
+        actor_id=author_id,
+        actor_category="user",
+    )
+    with pytest.raises(ValueError):
+        ticket.edit_message(
+            message_id=ticket.messages[0].id,
+            author_id=author_id,
+            body="Changed",
+            actor_category="user",
+        )
+
+
+def test_admin_can_soft_delete_a_message_after_ticket_closure() -> None:
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    ticket.change_status(TicketStatus.IN_PROGRESS, actor_category="admin")
+    ticket.change_status(TicketStatus.RESOLVED, actor_category="admin")
+    ticket.change_status(TicketStatus.CLOSED, actor_category="admin")
+
+    ticket.delete_message(
+        message_id=ticket.messages[0].id,
+        actor_id=uuid.uuid4(),
+        actor_category="admin",
+    )
+
+    assert ticket.messages[0].is_deleted is True
