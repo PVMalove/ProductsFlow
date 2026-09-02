@@ -48,6 +48,21 @@ def test_scan_marks_mixed_application_modules_as_blocking(tmp_path: Path) -> Non
     ]
 
 
+def test_scan_does_not_treat_camel_case_boundaries_as_read_markers(
+    tmp_path: Path,
+) -> None:
+    command = tmp_path / "services/example/src/application/commands"
+    command.mkdir(parents=True)
+    (command / "change_ticket_status.py").write_text(
+        "class ChangeTicketStatusCommand:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    findings = scan(tmp_path)
+
+    assert findings == []
+
+
 def test_scan_marks_cross_side_imports_as_blocking(tmp_path: Path) -> None:
     query = tmp_path / "services/example/src/application/queries"
     command = tmp_path / "services/example/src/application/commands"
