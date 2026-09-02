@@ -2,7 +2,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -51,8 +51,8 @@ def test_a_subclass_implementing_the_contract_is_driven_entirely_by_it() -> None
 
     @dataclass(frozen=True, kw_only=True)
     class OrderPlaced(DomainEvent):
-        event_type: ClassVar[str] = "order.placed.v1"
-        aggregate_type: ClassVar[str] = "Order"
+        event_type: str = "order.placed.v1"
+        aggregate_type: str = "Order"
 
         order_id: uuid.UUID
         total: float
@@ -72,3 +72,24 @@ def test_a_subclass_implementing_the_contract_is_driven_entirely_by_it() -> None
         "order_id": str(event.order_id),  # type: ignore[attr-defined]
         "total": 9.99,
     }
+
+
+def test_a_subclass_can_override_only_event_type_leaving_aggregate_type_default() -> (
+    None
+):
+    """Регрессия: ранее `event_type`/`aggregate_type` были объявлены как
+    `ClassVar` на базовом классе — это ломало mypy для существующих
+    потребителей `DomainEvent` (`support-service`), которые уже
+    переопределяли `event_type: str = "..."` как обычное поле экземпляра,
+    не трогая `aggregate_type` вовсе. Оба поля — обычные dataclass-поля с
+    дефолтом, переопределение одного без другого не конфликтует."""
+
+    @dataclass(frozen=True, kw_only=True)
+    class TicketCreated(DomainEvent):
+        ticket_id: uuid.UUID
+        event_type: str = "ticket.created.v1"
+
+    event = TicketCreated(ticket_id=uuid.uuid4())
+
+    assert event.event_type == "ticket.created.v1"
+    assert event.aggregate_type == ""

@@ -2,7 +2,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.entity import Entity
@@ -13,8 +13,8 @@ from kernel_platform.outbox.models import OutboxMessage
 
 @dataclass(frozen=True, kw_only=True)
 class _WidgetCreated(DomainEvent):
-    event_type: ClassVar[str] = "widget.created.v1"
-    aggregate_type: ClassVar[str] = "Widget"
+    event_type: str = "widget.created.v1"
+    aggregate_type: str = "Widget"
 
     widget_id: uuid.UUID
     name: str

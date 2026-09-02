@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
 
@@ -16,7 +16,7 @@ class ProductEvent(DomainEvent):
     контракта `DomainEvent`, общую для всех Product-событий: `aggregate_type`
     и маппинг `product_id` в `aggregate_id()`/базовый `to_payload()`."""
 
-    aggregate_type: ClassVar[str] = "Product"
+    aggregate_type: str = "Product"
 
     product_id: ProductId
 
@@ -29,7 +29,7 @@ class ProductEvent(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ProductCreated(ProductEvent):
-    event_type: ClassVar[str] = "product.created.v1"
+    event_type: str = "product.created.v1"
 
     user_id: uuid.UUID
     name: str
@@ -48,19 +48,19 @@ class ProductCreated(ProductEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ProductUpdated(ProductEvent):
-    event_type: ClassVar[str] = "product.updated.v1"
+    event_type: str = "product.updated.v1"
 
 
 @dataclass(frozen=True, kw_only=True)
 class ProductActivated(ProductEvent):
-    event_type: ClassVar[str] = "product.activated.v1"
+    event_type: str = "product.activated.v1"
 
 
 @dataclass(frozen=True, kw_only=True)
 class ProductDeactivated(ProductEvent):
-    event_type: ClassVar[str] = "product.deactivated.v1"
+    event_type: str = "product.deactivated.v1"
 
 
 @dataclass(frozen=True, kw_only=True)
 class ProductDeleted(ProductEvent):
-    event_type: ClassVar[str] = "product.deleted.v1"
+    event_type: str = "product.deleted.v1"
