@@ -33,6 +33,8 @@ class Cursor:
 
 @dataclass(frozen=True)
 class PageInfo:
+    """Форма страницы курсорного листинга — не зависит от типа элементов."""
+
     next_cursor: str | None
     prev_cursor: str | None
     has_more: bool
@@ -40,11 +42,29 @@ class PageInfo:
 
 
 def encode_cursor(created_at: datetime, entity_id: uuid.UUID) -> str:
+    """Кодирует keyset-позицию в непрозрачный курсор.
+
+    Args:
+        created_at (datetime): Значение `created_at` строки-границы страницы.
+        entity_id (uuid.UUID): Id той же строки — тай-брейкер сортировки.
+
+    Returns:
+        str: Непрозрачная base64-строка курсора."""
     raw = f"{created_at.isoformat()}|{entity_id}"
     return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
 
 
 def decode_cursor(token: str) -> Cursor:
+    """Декодирует курсор, выданный `encode_cursor`, обратно в `Cursor`.
+
+    Args:
+        token (str): Курсор из query-параметра `after`/`before`.
+
+    Returns:
+        Cursor: Декодированная keyset-позиция.
+
+    Raises:
+        InvalidCursorError: Курсор повреждён или не декодируется."""
     try:
         raw = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
         created_at_raw, id_raw = raw.split("|")
@@ -53,14 +73,3 @@ def decode_cursor(token: str) -> Cursor:
         )
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
         raise InvalidCursorError("Некорректный курсор пагинации") from exc
-
-
-__all__ = [
-    "DEFAULT_PAGE_LIMIT",
-    "MAX_PAGE_LIMIT",
-    "Cursor",
-    "InvalidCursorError",
-    "PageInfo",
-    "decode_cursor",
-    "encode_cursor",
-]
