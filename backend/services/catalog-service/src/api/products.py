@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, status
 from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
-from kernel_platform.http.match import match_created
+from kernel_platform.http.match import match_created, match_result
 from kernel_platform.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -37,7 +37,6 @@ from application.commands import (
     ActivateProductCommand,
     DeactivateProductCommand,
     DeleteProductCommand,
-    UpdateProductCommand,
 )
 from application.queries import (
     GetProductAuditQuery,
@@ -101,22 +100,16 @@ async def get_product(
     return ProductResponse.from_domain(product)
 
 
-@router.patch("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch("/{product_id}", response_model=ApiResponse[ProductView])
 async def update_product(
     product_id: uuid.UUID,
     request: ProductUpdateRequest,
     auth: RequiredAuth,
     handler: UpdateProductDI,
-) -> None:
-    result = await handler.execute(
-        UpdateProductCommand(
-            product_id=product_id,
-            actor=to_actor(auth),
-            **request.model_dump(exclude_unset=True),
-        )
-    )
-    if result.is_err:
-        raise to_http_exception(result.error)
+) -> ApiResponse[ProductView]:
+    command = request.to_command(product_id=product_id, actor=to_actor(auth))
+    result: Result[ProductView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.patch("/{product_id}/activate", response_model=ProductResponse)

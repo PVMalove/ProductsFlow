@@ -13,7 +13,7 @@ from application.ports import (
     IdentityGateway,
     ProductCommandPort,
 )
-from domain.product import Product
+from contracts.product import ProductView
 from domain.product_id import ProductId
 
 
@@ -44,7 +44,7 @@ class UpdateProductCommandHandler:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, command: UpdateProductCommand) -> Result[Product]:
+    async def execute(self, command: UpdateProductCommand) -> Result[ProductView]:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError
@@ -58,4 +58,6 @@ class UpdateProductCommandHandler:
         )
         if result is None:
             raise ProductNotFoundError
-        return result
+        if result.is_err:
+            return Result.fail(result.error)
+        return Result.ok(ProductView.from_domain(result.value))

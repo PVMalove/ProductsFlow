@@ -228,6 +228,7 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     )
 
     assert result.is_ok
+    assert result.value == ProductView.from_domain(product)
     assert repo.updated == {
         "name": None,
         "description": None,
