@@ -299,13 +299,11 @@ async def test_update_product_changes_only_provided_fields(
         headers=_auth(token),
     )
 
-    assert response.status_code == 204
-    fetched = await catalog_client.get(
-        f"/api/v1/products/{product['id']}", headers=_auth(token)
-    )
-    body = fetched.json()
-    assert body["price"] == 42.0
-    assert body["name"] == _PRODUCT_PAYLOAD["name"]
+    assert response.status_code == 200
+    envelope = response.json()
+    assert envelope["meta"] == {}
+    assert envelope["data"]["price"] == 42.0
+    assert envelope["data"]["name"] == _PRODUCT_PAYLOAD["name"]
 
 
 async def test_update_product_by_a_non_owner_non_admin_is_forbidden(
@@ -337,7 +335,7 @@ async def test_update_product_by_an_admin_who_is_not_the_owner_is_allowed(
         headers=_auth(admin_token),
     )
 
-    assert response.status_code == 204
+    assert response.status_code == 200
 
 
 async def test_update_product_fails_closed_when_identity_is_unavailable(

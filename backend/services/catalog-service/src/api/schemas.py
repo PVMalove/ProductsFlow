@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from application.commands import CreateProductCommand
+from application.commands import CreateProductCommand, UpdateProductCommand
 from application.image_dto import ProductImageView
 from application.ports import Actor, ProductAuditAction, ProductAuditEntry
 from domain.product import Product
@@ -28,13 +28,22 @@ class ProductCreateRequest(BaseModel):
 
 class ProductUpdateRequest(BaseModel):
     """Все поля опциональны — `PATCH` частичный, отсутствующее поле не
-    трогается (`exclude_unset` на стороне роутера, CONTEXT.md «Обновление
+    трогается (`exclude_unset` внутри `to_command`, CONTEXT.md «Обновление
     товара»)."""
 
     name: str | None = None
     description: str | None = None
     price: float | None = None
     category: str | None = None
+
+    def to_command(
+        self, *, product_id: uuid.UUID, actor: Actor
+    ) -> UpdateProductCommand:
+        return UpdateProductCommand(
+            product_id=product_id,
+            actor=actor,
+            **self.model_dump(exclude_unset=True),
+        )
 
 
 class ProductResponse(BaseModel):
