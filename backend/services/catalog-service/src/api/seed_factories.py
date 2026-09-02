@@ -108,4 +108,12 @@ def generate_products(count: int = 100) -> list[ProductSeed]:
             )
         )
 
+    if len(products) < count:
+        max_unique = sum(len(n) for n in _NOUNS_BY_CATEGORY.values()) * len(_ADJECTIVES)
+        raise RuntimeError(
+            f"generate_products: could not generate {count} unique names — only "
+            f"{max_unique} adjective/noun combinations exist "
+            f"(got {len(products)} within {max_attempts} attempts)"
+        )
+
     return products

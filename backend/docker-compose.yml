@@ -176,7 +176,7 @@ services:
       [
         "sh",
         "-c",
-        "for i in 1 2 3 4 5; do python -m api.worker && break; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done",
+        "for i in 1 2 3 4 5; do python -m api.worker && exit 0; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
       ]
     environment:
       APP_ENV: ${APP_ENV}
