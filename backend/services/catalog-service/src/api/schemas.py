@@ -3,8 +3,9 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from application.commands import CreateProductCommand
 from application.image_dto import ProductImageView
-from application.ports import ProductAuditAction, ProductAuditEntry
+from application.ports import Actor, ProductAuditAction, ProductAuditEntry
 from domain.product import Product
 from domain.repositories import PageInfo, ProductPage
 
@@ -14,6 +15,15 @@ class ProductCreateRequest(BaseModel):
     description: str = ""
     price: float
     category: str
+
+    def to_command(self, *, actor: Actor) -> CreateProductCommand:
+        return CreateProductCommand(
+            actor=actor,
+            name=self.name,
+            description=self.description,
+            price=self.price,
+            category=self.category,
+        )
 
 
 class ProductUpdateRequest(BaseModel):

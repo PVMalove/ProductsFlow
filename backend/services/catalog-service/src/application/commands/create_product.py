@@ -12,7 +12,7 @@ from application.ports import (
     OwnerSnapshot,
     ProductCommandPort,
 )
-from domain.product import Product
+from contracts.product import ProductView
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class CreateProductCommandHandler:
         self._owner_read_model = owner_read_model
         self._identity = identity
 
-    async def execute(self, command: CreateProductCommand) -> Result[Product]:
+    async def execute(self, command: CreateProductCommand) -> Result[ProductView]:
         if await self._owner_read_model.get(command.actor.user_id) is None:
             info = await self._identity.fetch_current_user(command.actor.token)
             await self._owner_read_model.upsert(
@@ -56,10 +56,13 @@ class CreateProductCommandHandler:
                     last_applied_outbox_id=0,
                 )
             )
-        return await self._repository.create(
+        result = await self._repository.create(
             name=command.name,
             description=command.description,
             price=command.price,
             category=command.category,
             user_id=command.actor.user_id,
         )
+        if result.is_err:
+            return Result.fail(result.error)
+        return Result.ok(ProductView.from_domain(result.value))

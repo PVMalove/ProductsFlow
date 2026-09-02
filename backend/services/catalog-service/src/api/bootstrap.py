@@ -119,7 +119,7 @@ async def _seed_products(
         product = result.value
         await image_handler.execute(
             UpsertProductImageCommand(
-                product_id=product.id.value,
+                product_id=product.id,
                 actor=actor,
                 body=placeholder_bytes,
                 content_type=PLACEHOLDER_CONTENT_TYPE,

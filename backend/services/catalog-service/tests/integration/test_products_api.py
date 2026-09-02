@@ -1,4 +1,5 @@
 import uuid
+from typing import cast
 
 import httpx
 import pytest
@@ -45,8 +46,9 @@ async def _create_product(
     payload = {**_PRODUCT_PAYLOAD, **overrides}
     response = await client.post("/api/v1/products", json=payload, headers=_auth(token))
     assert response.status_code == 201, response.text
-    body: dict[str, object] = response.json()
-    return body
+    envelope: dict[str, object] = response.json()
+    assert envelope["meta"] == {}
+    return cast(dict[str, object], envelope["data"])
 
 
 # --- Создание (story 1) ---------------------------------------------------
@@ -57,6 +59,9 @@ async def test_create_product_requires_authentication(
 ) -> None:
     response = await catalog_client.post("/api/v1/products", json=_PRODUCT_PAYLOAD)
     assert response.status_code == 401
+    assert response.json() == {
+        "error": {"code": "UNAUTHORIZED", "message": "Требуется авторизация"}
+    }
 
 
 async def test_create_product_persists_it_under_the_caller(
@@ -69,6 +74,21 @@ async def test_create_product_persists_it_under_the_caller(
     assert body["name"] == _PRODUCT_PAYLOAD["name"]
     assert body["user_id"] == str(owner_id)
     assert body["is_active"] is True
+
+
+async def test_create_product_returns_the_bff_success_envelope(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    """ADR 0031: `data`/`meta` обязательны, `meta` пуст для create."""
+    token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.post(
+        "/api/v1/products", json=_PRODUCT_PAYLOAD, headers=_auth(token)
+    )
+
+    assert response.status_code == 201
+    assert set(response.json().keys()) == {"data", "meta"}
+    assert response.json()["meta"] == {}
 
 
 async def test_create_product_seeds_owner_read_model_on_cold_miss(
@@ -100,6 +120,50 @@ async def test_create_product_rejects_invalid_payload(
     )
 
     assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "invalid_name",
+            "message": "Название должно быть от 3 до 100 символов",
+        }
+    }
+
+
+async def test_create_product_rejects_a_malformed_request_body(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    """Framework-level Pydantic validation (не доменная) — тоже структурная
+    error-shape, но с каноническим VALIDATION_ERROR (ADR 0031)."""
+    token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.post(
+        "/api/v1/products",
+        json={**_PRODUCT_PAYLOAD, "price": "not-a-number"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {"code": "VALIDATION_ERROR", "message": "Некорректные данные запроса"}
+    }
+
+
+async def test_create_product_fails_closed_when_identity_is_unavailable_on_cold_miss(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    token, _ = _register_owner(identity_gateway)
+    identity_gateway.unavailable = True
+
+    response = await catalog_client.post(
+        "/api/v1/products", json=_PRODUCT_PAYLOAD, headers=_auth(token)
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "code": "IDENTITY_UNAVAILABLE",
+            "message": "identity-service недоступен",
+        }
+    }
 
 
 # --- Прямой доступ по id (stories 6, 9, 12) -------------------------------
