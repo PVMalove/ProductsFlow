@@ -36,7 +36,7 @@ class MutationSession(RecordingSession):
 
     async def scalars(self, statement: object) -> object:
         class Result:
-            def all(inner_self: object) -> list[TicketMessageModel]:
+            def all(_inner_self: object) -> list[TicketMessageModel]:
                 return [self.message]
 
         return Result()
@@ -84,8 +84,9 @@ def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageMode
 
 
 @pytest.mark.asyncio
-async def test_add_message_writes_only_technical_outbox_data_before_one_commit(
-) -> None:
+async def test_add_message_writes_only_technical_outbox_data_before_one_commit() -> (
+    None
+):
     author_id = uuid.uuid4()
     row, first_message = _stored_ticket(author_id)
     session = MutationSession(row, first_message)

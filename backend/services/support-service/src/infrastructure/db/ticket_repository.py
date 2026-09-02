@@ -280,9 +280,7 @@ class TicketRepository:
 
     async def _load_for_update(self, ticket_id: uuid.UUID) -> TicketModel | None:
         statement = (
-            select(TicketModel)
-            .where(TicketModel.id == ticket_id)
-            .with_for_update()
+            select(TicketModel).where(TicketModel.id == ticket_id).with_for_update()
         )
         return await self._session.scalar(statement)
 

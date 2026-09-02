@@ -24,7 +24,6 @@ def upgrade() -> None:
         sa.Column("status", sa.String(32), nullable=False, server_default="OPEN"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint("length(btrim(subject)) BETWEEN 1 AND 200", name="ck_tickets_subject_length"),
-        sa.CheckConstraint("status IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')", name="ck_tickets_status"),
     )
     op.create_index("ix_tickets_author_created_at_id", "tickets", ["author_id", "created_at", "id"])
     op.create_table(
