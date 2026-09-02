@@ -45,6 +45,7 @@ async def upload_product_image(
     product_id: uuid.UUID,
     auth: RequiredAuth,
     handler: UpsertProductImageDI,
+    read_handler: GetProductImageDI,
     response: Response,
     file: Annotated[UploadFile, File(description="JPEG/PNG/WEBP, до 5 МБ")],
 ) -> ProductImageResponse:
@@ -71,7 +72,10 @@ async def upload_product_image(
     response.status_code = (
         status.HTTP_200_OK if mutation.replaced else status.HTTP_201_CREATED
     )
-    return ProductImageResponse.from_view(mutation.view)
+    view = await read_handler.handle(
+        GetProductImageQuery(product_id=product_id, actor=to_actor(auth))
+    )
+    return ProductImageResponse.from_view(view)
 
 
 @router.delete("/{product_id}/image", status_code=status.HTTP_204_NO_CONTENT)

@@ -94,6 +94,8 @@ class ProductAuditReader(Protocol):
 
 
 class ProductCommandPort(Protocol):
+    async def get_by_id(self, product_id: ProductId) -> Product | None: ...
+
     async def create(
         self,
         *,

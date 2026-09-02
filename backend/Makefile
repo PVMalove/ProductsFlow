@@ -20,7 +20,7 @@ _require-pkg:
 	$(if $(member_dir),,$(error пакет '$(pkg)' не найден ни в libs/, ни в services/))
 
 architecture-check: ## Проверить направление зависимостей и вывести CQRS-аудит
-	uv run --project services/identity-service python ../../scripts/check_architecture.py --strict
+	python scripts/check_architecture.py --strict
 
 # uv run --project <dir> из backend/ (а не `cd <dir> && uv run`): mypy
 # --explicit-package-bases выводит имя модуля из позиционного пути относительно
@@ -33,7 +33,7 @@ architecture-check: ## Проверить направление зависим�
 check: _require-pkg ## Прогнать все линтеры на пакете (make check pkg=<member>) — своё изолированное окружение
 	uv --project $(member_dir) sync
 	uv run --project $(member_dir) ruff check $(member_dir)
-	uv run --project $(member_dir) mypy --explicit-package-bases $(member_dir)
+	uv run --project $(member_dir) mypy --cache-dir $(member_dir)/.mypy_cache --explicit-package-bases $(member_dir)
 	uv run --project $(member_dir) ruff format --check $(member_dir)
 	uv run --project $(member_dir) vulture whitelist.py $(member_dir)
 

@@ -13,6 +13,12 @@ Application code depends on explicit command/query ports for product access and
 on ports for the owner read model, identity lookup, image storage, and audit
 reads. Command handlers own mutations and query handlers own visibility,
 pagination, audit, and image reads.
+
+Command handlers load an aggregate through `ProductCommandPort` when they need
+to authorize or validate a mutation. They do not cast the repository to
+`ProductQueryPort`; query ports are reserved for query handlers. The former
+mixed `product_use_cases.py` and `product_image_use_cases.py` facades are
+removed and must not be reintroduced as compatibility adapters.
 `ProductVisibilityPolicy` remains in `domain`. SQLAlchemy implementations are
 assembled only in `api/dependencies.py`, while `api` maps
 application errors to the unchanged HTTP status and response contract.

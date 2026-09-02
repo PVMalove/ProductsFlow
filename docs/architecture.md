@@ -112,12 +112,12 @@ HTTP / AMQP adapter (presentation) ──> application ──> domain
 конструктор и выполняет один сценарий. Его можно тестировать напрямую, без
 FastAPI и без реальной инфраструктуры.
 
-CQRS применяется локально и только когда это упрощает задачу: write- и
-read-модель имеют разные правила, требования к консистентности или независимо
-масштабируются. Для простого CRUD не требуется ни искусственно разносить
-одинаковую логику, ни заводить общий `ICommand`/`IQuery`, handler Protocol,
-диспетчер или глобальный реестр. FastAPI `Depends()` остаётся явной точкой
-связывания входа, handler и адаптеров.
+CQRS обязателен для активного кода `backend`: write- и read-операции всегда
+разделяются на command/query DTO и отдельные handlers, даже если сценарий —
+простой CRUD. При этом не требуется искусственно разносить одинаковую логику
+по дополнительным модулям или заводить общий `ICommand`/`IQuery`, handler
+Protocol, диспетчер или глобальный реестр. FastAPI `Depends()` остаётся явной
+точкой связывания входа, handler и адаптеров.
 
 ## Проверка границы
 
@@ -146,8 +146,26 @@ Command-handler изменяет агрегат через command-side port, в
 Query-handler читает через query-side port/read model и не меняет состояние.
 HTTP-адаптер только преобразует transport DTO и вызывает handler.
 
-До миграции существующих bounded context допускаются compatibility adapters:
-текущие `src/api`-модули и смешанные `*_use_cases.py` могут оставаться внешним
-слоем, но должны быть перечислены в аудите и не становиться шаблоном для нового
-кода. Адаптер не содержит новой бизнес-логики и удаляется в задаче миграции
-соответствующего сервиса.
+### Чек-лист нового сценария
+
+Перед реализацией проверьте:
+
+1. DTO неизменяем и не импортирует transport или infrastructure-типы.
+2. Command-handler зависит от command-side port; если ему нужно загрузить
+   агрегат для проверки инварианта, чтение выполняется через тот же write-side
+   repository, а не через query-handler или query-port.
+3. Command-side и query-side модули не импортируют друг друга. Общая логика
+   выносится в domain или нейтральный application helper.
+4. Query-handler зависит только от query-side port/read model и не вызывает
+   mutation, outbox или domain event.
+5. Для операции создан отдельный модуль в `application/commands/` или
+   `application/queries/`, а публичный импорт добавлен в соответствующий
+   `__init__.py`.
+6. Unit-тест проверяет handler через fake порта; integration-тест проверяет
+   adapter и сохранение публичного transport/event contract.
+7. Перед PR запущены `make -C backend architecture-check`, package check и
+   package tests.
+
+Compatibility adapter допустим только для сохранения существующего import
+contract, должен быть command-only или query-only re-export без бизнес-логики и
+явно помечен docstring. Смешанные `*_use_cases.py` фасады запрещены.
