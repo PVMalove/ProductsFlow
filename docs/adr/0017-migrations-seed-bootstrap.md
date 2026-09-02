@@ -1,5 +1,7 @@
 # 0017. Миграции, сид и bucket-ensure: bootstrap-шаг вместо lifespan
 
+> **Superseded частично, в части провижининга Postgres, механизма сида `OwnerReadModel` и состава `make`-целей, решением [ADR 0032](0032-bootstrap-implementation-amends-0017.md)**: три Postgres-сервиса в Compose вместо внешнего провижининга, `OwnerReadModel` через реальный событийный конвейер вместо прямой записи по конвенции `id=1`, и `make setup`/`make demo` поверх `make dev pkg=<service>`. Текст ниже сохранён как есть — не переписывается задним числом.
+
 Техдолг №5 TD (`run_migrations()`/`seed_db()` в `lifespan` — гонка при нескольких репликах) TD чинит в Фазе 7, за границей destination. Но три сервиса со своим `alembic/` рождаются в Фазах 2, 4, 5 — внутри границы — и без явного решения унаследуют дефект трижды. ADR 0010 уже подготовил место: `docker-compose.migrations.yml` в дереве workspace, с явной пометкой «решение по механизму принимается отдельно (техдолг №5 TD)» — это решение.
 
 **Один bootstrap-шаг на сервис: миграции + bucket-ensure (только catalog) + сид, последовательно.** `identity-bootstrap`, `catalog-bootstrap`, `support-bootstrap` — one-off compose-сервисы, `depends_on: <своя db> healthy`. `*-api` каждого сервиса — `depends_on: <свой>-bootstrap: condition: service_completed_successfully`. Три bootstrap-шага не зависят друг от друга и могут выполняться параллельно — на этом построен и сид (см. ниже). Порядок внутри catalog-bootstrap: `alembic upgrade head` → `ensure_minio_buckets` → сид. Тот же порядок, что сейчас в `lifespan`, просто вынесенный из процесса API.
