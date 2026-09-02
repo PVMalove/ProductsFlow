@@ -13,10 +13,16 @@ dependencies = [
     "asyncpg>=0.31.0",
     "cryptography>=50.0.0",
     "httpx>=0.28.1",
+    "kernel-domain",
     "pamqp>=4.0.1",
     "pyjwt>=2.13.0",
     "sqlalchemy[asyncio]>=2.0",
 ]
+
+# path-зависимость на соседний пакет монорепо (ADR 0020) — editable в
+# dev-окружении, --no-editable при сборке production-образа.
+[tool.uv.sources]
+kernel-domain = { path = "../kernel-domain", editable = true }
 
 [build-system]
 requires = ["hatchling"]

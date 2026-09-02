@@ -470,6 +470,21 @@ wheels = [
 ]
 
 [[package]]
+name = "kernel-domain"
+version = "0.1.0"
+source = { editable = "../kernel-domain" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=2.3.1" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "ruff", specifier = ">=0.16.1" },
+    { name = "vulture", specifier = ">=2.14" },
+]
+
+[[package]]
 name = "kernel-platform"
 version = "0.1.0"
 source = { editable = "." }
@@ -479,6 +494,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "kernel-domain" },
     { name = "pamqp" },
     { name = "pyjwt" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -502,6 +518,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "kernel-domain", editable = "../kernel-domain" },
     { name = "pamqp", specifier = ">=4.0.1" },
     { name = "pyjwt", specifier = ">=2.13.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
