@@ -28,7 +28,7 @@ class ProductCreateRequest(BaseModel):
 
 class ProductUpdateRequest(BaseModel):
     """Все поля опциональны — `PATCH` частичный, отсутствующее поле не
-    трогается (`exclude_unset` на стороне роутера, CONTEXT.md «Обновление
+    трогается (`exclude_unset` внутри `to_command`, CONTEXT.md «Обновление
     товара»)."""
 
     name: str | None = None
