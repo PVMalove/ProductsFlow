@@ -33,7 +33,17 @@ class LoginCommandHandler:
         self._password_hasher = password_hasher
 
     async def execute(self, command: LoginCommand) -> Result[User]:
-        user = await self._users.get_by_email(Email(command.email))
+        try:
+            email = Email(command.email)
+        except ValueError:
+            return Result.fail(
+                Error(
+                    code="invalid_credentials",
+                    description="Неверный email или пароль",
+                    type=ErrorType.UNAUTHORIZED,
+                )
+            )
+        user = await self._users.get_by_email(email)
         if user is None or not self._password_hasher.verify(
             command.password, user.password_hash
         ):

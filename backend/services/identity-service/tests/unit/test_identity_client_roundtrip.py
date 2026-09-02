@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import jwt
@@ -11,6 +12,8 @@ from api.main import app as identity_app
 from core.security.tokens import create_access_token
 from tests.unit.counting_transport import CountingTransport, FlakyOnceTransport
 
+_SUBJECT = UUID("00000000-0000-0000-0000-000000000042")
+
 
 def _forge_token(kid: str, sub: str = "999") -> str:
     rogue_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -21,11 +24,11 @@ async def test_verify_token_accepts_a_token_signed_by_identity(
     identity_http_client: httpx.AsyncClient,
 ) -> None:
     client = IdentityClient(identity_http_client)
-    token = create_access_token(sub=42)
+    token = create_access_token(sub=_SUBJECT)
 
     payload = await client.verify_token(token)
 
-    assert payload["sub"] == "42"
+    assert payload["sub"] == str(_SUBJECT)
     assert payload["iss"] == "identity-service"
 
 
@@ -33,10 +36,10 @@ async def test_verify_token_reuses_a_cached_kid_without_an_http_call(
     identity_http_client: httpx.AsyncClient, identity_transport: CountingTransport
 ) -> None:
     client = IdentityClient(identity_http_client)
-    await client.verify_token(create_access_token(sub=1))
+    await client.verify_token(create_access_token(sub=_SUBJECT))
     assert identity_transport.request_count == 1
 
-    await client.verify_token(create_access_token(sub=2))
+    await client.verify_token(create_access_token(sub=_SUBJECT))
 
     assert identity_transport.request_count == 1
 
@@ -46,7 +49,7 @@ async def test_verify_token_refetches_once_for_unknown_kid_within_throttle_windo
 ) -> None:
     client = IdentityClient(identity_http_client)
     # Прогреваем кэш реальным kid — дальше запросы бьют именно по "неизвестному kid".
-    await client.verify_token(create_access_token(sub=1))
+    await client.verify_token(create_access_token(sub=_SUBJECT))
     assert identity_transport.request_count == 1
 
     bogus_token = _forge_token(kid="bogus-kid")
@@ -64,7 +67,7 @@ async def test_verify_token_rejects_a_token_signed_by_a_different_key(
     identity_http_client: httpx.AsyncClient,
 ) -> None:
     client = IdentityClient(identity_http_client)
-    real_token = create_access_token(sub=1)
+    real_token = create_access_token(sub=_SUBJECT)
     real_kid = jwt.get_unverified_header(real_token)["kid"]
 
     forged_token = _forge_token(kid=real_kid, sub="1")
@@ -89,6 +92,6 @@ async def test_preload_failure_is_non_fatal_logs_and_lazy_fetch_still_works(
 
         assert "JWKS" in caplog.text
 
-        payload = await client.verify_token(create_access_token(sub=7))
+        payload = await client.verify_token(create_access_token(sub=_SUBJECT))
 
-        assert payload["sub"] == "7"
+        assert payload["sub"] == str(_SUBJECT)

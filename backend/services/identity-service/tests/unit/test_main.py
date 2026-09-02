@@ -21,6 +21,11 @@ def test_app_starts_in_dev_without_a_configured_key(
 ) -> None:
     monkeypatch.setattr(settings, "app_env", "dev")
     monkeypatch.setattr(settings, "identity_jwt_private_key_path", "")
+    monkeypatch.setattr(
+        settings,
+        "identity_database_url",
+        "postgresql+asyncpg://identity:identity@localhost/identity",
+    )
 
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/.well-known/jwks.json")
