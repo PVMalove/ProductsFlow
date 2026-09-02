@@ -6,6 +6,8 @@ from api.dependencies import (
     AddTicketMessageDI,
     ChangeTicketStatusDI,
     CreateTicketDI,
+    DeleteTicketMessageDI,
+    EditTicketMessageDI,
     GetTicketDI,
     ListAdminTicketsDI,
     ListTicketMessagesDI,
@@ -22,6 +24,8 @@ from application.commands import (
     AddTicketMessageCommand,
     ChangeTicketStatusCommand,
     CreateTicketCommand,
+    DeleteTicketMessageCommand,
+    EditTicketMessageCommand,
 )
 from application.errors import TicketNotFoundError
 from application.pagination import (
@@ -36,7 +40,13 @@ from application.queries import (
     ListTicketMessagesQuery,
     ListTicketsQuery,
 )
-from domain.ticket import InvalidStatusTransitionError, TicketClosedError
+from domain.ticket import (
+    InvalidStatusTransitionError,
+    TicketClosedError,
+    TicketMessageAlreadyDeletedError,
+    TicketMessageImmutableError,
+    TicketMessageNotFoundError,
+)
 from infrastructure.security.auth import AdminAuth, OptionalAdmin, RequiredAuth
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
@@ -168,6 +178,74 @@ async def change_ticket_status(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Недопустимый переход статуса тикета",
+        ) from exc
+    return TicketResponse.from_domain(ticket)
+
+
+@router.patch("/{ticket_id}/messages/{message_id}", response_model=TicketResponse)
+async def edit_ticket_message(
+    ticket_id: uuid.UUID,
+    message_id: uuid.UUID,
+    request: TicketMessageCreateRequest,
+    actor_id: RequiredAuth,
+    is_admin: OptionalAdmin,
+    handler: EditTicketMessageDI,
+) -> TicketResponse:
+    try:
+        ticket = await handler.execute(
+            EditTicketMessageCommand(
+                ticket_id=ticket_id,
+                message_id=message_id,
+                actor_id=actor_id,
+                body=request.body,
+                is_admin=is_admin,
+            )
+        )
+    except (TicketNotFoundError, TicketMessageNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
+        ) from exc
+    except (
+        TicketClosedError,
+        TicketMessageAlreadyDeletedError,
+        TicketMessageImmutableError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Сообщение нельзя изменить",
+        ) from exc
+    return TicketResponse.from_domain(ticket)
+
+
+@router.delete("/{ticket_id}/messages/{message_id}", response_model=TicketResponse)
+async def delete_ticket_message(
+    ticket_id: uuid.UUID,
+    message_id: uuid.UUID,
+    actor_id: RequiredAuth,
+    is_admin: OptionalAdmin,
+    handler: DeleteTicketMessageDI,
+) -> TicketResponse:
+    try:
+        ticket = await handler.execute(
+            DeleteTicketMessageCommand(
+                ticket_id=ticket_id,
+                message_id=message_id,
+                actor_id=actor_id,
+                is_admin=is_admin,
+            )
+        )
+    except (TicketNotFoundError, TicketMessageNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
+        ) from exc
+    except (
+        TicketClosedError,
+        TicketMessageAlreadyDeletedError,
+        TicketMessageImmutableError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Сообщение нельзя удалить",
         ) from exc
     return TicketResponse.from_domain(ticket)
 

@@ -20,12 +20,16 @@ append only to their own non-closed Ticket; an administrator may append to any
 non-closed Ticket. Status changes require an administrator and return the
 updated Ticket with `200`. Invalid lifecycle transitions and attempts to
 mutate a closed Ticket return `409`; an inaccessible Ticket is reported as
-`404`.
+`404`. An administrator may still soft-delete a message in a closed Ticket for
+moderation.
 
 Tickets themselves are neither edited nor deleted in Phase 5. Message editing
 and deletion are separate operations whose authorization and retention rules
 are defined above. Message edits and soft deletions publish
 `ticket.message_edited.v1` and `ticket.message_deleted.v1` without text.
+Message responses expose `is_deleted`; a deleted message keeps its identifier,
+author, timestamp, and thread position while returning the deletion marker as
+its body.
 
 All text is trimmed plaintext: subjects contain 1–200 characters and message
 bodies contain 1–10,000; invalid input returns `422`. A system message cannot

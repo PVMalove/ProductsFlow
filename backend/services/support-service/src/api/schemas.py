@@ -37,6 +37,7 @@ class TicketMessageResponse(BaseModel):
     author_id: uuid.UUID
     body: str
     created_at: datetime
+    is_deleted: bool
 
 
 class TicketResponse(BaseModel):
@@ -66,6 +67,7 @@ class TicketResponse(BaseModel):
                     author_id=message.author_id,
                     body=message.body,
                     created_at=message.created_at,
+                    is_deleted=message.is_deleted,
                 )
                 for message in source_messages
             ],

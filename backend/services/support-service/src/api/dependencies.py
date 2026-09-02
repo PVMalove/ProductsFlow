@@ -6,6 +6,8 @@ from application.commands import (
     AddTicketMessageCommandHandler,
     ChangeTicketStatusCommandHandler,
     CreateTicketCommandHandler,
+    DeleteTicketMessageCommandHandler,
+    EditTicketMessageCommandHandler,
 )
 from application.queries import (
     GetTicketQueryHandler,
@@ -45,6 +47,28 @@ def get_change_ticket_status_handler(
 
 ChangeTicketStatusDI = Annotated[
     ChangeTicketStatusCommandHandler, Depends(get_change_ticket_status_handler)
+]
+
+
+def get_edit_ticket_message_handler(
+    session: DbSessionDI,
+) -> EditTicketMessageCommandHandler:
+    return EditTicketMessageCommandHandler(TicketRepository(session))
+
+
+EditTicketMessageDI = Annotated[
+    EditTicketMessageCommandHandler, Depends(get_edit_ticket_message_handler)
+]
+
+
+def get_delete_ticket_message_handler(
+    session: DbSessionDI,
+) -> DeleteTicketMessageCommandHandler:
+    return DeleteTicketMessageCommandHandler(TicketRepository(session))
+
+
+DeleteTicketMessageDI = Annotated[
+    DeleteTicketMessageCommandHandler, Depends(get_delete_ticket_message_handler)
 ]
 
 

@@ -38,7 +38,7 @@ from domain.product_id import ProductId
 OWNER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
-def test_catalog_application_facades_expose_one_handler_per_operation() -> None:
+def test_catalog_application_handlers_expose_one_handler_per_operation() -> None:
     command_types = (
         CreateProductCommandHandler,
         UpdateProductCommandHandler,
@@ -70,10 +70,10 @@ def test_catalog_application_facades_expose_one_handler_per_operation() -> None:
         GetProductImageQuery,
     )
 
-    assert all(hasattr(handler_type, "handle") for handler_type in command_types)
-    assert all(hasattr(handler_type, "handle") for handler_type in query_types)
-    assert all(not hasattr(handler_type, "execute") for handler_type in command_types)
-    assert all(not hasattr(handler_type, "execute") for handler_type in query_types)
+    assert all(hasattr(handler_type, "execute") for handler_type in command_types)
+    assert all(hasattr(handler_type, "execute") for handler_type in query_types)
+    assert all(not hasattr(handler_type, "handle") for handler_type in command_types)
+    assert all(not hasattr(handler_type, "handle") for handler_type in query_types)
     assert all(
         hasattr(dto_type, "__dataclass_fields__") for dto_type in command_dto_types
     )

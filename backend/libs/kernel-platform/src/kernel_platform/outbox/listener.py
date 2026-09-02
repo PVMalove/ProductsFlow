@@ -38,7 +38,9 @@ class OutboxListener:
 
         Args:
             dsn (str): Строка подключения к БД.
-            channel (str): Имя pg-канала, который слушаем. По дефолту `NOTIFICATION_CHANNEL`."""
+            channel (str): Имя pg-канала, который слушаем.
+                По умолчанию `NOTIFICATION_CHANNEL`.
+        """
         self._dsn = dsn
         self._channel = channel
         self._connection: asyncpg.Connection | None = None
@@ -64,7 +66,8 @@ class OutboxListener:
     async def wait_for_wakeup(self, timeout: float) -> None:
         """Блокирующее (асинхронно) ожидание эвента о новом сообщении или таймаута.
 
-        Ждет триггера от `asyncio.Event`. Если событие не стрельнуло за timeout — проглатывает `TimeoutError` и выходит.
+        Ждет триггера от `asyncio.Event`. Если событие не стрельнуло за timeout —
+        проглатывает `TimeoutError` и выходит.
         В любом случае сбрасывает флаг эвента перед выходом.
 
         Args:
@@ -77,18 +80,20 @@ class OutboxListener:
             self._wakeup.clear()
 
     def _handle_notify(
-            self,
-            _connection: asyncpg.Connection,
-            _pid: int,
-            _channel: str,
-            _payload: object,
+        self,
+        _connection: asyncpg.Connection,
+        _pid: int,
+        _channel: str,
+        _payload: object,
     ) -> None:
         """Стреляет эвент при получении `NOTIFY` из постгре.
 
         Взводит `asyncio.Event`, разблокируя ожидающих в `wait_for_wakeup`.
 
         Args:
-            _connection, _pid, _channel, _payload: Сырые параметры коллбэка `asyncpg`."""
+            _connection, _pid, _channel, _payload: Сырые параметры коллбэка
+                `asyncpg`.
+        """
         self._wakeup.set()
 
     async def __aenter__(self) -> "OutboxListener":
@@ -97,10 +102,10 @@ class OutboxListener:
         return self
 
     async def __aexit__(
-            self,
-            _exc_type: type[BaseException] | None,
-            _exc: BaseException | None,
-            _traceback: TracebackType | None,
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
     ) -> None:
         """Точка выхода асинхронного контекстного менеджера, стопает листенер."""
         await self.stop()

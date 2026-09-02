@@ -5,20 +5,27 @@ from fastapi.testclient import TestClient
 from api.dependencies import (
     get_add_ticket_message_handler,
     get_change_ticket_status_handler,
+    get_delete_ticket_message_handler,
+    get_edit_ticket_message_handler,
     get_list_admin_tickets_handler,
     get_list_ticket_messages_handler,
     get_list_tickets_handler,
     get_ticket_handler,
 )
 from api.main import app
-from application.commands import AddTicketMessageCommand, ChangeTicketStatusCommand
+from application.commands import (
+    AddTicketMessageCommand,
+    ChangeTicketStatusCommand,
+    DeleteTicketMessageCommand,
+    EditTicketMessageCommand,
+)
 from application.queries import (
     GetTicketQuery,
     ListAdminTicketsQuery,
     ListTicketsQuery,
 )
 from domain.repositories import MessagePage, PageInfo, TicketPage
-from domain.ticket import Ticket, TicketStatus
+from domain.ticket import Ticket, TicketClosedError, TicketStatus
 from infrastructure.security.auth import get_admin_auth, get_is_admin, get_required_auth
 
 
@@ -155,3 +162,84 @@ def test_admin_status_endpoint_passes_status_command() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
+
+
+def test_ticket_message_edit_endpoint_passes_message_command() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    message_id = ticket.messages[0].id
+
+    class FakeHandler:
+        async def execute(self, command: EditTicketMessageCommand) -> Ticket:
+            assert command.ticket_id == ticket.id
+            assert command.message_id == message_id
+            assert command.actor_id == author_id
+            assert command.body == "Corrected"
+            assert command.is_admin is True
+            return ticket
+
+    app.dependency_overrides[get_required_auth] = lambda: author_id
+    app.dependency_overrides[get_is_admin] = lambda: True
+    app.dependency_overrides[get_edit_ticket_message_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/tickets/{ticket.id}/messages/{message_id}",
+                json={"body": "Corrected"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+
+def test_ticket_message_delete_endpoint_passes_admin_context() -> None:
+    actor_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    message_id = ticket.messages[0].id
+
+    class FakeHandler:
+        async def execute(self, command: DeleteTicketMessageCommand) -> Ticket:
+            assert command.ticket_id == ticket.id
+            assert command.message_id == message_id
+            assert command.actor_id == actor_id
+            assert command.is_admin is True
+            return ticket
+
+    app.dependency_overrides[get_required_auth] = lambda: actor_id
+    app.dependency_overrides[get_is_admin] = lambda: True
+    app.dependency_overrides[get_delete_ticket_message_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.delete(
+                f"/api/v1/tickets/{ticket.id}/messages/{message_id}"
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+
+def test_ticket_message_edit_maps_closed_ticket_to_conflict() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    message_id = ticket.messages[0].id
+
+    class FakeHandler:
+        async def execute(self, command: EditTicketMessageCommand) -> Ticket:
+            raise TicketClosedError
+
+    app.dependency_overrides[get_required_auth] = lambda: author_id
+    app.dependency_overrides[get_edit_ticket_message_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/tickets/{ticket.id}/messages/{message_id}",
+                json={"body": "Corrected"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409

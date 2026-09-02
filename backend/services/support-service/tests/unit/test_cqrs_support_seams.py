@@ -122,7 +122,7 @@ async def test_ticket_queries_are_independent_handlers() -> None:
     ) == repository.message_page
 
 
-def test_support_cqrs_handlers_expose_handle_only() -> None:
+def test_support_cqrs_handlers_expose_execute_only() -> None:
     handler_types = (
         CreateTicketCommandHandler,
         GetTicketQueryHandler,
@@ -131,6 +131,6 @@ def test_support_cqrs_handlers_expose_handle_only() -> None:
         ListTicketMessagesQueryHandler,
     )
 
-    assert all(hasattr(handler_type, "handle") for handler_type in handler_types)
-    assert all(not hasattr(handler_type, "execute") for handler_type in handler_types)
+    assert all(hasattr(handler_type, "execute") for handler_type in handler_types)
+    assert all(not hasattr(handler_type, "handle") for handler_type in handler_types)
     assert TicketCommandPort is not TicketQueryPort

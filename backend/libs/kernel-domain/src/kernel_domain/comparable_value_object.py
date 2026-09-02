@@ -53,8 +53,8 @@ class ComparableValueObject(ValueObject):
         if type(other) is not type(self):
             return type(self).__name__ < type(other).__name__
         for left, right in zip(
-                self._comparable_equality_components(),
-                other._comparable_equality_components(),
+            self._comparable_equality_components(),
+            other._comparable_equality_components(),
         ):
             if left != right:
                 return bool(left < right)

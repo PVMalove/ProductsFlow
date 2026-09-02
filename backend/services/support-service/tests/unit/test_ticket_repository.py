@@ -108,6 +108,69 @@ async def test_add_message_writes_only_technical_outbox_data_before_one_commit()
 
 
 @pytest.mark.asyncio
+async def test_edit_message_updates_body_and_writes_technical_outbox_event() -> None:
+    author_id = uuid.uuid4()
+    row, message = _stored_ticket(author_id)
+    session = MutationSession(row, message)
+
+    result = await SqlTicketRepository(session).edit_message(  # type: ignore[arg-type]
+        ticket_id=row.id,
+        message_id=message.id,
+        actor_id=author_id,
+        body="Corrected text",
+    )  # type: ignore[arg-type]
+
+    assert result is not None
+    assert message.body == "Corrected text"
+    assert session.commit_count == 1
+    outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
+    assert len(outbox) == 1
+    assert outbox[0].event_type == "ticket.message_edited.v1"
+    assert "body" not in outbox[0].payload
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_soft_deletes_message_and_writes_technical_event() -> None:
+    author_id = uuid.uuid4()
+    row, message = _stored_ticket(author_id)
+    session = MutationSession(row, message)
+
+    result = await SqlTicketRepository(session).delete_message(  # type: ignore[arg-type]
+        ticket_id=row.id,
+        message_id=message.id,
+        actor_id=uuid.uuid4(),
+        is_admin=True,
+    )  # type: ignore[arg-type]
+
+    assert result is not None
+    assert message.body == "[Сообщение удалено]"
+    assert message.is_deleted is True
+    assert session.commit_count == 1
+    outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
+    assert len(outbox) == 1
+    assert outbox[0].event_type == "ticket.message_deleted.v1"
+    assert "body" not in outbox[0].payload
+
+
+@pytest.mark.asyncio
+async def test_editing_message_on_another_ticket_owner_is_hidden() -> None:
+    author_id = uuid.uuid4()
+    row, message = _stored_ticket(author_id)
+    session = MutationSession(row, message)
+
+    result = await SqlTicketRepository(session).edit_message(  # type: ignore[arg-type]
+        ticket_id=row.id,
+        message_id=message.id,
+        actor_id=uuid.uuid4(),
+        body="Should not be visible",
+    )  # type: ignore[arg-type]
+
+    assert result is None
+    assert message.body == "First message"
+    assert session.commit_count == 0
+
+
+@pytest.mark.asyncio
 async def test_rejected_status_change_rolls_back_without_persisting_mutation() -> None:
     author_id = uuid.uuid4()
     row, first_message = _stored_ticket(author_id)
