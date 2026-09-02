@@ -8,6 +8,10 @@ from application.commands.change_password import (
     ChangePasswordCommand,
     ChangePasswordCommandHandler,
 )
+from application.commands.change_role import (
+    ChangeUserRoleCommand,
+    ChangeUserRoleCommandHandler,
+)
 from application.commands.deactivate_user import (
     DeactivateUserCommand,
     DeactivateUserCommandHandler,
@@ -23,6 +27,8 @@ __all__ = [
     "ActivateUserCommandHandler",
     "ChangePasswordCommand",
     "ChangePasswordCommandHandler",
+    "ChangeUserRoleCommand",
+    "ChangeUserRoleCommandHandler",
     "DeactivateUserCommand",
     "DeactivateUserCommandHandler",
     "LoginCommand",

@@ -55,6 +55,7 @@ class UserAuditAction(enum.StrEnum):
     PASSWORD_CHANGED = "password_changed"
     ACTIVATED = "activated"
     DEACTIVATED = "deactivated"
+    ROLE_CHANGED = "role_changed"
 
 
 @dataclass(frozen=True)

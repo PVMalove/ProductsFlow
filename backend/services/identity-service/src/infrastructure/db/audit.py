@@ -108,6 +108,13 @@ def _on_user_update(
                 "Пользователь активирован" if active else "Пользователь деактивирован"
             ),
         )
+    if state.attrs.role.history.has_changes():
+        _write_audit(
+            connection,
+            user_id=target.id,
+            action=UserAuditAction.ROLE_CHANGED,
+            description=f"Роль пользователя изменена на {target.role!r}",
+        )
 
 
 async def get_audit_logs_by_user(

@@ -164,7 +164,7 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
         "/api/v1/users/audit?page_index=1&page_size=2", headers=admin_headers
     )
     assert global_audit.status_code == 200
-    assert global_audit.json()["total"] == 5
+    assert global_audit.json()["total"] == 6
     assert global_audit.json()["total_pages"] == 3
 
     self_deactivation = await client.patch(
