@@ -21,9 +21,20 @@ no `add` or `save` operation, so a query handler cannot accidentally mutate the
 aggregate through its declared dependency. The old per-operation module paths
 remain thin re-export adapters for callers during the migration.
 
+`ListUsersQueryHandler` reads an administrator's cursor-paginated `UserPage`
+through `UserListQueryPort`, using the shared `kernel_platform.pagination`
+contract. `GetUserAuditQueryHandler` uses `UserAuditQueryPort`: a missing
+`user_id` selects the global offset-paginated `UserAuditPage` with
+`page_index`/`page_size` and `total_pages`, while a supplied `user_id` selects
+the complete, unpaginated personal history. Authorization and the distinction
+between the caller's own id and an administrator's target id belong to the API
+boundary.
+
 `infrastructure.db.user_repository.UserRepository` maps the aggregate to the
 SQLAlchemy `UserModel`. Every mutating method drains domain events through the
 shared kernel-platform outbox operation and commits once, so the user row and
 its outbox rows share one transaction. ORM listeners in `infrastructure.db.audit`
 write the immutable user audit trail and resolve the actor from the shared
 request `ContextVar` (falling back to the affected user's id outside HTTP).
+`SqlUserQueryRepository` and `SqlUserAuditReader` provide the corresponding
+read-side SQL adapters without exposing password hashes.

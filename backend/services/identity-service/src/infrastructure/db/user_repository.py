@@ -1,7 +1,9 @@
 from kernel_platform.outbox.drain import drain_events_to_outbox
-from sqlalchemy import select
+from kernel_platform.pagination import Cursor, PageInfo, encode_cursor
+from sqlalchemy import Select, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.ports import UserListQueryPort, UserPage, UserReadModel
 from domain.email import Email
 from domain.repositories import UserRepository as UserRepositoryPort
 from domain.role import Role
@@ -12,6 +14,8 @@ from domain.user_id import UserId
 # whenever the repository is used, including from application code.
 from infrastructure.db import audit as _audit  # noqa: F401
 from infrastructure.db.models import UserModel
+
+_UserRows = list[UserModel]
 
 
 def _to_domain(row: UserModel) -> User:
@@ -77,3 +81,85 @@ def _to_model(user: User) -> UserModel:
 
 
 _user_repository_implementation: type[UserRepositoryPort] = UserRepository
+
+
+def _to_read_model(row: UserModel) -> UserReadModel:
+    return UserReadModel(
+        id=UserId(row.id),
+        email=Email(row.email),
+        role=Role(row.role),
+        is_active=row.is_active,
+    )
+
+
+class SqlUserQueryRepository:
+    """Read-only SQL adapter for the identity application's query port."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, user_id: UserId) -> UserReadModel | None:
+        row = await self.session.get(UserModel, user_id.value)
+        return _to_read_model(row) if row is not None else None
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        after: Cursor | None = None,
+        before: Cursor | None = None,
+    ) -> UserPage:
+        base_stmt = select(UserModel)
+        if before is not None:
+            stmt = base_stmt.where(
+                tuple_(UserModel.created_at, UserModel.id)
+                > (before.created_at, before.id)
+            ).order_by(UserModel.created_at.asc(), UserModel.id.asc())
+            rows, has_prev = await self._overfetch(stmt, limit)
+            rows.reverse()
+            has_more = True
+        else:
+            stmt = base_stmt
+            if after is not None:
+                stmt = stmt.where(
+                    tuple_(UserModel.created_at, UserModel.id)
+                    < (after.created_at, after.id)
+                )
+            stmt = stmt.order_by(UserModel.created_at.desc(), UserModel.id.desc())
+            rows, has_more = await self._overfetch(stmt, limit)
+            has_prev = after is not None
+
+        if not rows:
+            return UserPage(
+                items=[],
+                page_info=PageInfo(
+                    next_cursor=None, prev_cursor=None, has_more=False, has_prev=False
+                ),
+            )
+
+        return UserPage(
+            items=[_to_read_model(row) for row in rows],
+            page_info=PageInfo(
+                next_cursor=(
+                    encode_cursor(rows[-1].created_at, rows[-1].id)
+                    if has_more
+                    else None
+                ),
+                prev_cursor=(
+                    encode_cursor(rows[0].created_at, rows[0].id) if has_prev else None
+                ),
+                has_more=has_more,
+                has_prev=has_prev,
+            ),
+        )
+
+    async def _overfetch(
+        self, stmt: Select[tuple[UserModel]], limit: int
+    ) -> tuple[_UserRows, bool]:
+        rows: _UserRows = list(
+            (await self.session.scalars(stmt.limit(limit + 1))).all()
+        )
+        return rows[:limit], len(rows) > limit
+
+
+_user_list_query_port_implementation: type[UserListQueryPort] = SqlUserQueryRepository
