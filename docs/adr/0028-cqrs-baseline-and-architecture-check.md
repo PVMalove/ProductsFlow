@@ -2,8 +2,8 @@
 
 ## Статус
 
-Принято. Baseline вводится для активного кода в `backend/`; frozen monolith
-`app/` в область действия не входит.
+Принято и применяется. Enforcement действует для активного кода в `backend`;
+frozen monolith `app/` в область действия не входит.
 
 ## Контекст
 
@@ -30,6 +30,9 @@ query-side через command-side.
 - **Направление зависимостей:** adapter → application → domain; infrastructure
   реализует порты и подключается в composition root. Domain/application не
   импортируют infrastructure, FastAPI или SQLAlchemy.
+- **Граница CQRS:** модули `application/commands/` и
+  `application/queries/` не импортируют друг друга. Повторное использование
+  логики оформляется через domain или нейтральный application helper.
 - **Транзакция:** command-handler выполняет mutation и запись transactional
   outbox атомарно в одной транзакции репозитория. Query-handler использует
   read model/projection и не открывает command-side путь.
@@ -104,30 +107,32 @@ class ListTicketsQueryHandler:
 
 | Область | Найдено | Решение в baseline |
 | --- | --- | --- |
-| `identity-service/src/application` | команды и запросы identity выделены в пакеты `commands/` и `queries/`, по одному модулю на операцию; старые command-файлы оставлены compatibility adapters | считать identity эталонным примером пакетного CQRS layout |
-| `catalog-service/src/application/commands/` and `queries/` | product CRUD, visibility, pagination, audit, and image operations have one immutable DTO and dedicated handler per operation; old compatibility modules were removed | migrated in #187 |
-| `support-service/src/application/commands/` and `queries/` | ticket creation, ticket visibility, ticket lists and message pagination use dedicated command/query DTOs and handlers | migrated in #188 |
+| `identity-service/src/application` | команды и запросы identity выделены в пакеты `commands/` и `queries/`, по одному модулю на операцию; старые пути оставлены только как command-only compatibility adapters | пакетный CQRS layout — эталон для новых сценариев |
+| `catalog-service/src/application/commands/` and `queries/` | product CRUD, visibility, pagination, audit, and image operations имеют immutable DTO и dedicated handler на операцию; смешанные фасады удалены | миграция завершена в #187 |
+| `support-service/src/application/commands/` and `queries/` | ticket creation, ticket visibility, ticket lists and message pagination используют отдельные command/query DTO и handlers; смешанный фасад удалён | миграция завершена в #188 |
 | shared libraries | прикладных use case-модулей нет | нарушений CQRS не найдено |
-| все `domain/` и `application/` | blocking imports `infrastructure`, FastAPI или SQLAlchemy не обнаружены | enforced автоматически |
+| все `domain/` и `application/` | blocking imports `infrastructure`, FastAPI или SQLAlchemy не обнаружены; mixed command/query modules отсутствуют | enforced автоматически |
 
 Аудит воспроизводим: `python backend/scripts/check_architecture.py` печатает
-`MIGRATION` findings и blocking `ERROR` findings. `--strict` возвращает ненулевой
-код только для blocking dependency-direction нарушений, поэтому baseline можно
-подключить к CI до завершения поэтапной миграции. Новые violations не должны
+blocking `ERROR` findings. `--strict` возвращает ненулевой код при любом
+нарушении направления зависимостей или CQRS-разделения, включая cross-side
+imports и mixed-use-case modules. Тот же gate запускается в CI и через
+`make -C backend architecture-check`. Новые violations не должны
 получать compatibility-исключения без отдельной ADR.
 
 ## Compatibility adapters
 
-`src/api` сохраняется как внешний adapter до завершения перехода к
-`presentation/`; его composition root может собрать конкретные infrastructure
-реализации и передать их через application ports. Смешанный use-case-фасад также
-может временно делегировать в новые command/query handlers. Такие адаптеры не
-добавляют бизнес-правил, помечаются в аудите и удаляются после миграции сервиса.
+`src/api` остаётся внешним transport adapter: его composition root может собрать
+конкретные infrastructure-реализации и передать их через application ports.
+Смешанные use-case-фасады не допускаются и удалены в catalog/support. Старые
+identity-пути сохранены только как явно названные command-only re-export
+adapters, чтобы не менять существующие import contracts; они не содержат
+бизнес-логики и не могут быть шаблоном для нового кода.
 
 ## Последствия
 
 Команды получают явную транзакционную границу и сохраняют текущие security,
 visibility и outbox-контракты. Запросы можно оптимизировать read models без
-изменения агрегатов. Архитектурный check сообщает blocking layer violations,
-а миграции identity, catalog и support больше не оставляют mixed-use-case
-finding; issue #189 закрывает enforcement по bounded context.
+изменения агрегатов. Архитектурный check блокирует новые mixed-use-case и layer
+violations, а миграции identity, catalog и support не оставляют таких findings.
+Issue #189 закрывает enforcement по bounded context.

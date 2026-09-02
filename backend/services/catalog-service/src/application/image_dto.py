@@ -1,4 +1,4 @@
-"""Transport-neutral image DTOs shared by image command and query handlers."""
+"""Transport-neutral image DTOs for image command and query handlers."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,5 +12,4 @@ class ProductImageView:
 
 @dataclass(frozen=True)
 class ProductImageMutation:
-    view: ProductImageView
     replaced: bool

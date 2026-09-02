@@ -1,9 +1,8 @@
 """Small, dependency-free CQRS and layer-boundary architecture check.
 
-The check is intentionally conservative: migration findings are reported so
-that the current state remains visible, while only dependency-direction
-violations fail ``--strict``.  Service migrations can therefore tighten the
-gate one bounded context at a time.
+The active backend has completed its CQRS migration.  Both dependency
+direction and mixed command/query modules are therefore blocking violations.
+The frozen monolith is outside the scan root and remains untouched.
 """
 
 from __future__ import annotations
@@ -47,10 +46,9 @@ def scan(root: Path) -> list[Finding]:
     findings: list[Finding] = []
     for layer in ("domain", "application"):
         for path in sorted(root.rglob(f"src/{layer}/**/*.py")):
-            if path.name == "__init__.py":
-                continue
             findings.extend(_layer_import_findings(root, path, layer))
             if layer == "application":
+                findings.extend(_cqrs_import_findings(path))
                 finding = _mixed_module_finding(path)
                 if finding is not None:
                     findings.append(finding)
@@ -85,21 +83,87 @@ def _layer_import_findings(root: Path, path: Path, layer: str) -> list[Finding]:
     return findings
 
 
+def _import_names(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+
+    names = [node.module] if node.module else []
+    names.extend(
+        f"{node.module}.{alias.name}" if node.module else alias.name
+        for alias in node.names
+    )
+    return names
+
+
+def _imported_cqrs_sides(node: ast.AST) -> set[str]:
+    sides = {"commands", "queries"}
+    return {
+        side
+        for name in _import_names(node)
+        for side in sides
+        if side in name.split(".")
+    }
+
+
+def _cqrs_import_findings(path: Path) -> list[Finding]:
+    side = next((part for part in ("commands", "queries") if part in path.parts), None)
+    if side is None:
+        return []
+
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    findings: list[Finding] = []
+    opposite = "queries" if side == "commands" else "commands"
+    for node in ast.walk(tree):
+        if opposite in _imported_cqrs_sides(node):
+            findings.append(
+                Finding(
+                    rule="cross-cqrs-import",
+                    path=path,
+                    line=node.lineno,
+                    blocking=True,
+                    message=f"{side} imports {opposite}",
+                )
+            )
+    return findings
+
+
 def _mixed_module_finding(path: Path) -> Finding | None:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     writes = 0
     reads = 0
+    imported_sides: set[str] = set()
+    is_legacy_facade = path.stem == "use_cases" or path.name.endswith("_use_cases.py")
     for node in tree.body:
-        if not isinstance(node, ast.ClassDef):
-            continue
-        name = node.name.lower()
-        writes += any(marker in name for marker in _WRITE_MARKERS)
-        reads += any(marker in name for marker in _READ_MARKERS)
+        imported_sides.update(_imported_cqrs_sides(node))
+        if isinstance(node, ast.ClassDef):
+            names = [node.name]
+            if is_legacy_facade:
+                names.extend(
+                    child.name
+                    for child in node.body
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                )
+        elif is_legacy_facade and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            names = [node.name]
+        else:
+            names = []
+
+        for name in names:
+            lowered = name.lower()
+            writes += any(marker in lowered for marker in _WRITE_MARKERS)
+            reads += any(marker in lowered for marker in _READ_MARKERS)
+
+    writes += "commands" in imported_sides
+    reads += "queries" in imported_sides
     if writes and reads:
         return Finding(
             rule="mixed-use-case-module",
             path=path,
-            blocking=False,
+            blocking=True,
             message="contains both command-side and query-side use cases",
         )
     return None
@@ -120,7 +184,7 @@ def main() -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="fail when a blocking dependency-direction violation is found",
+        help="fail when a blocking architecture violation is found",
     )
     args = parser.parse_args()
     root = args.root.resolve()

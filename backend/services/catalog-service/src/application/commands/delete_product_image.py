@@ -12,7 +12,6 @@ from application.ports import (
     IdentityGateway,
     ProductCommandPort,
     ProductImageStorage,
-    ProductQueryPort,
 )
 
 
@@ -31,13 +30,12 @@ class DeleteProductImageCommandHandler:
         bucket_name: str,
     ) -> None:
         self._repository = repository
-        self._query_repository: ProductQueryPort = repository  # type: ignore[assignment]
         self._authorizer = ProductAuthorizer(identity)
         self._storage = storage
         self._bucket_name = bucket_name
 
     async def handle(self, command: DeleteProductImageCommand) -> None:
-        product = await get_product(self._query_repository, command.product_id)
+        product = await get_product(self._repository, command.product_id)
         await self._authorizer.require_owner_or_admin(command.actor, product)
         image = await self._repository.get_product_image(product.id)
         if image is None:

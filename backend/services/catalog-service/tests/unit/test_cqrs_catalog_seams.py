@@ -20,6 +20,7 @@ from application.commands import (
     UpsertProductImageCommand,
     UpsertProductImageCommandHandler,
 )
+from application.image_dto import ProductImageMutation
 from application.ports import Actor, IdentityUser, OwnerSnapshot, ProductCommandPort
 from application.queries import (
     GetProductAuditQuery,
@@ -79,6 +80,13 @@ def test_catalog_application_facades_expose_one_handler_per_operation() -> None:
     assert all(
         hasattr(dto_type, "__dataclass_fields__") for dto_type in query_dto_types
     )
+
+
+def test_image_command_result_does_not_expose_a_query_view() -> None:
+    mutation = ProductImageMutation(replaced=True)
+
+    assert mutation.replaced is True
+    assert "view" not in mutation.__dataclass_fields__
 
 
 class FakeProductRepository:
