@@ -3,11 +3,9 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
-from application.commands.change_role import (
+from application.commands import (
     ChangeUserRoleCommand,
     ChangeUserRoleCommandHandler,
-)
-from application.commands.register_user import (
     RegisterUserCommand,
     RegisterUserCommandHandler,
 )
