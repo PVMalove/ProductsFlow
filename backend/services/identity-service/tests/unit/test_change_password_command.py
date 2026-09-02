@@ -10,21 +10,20 @@ from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
-def _register(repository: FakeUserRepository, hasher: FakePasswordHasher):
-    return (
-        RegisterUserCommandHandler(repository, hasher)
-        .execute(RegisterUserCommand("user@example.com", "password1"))
-        .value
+async def _register(repository: FakeUserRepository, hasher: FakePasswordHasher):
+    result = await RegisterUserCommandHandler(repository, hasher).execute(
+        RegisterUserCommand("user@example.com", "password1")
     )
+    return result.value
 
 
-def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -> None:
+async def test_change_password_updates_hash_and_records_event() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    user = _register(repository, hasher)
+    user = await _register(repository, hasher)
     user.pull_events()
 
-    result = ChangePasswordCommandHandler(repository, hasher).execute(
+    result = await ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "newpassword2")
     )
 
@@ -37,15 +36,13 @@ def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -
     assert event.user_id == user.id
 
 
-def test_change_password_fails_without_mutating_when_the_old_password_is_wrong() -> (
-    None
-):
+async def test_change_password_rejects_wrong_old_password_without_mutating() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    user = _register(repository, hasher)
+    user = await _register(repository, hasher)
     original_hash = user.password_hash
 
-    result = ChangePasswordCommandHandler(repository, hasher).execute(
+    result = await ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "wrong-old-password", "newpassword2")
     )
 
@@ -54,13 +51,13 @@ def test_change_password_fails_without_mutating_when_the_old_password_is_wrong()
     assert user.password_hash == original_hash
 
 
-def test_change_password_fails_with_validation_on_a_weak_new_password() -> None:
+async def test_change_password_fails_with_validation_on_a_weak_new_password() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    user = _register(repository, hasher)
+    user = await _register(repository, hasher)
     original_hash = user.password_hash
 
-    result = ChangePasswordCommandHandler(repository, hasher).execute(
+    result = await ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "short")
     )
 
@@ -69,13 +66,13 @@ def test_change_password_fails_with_validation_on_a_weak_new_password() -> None:
     assert user.password_hash == original_hash
 
 
-def test_change_password_rejects_a_deactivated_user() -> None:
+async def test_change_password_rejects_a_deactivated_user() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    user = _register(repository, hasher)
+    user = await _register(repository, hasher)
     user.is_active = False
 
-    result = ChangePasswordCommandHandler(repository, hasher).execute(
+    result = await ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "newpassword2")
     )
 

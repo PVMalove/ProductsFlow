@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.settings import settings
 
+# Import ORM modules so Alembic autogenerate sees identity tables and installs
+# the User audit listeners whenever the service's migration environment loads.
+from infrastructure.db import audit as _audit  # noqa: F401
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

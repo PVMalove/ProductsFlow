@@ -1,12 +1,14 @@
 """Public command-side interface for identity application use cases."""
 
+from application.commands.activate_user import (
+    ActivateUserCommand,
+    ActivateUserCommandHandler,
+)
 from application.commands.change_password import (
     ChangePasswordCommand,
     ChangePasswordCommandHandler,
 )
 from application.commands.deactivate_user import (
-    ActivateUserCommand,
-    ActivateUserCommandHandler,
     DeactivateUserCommand,
     DeactivateUserCommandHandler,
 )

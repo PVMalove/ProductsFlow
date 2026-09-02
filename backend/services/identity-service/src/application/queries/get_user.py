@@ -43,7 +43,7 @@ class GetUserQueryHandler:
     def __init__(self, users: UserQueryPort) -> None:
         self._users = users
 
-    def execute(self, query: GetUserQuery) -> Result[UserReadModel]:
+    async def execute(self, query: GetUserQuery) -> Result[UserReadModel]:
         """
         Выполняет запрос на получение пользователя.
 
@@ -51,7 +51,7 @@ class GetUserQueryHandler:
         @return: Result[UserReadModel] или Error при отсутствии.
         @raises: Не выбрасывает исключений (использует паттерн Result).
         """
-        read_model = self._users.get_by_id(query.user_id)
+        read_model = await self._users.get_by_id(query.user_id)
         if read_model is None:
             return Result.fail(
                 Error(
