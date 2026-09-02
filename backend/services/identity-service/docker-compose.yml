@@ -7,6 +7,7 @@ services:
       APP_ENV: ${APP_ENV:-dev}
       IDENTITY_JWT_PRIVATE_KEY_PATH: ${IDENTITY_JWT_PRIVATE_KEY_PATH:-}
       IDENTITY_ACCESS_TOKEN_TTL_HOURS: ${IDENTITY_ACCESS_TOKEN_TTL_HOURS:-1}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:-}
   identity-worker:
     build:
       context: ../..

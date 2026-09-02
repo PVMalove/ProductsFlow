@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from core.security.tokens import create_access_token
 pytestmark = pytest.mark.usefixtures("configured_key_path")
 
 _MIDDLEWARE_LOGGER = "observability.middleware"
+_SUBJECT = UUID("00000000-0000-0000-0000-000000000042")
 
 
 class _ActorIdCapturingHandler(logging.Handler):
@@ -32,7 +34,7 @@ class _ActorIdCapturingHandler(logging.Handler):
 def test_valid_bearer_sets_actor_id_and_writes_one_access_log_line(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    token = create_access_token(sub=42)
+    token = create_access_token(sub=_SUBJECT)
     handler = _ActorIdCapturingHandler()
     logger = logging.getLogger(_MIDDLEWARE_LOGGER)
     logger.addHandler(handler)
@@ -55,7 +57,7 @@ def test_valid_bearer_sets_actor_id_and_writes_one_access_log_line(
     assert getattr(records[0], "path") == "/.well-known/jwks.json"
     assert getattr(records[0], "status_code") == 200
 
-    assert handler.captured == [42]
+    assert handler.captured == [str(_SUBJECT)]
 
 
 @pytest.mark.parametrize(

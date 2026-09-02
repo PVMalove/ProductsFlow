@@ -47,6 +47,15 @@ async def test_login_fails_with_unauthorized_when_the_email_is_unknown() -> None
     assert result.error.type == ErrorType.UNAUTHORIZED
 
 
+async def test_login_fails_with_unauthorized_for_an_invalid_email() -> None:
+    result = await LoginCommandHandler(
+        FakeUserRepository(), FakePasswordHasher()
+    ).execute(LoginCommand("not-an-email", "password1"))
+
+    assert result.is_err
+    assert result.error.type == ErrorType.UNAUTHORIZED
+
+
 async def test_login_rejects_a_deactivated_user() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()

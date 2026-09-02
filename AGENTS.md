@@ -64,14 +64,20 @@ instruction chooses the checkout strategy.
   `.claude/skills`.
 - Harness-managed skill files and their version lock live in `.harness/`.
 - Capability updates are explicit and require a reviewed harness diff.
-- В Orca-managed сессии всегда используй стратегию **"Run a phased workflow"** по умолчанию.
-  Supervised-цепочка обязательна для любого сабагента, который порождает отдельный процесс и
+- В Orca-managed сессии (признак: `TERM_PROGRAM=Orca` или заданы `ORCA_WORKSPACE_ID`/`ORCA_WORKTREE_ID`
+  в окружении) **всегда** используй стратегию **"Run a phased workflow"** по умолчанию —
+  это MUST, не рекомендация.
+  Supervised-цепочка **обязательна** для любого сабагента, который порождает отдельный процесс и
   что-то доставляет (код, текст PR, отчёт и т.п.): `Run → Task → worker-start` (предпочтительно)
   или `dispatch --inject` → `orca orchestration check --wait` до получения `worker_done`/`escalation`.
   Обычный `Spawned`/`default`-subagent (без provenance Orca, lifecycle preamble и контроля
-  `worker_done`) допустим только как узкое исключение — для тривиального in-session lookup'а без
-  отдельного deliverable. Делегирование результата (например, подготовка тела PR) не считается
-  таким исключением и обязано идти supervised-цепочкой.
+  `worker_done`) допустим **только** как узкое исключение — для тривиального in-session lookup'а без
+  отдельного deliverable (пример: `Explore` для поиска кода). Делегирование результата (например,
+  подготовка тела PR через `pr-composer`) не считается таким исключением и **обязано** идти
+  supervised-цепочкой.
+  **Последствие нарушения:** координатор не получает `worker_done` и не продолжает workflow
+  автоматически — пользователю приходится вручную «пинать» сессию на каждый следующий шаг
+  (открытие PR, публикация отчёта и т.п.), что и является наблюдаемым симптомом этого антипаттерна.
   Оценивай доставленные результаты каждого этапа перед запуском следующего, продолжая workflow
   в той же сессии. Избегай параллельной работы или разделения на несколько worktrees без
   явного запроса. В обычном рантайме заверши ход после запуска и дождись уведомления harness.
