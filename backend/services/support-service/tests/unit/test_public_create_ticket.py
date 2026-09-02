@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from api.dependencies import get_create_ticket_use_case
 from api.main import app
+from application.commands import CreateTicketCommand
 from domain.ticket import Ticket
 from infrastructure.security.auth import get_required_auth
 
@@ -33,11 +34,11 @@ def test_create_ticket_returns_created_resource() -> None:
     author_id = uuid.uuid4()
 
     class FakeUseCase:
-        async def execute(
-            self, *, author_id: uuid.UUID, subject: str, first_message: str
-        ) -> Ticket:
+        async def handle(self, command: CreateTicketCommand) -> Ticket:
             return Ticket.create(
-                author_id=author_id, subject=subject, first_message=first_message
+                author_id=command.author_id,
+                subject=command.subject,
+                first_message=command.first_message,
             )
 
     app.dependency_overrides[get_required_auth] = lambda: author_id

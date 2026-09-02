@@ -6,6 +6,20 @@
 independently deployable, with its own `pyproject.toml`, `uv.lock`, and Alembic
 migrations.
 
+## CQRS application boundary
+
+The command side currently exposes `CreateTicketCommand` and
+`CreateTicketCommandHandler` through `application/commands/`. The handler
+creates the Ticket aggregate and delegates the atomic aggregate, first-message
+and outbox write to `TicketCommandPort`.
+
+The query side exposes separate handlers in `application/queries/` for getting
+one Ticket, listing the caller's Tickets, listing all Tickets for an admin, and
+listing a Ticket's messages. They depend only on `TicketQueryPort`, return
+read results, and do not mutate aggregates or publish events. HTTP dependencies
+construct these handlers from the infrastructure repository while preserving
+the existing `api` adapter and routes.
+
 Unread counters, assignment of a staff member, and a local user read model are
 outside Phase 5. Request identity and roles come from a locally validated JWT;
 the identity-event consumer exists solely to anonymize retained tickets after a
