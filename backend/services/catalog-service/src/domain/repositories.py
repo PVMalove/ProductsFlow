@@ -1,29 +1,13 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from kernel_domain.result import Result
+from kernel_platform.pagination import Cursor, PageInfo
 
 from domain.product import Product
 from domain.product_id import ProductId
 from domain.product_image import ProductImage
-
-
-@dataclass(frozen=True)
-class Cursor:
-    """Keyset-позиция в списке продуктов."""
-
-    created_at: datetime
-    id: uuid.UUID
-
-
-@dataclass(frozen=True)
-class PageInfo:
-    next_cursor: str | None
-    prev_cursor: str | None
-    has_more: bool
-    has_prev: bool
 
 
 @dataclass(frozen=True)

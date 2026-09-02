@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.pagination import decode_cursor
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,6 @@ from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import upsert_owner_read_model
-from infrastructure.db.pagination import decode_cursor
 from infrastructure.db.product_repository import ProductRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

@@ -1,0 +1,66 @@
+# ruff: noqa: E501
+"""Общий keyset-курсор и форма страницы для list-эндпоинтов (issue #200).
+
+Ранее локальный для `catalog-service` контракт: непрозрачный курсор
+(`created_at`, `id`), форма страницы (`has_more`/`has_prev` и т.п.) и
+кодирование/декодирование курсора в base64-строку. Второй подтверждённый
+потребитель — `identity-service` (issue #201/#202) — делает дублирование
+между сервисами неоправданным (тот же admission-принцип, что и ADR 0029 для
+generic drain-в-outbox).
+"""
+
+import base64
+import binascii
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+
+DEFAULT_PAGE_LIMIT = 20
+MAX_PAGE_LIMIT = 100
+
+
+class InvalidCursorError(ValueError):
+    """The pagination cursor could not be decoded."""
+
+
+@dataclass(frozen=True)
+class Cursor:
+    """Keyset-позиция в отсортированном по (`created_at`, `id`) списке."""
+
+    created_at: datetime
+    id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class PageInfo:
+    next_cursor: str | None
+    prev_cursor: str | None
+    has_more: bool
+    has_prev: bool
+
+
+def encode_cursor(created_at: datetime, entity_id: uuid.UUID) -> str:
+    raw = f"{created_at.isoformat()}|{entity_id}"
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def decode_cursor(token: str) -> Cursor:
+    try:
+        raw = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
+        created_at_raw, id_raw = raw.split("|")
+        return Cursor(
+            created_at=datetime.fromisoformat(created_at_raw), id=uuid.UUID(id_raw)
+        )
+    except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
+        raise InvalidCursorError("Некорректный курсор пагинации") from exc
+
+
+__all__ = [
+    "DEFAULT_PAGE_LIMIT",
+    "MAX_PAGE_LIMIT",
+    "Cursor",
+    "InvalidCursorError",
+    "PageInfo",
+    "decode_cursor",
+    "encode_cursor",
+]
