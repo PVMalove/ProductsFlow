@@ -20,6 +20,10 @@ from application.commands.edit_ticket_message import (
     EditTicketMessageCommand,
     EditTicketMessageCommandHandler,
 )
+from application.commands.process_user_deletion import (
+    ProcessUserDeletionCommand,
+    ProcessUserDeletionCommandHandler,
+)
 
 __all__ = [
     "AddTicketMessageCommand",
@@ -32,4 +36,6 @@ __all__ = [
     "CreateTicketCommandHandler",
     "EditTicketMessageCommand",
     "EditTicketMessageCommandHandler",
+    "ProcessUserDeletionCommand",
+    "ProcessUserDeletionCommandHandler",
 ]

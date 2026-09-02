@@ -18,7 +18,5 @@ WORKDIR /srv
 COPY --from=builder /srv/services/support-service/.venv /srv/services/support-service/.venv
 ENV PATH="/srv/services/support-service/.venv/bin:$PATH"
 
-# The scaffold exposes the API entrypoint until the
-# support-specific HTTP surface is implemented.
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

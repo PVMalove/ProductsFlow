@@ -10,6 +10,8 @@ from domain.events.ticket_message_added import TicketMessageAdded
 from domain.events.ticket_status_changed import TicketStatusChanged
 from domain.message import DELETED_MESSAGE_MARKER, TicketMessage, validate_plaintext
 
+USER_DELETED_MESSAGE = "[Пользователь удалён]"
+
 
 class TicketClosedError(ValueError):
     """Raised when a normal mutation targets a terminal ticket."""
@@ -47,7 +49,7 @@ _NEXT_STATUS = {
 
 @dataclass(slots=True)
 class Ticket(Entity[uuid.UUID]):
-    author_id: uuid.UUID
+    author_id: uuid.UUID | None
     subject: str
     status: TicketStatus
     messages: list[TicketMessage]
@@ -57,7 +59,7 @@ class Ticket(Entity[uuid.UUID]):
         self,
         id: uuid.UUID,
         *,
-        author_id: uuid.UUID,
+        author_id: uuid.UUID | None,
         subject: str,
         status: TicketStatus = TicketStatus.OPEN,
         messages: list[TicketMessage] | None = None,
@@ -71,7 +73,9 @@ class Ticket(Entity[uuid.UUID]):
         if not self.messages:
             raise ValueError("ticket must have a first message")
         first = self.messages[0]
-        if first.ticket_id != self.id or first.author_id != self.author_id:
+        if first.ticket_id != self.id or (
+            self.author_id is not None and first.author_id != self.author_id
+        ):
             raise ValueError("first message must belong to the ticket author")
         self.created_at = created_at or first.created_at
 
@@ -140,6 +144,51 @@ class Ticket(Entity[uuid.UUID]):
 
     def change_status(self, status: TicketStatus, *, actor_category: str) -> None:
         self._change_status(status, actor_category=actor_category)
+
+    def anonymize_deleted_user(self, user_id: uuid.UUID) -> bool:
+        """Remove a deleted user's identity and close their active ticket.
+
+        The deletion event is recorded by the application inbox, so this
+        aggregate operation is intentionally safe to call more than once: an
+        already anonymized ticket cannot receive another system message.
+        """
+        owns_ticket = self.author_id == user_id
+        if owns_ticket:
+            self.author_id = None
+
+        for message in self.messages:
+            if message.author_id == user_id:
+                object.__setattr__(message, "author_id", None)
+
+        if not owns_ticket or self.status is TicketStatus.CLOSED:
+            return owns_ticket
+
+        previous_status = self.status
+        self.status = TicketStatus.CLOSED
+        self.add_domain_event(
+            TicketStatusChanged(
+                ticket_id=self.id,
+                previous_status=previous_status.value,
+                status=TicketStatus.CLOSED.value,
+                actor_category="system",
+            )
+        )
+        system_message = TicketMessage(
+            id=uuid.uuid4(),
+            ticket_id=self.id,
+            author_id=None,
+            body=USER_DELETED_MESSAGE,
+            is_system=True,
+        )
+        self.messages.append(system_message)
+        self.add_domain_event(
+            TicketMessageAdded(
+                ticket_id=self.id,
+                message_id=system_message.id,
+                actor_category="system",
+            )
+        )
+        return True
 
     def edit_message(
         self,
