@@ -5,6 +5,7 @@ from typing import Any
 from kernel_domain.domain_event import DomainEvent
 
 from domain.email import Email
+from domain.role import Role
 from domain.user_id import UserId
 
 
@@ -44,3 +45,12 @@ class Deactivated(UserEvent):
 @dataclass(frozen=True, kw_only=True)
 class Activated(UserEvent):
     event_type: str = "user.activated.v1"
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoleChanged(UserEvent):
+    event_type: str = "user.role_changed.v1"
+    role: Role
+
+    def to_payload(self) -> dict[str, Any]:
+        return {**super().to_payload(), "role": self.role.value}

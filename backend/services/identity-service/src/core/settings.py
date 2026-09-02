@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     identity_database_url: str = ""
     identity_amqp_url: str = "amqp://guest:guest@localhost:5672/"
     identity_outbox_poll_interval_seconds: float = 5.0
+    admin_email: str = ""
+    admin_password: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

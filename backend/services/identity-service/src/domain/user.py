@@ -7,6 +7,7 @@ from domain.events import (
     Activated,
     Deactivated,
     PasswordChanged,
+    RoleChanged,
     UserRegistered,
 )
 from domain.role import Role
@@ -88,4 +89,18 @@ class User(Entity[UserId]):
 
         self.is_active = True
         self.add_domain_event(Activated(user_id=self.id))
+        return Result.ok(None)
+
+    def change_role(self, role: Role) -> Result[None]:
+        if self.role == role:
+            return Result.fail(
+                Error(
+                    code="role_unchanged",
+                    description=f"Пользователь уже имеет роль {role.value!r}",
+                    type=ErrorType.CONFLICT,
+                )
+            )
+
+        self.role = role
+        self.add_domain_event(RoleChanged(user_id=self.id, role=role))
         return Result.ok(None)
