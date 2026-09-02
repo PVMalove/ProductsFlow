@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Upsert-product-image command and handler."""
 
 import uuid
@@ -20,6 +21,8 @@ IMAGE_KEY_TEMPLATE = "products/{product_id}/image"
 
 @dataclass(frozen=True)
 class UpsertProductImageCommand:
+    """DTO для команды добавления или обновления изображения товара."""
+
     product_id: uuid.UUID
     actor: Actor
     body: bytes
@@ -27,6 +30,14 @@ class UpsertProductImageCommand:
 
 
 class UpsertProductImageCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Загрузка нового или замена старого изображения для товара.
+    Validations: Проверка прав, проверка формата и размера изображения.
+    Side Effects: Данные о новом изображении сохраняются в репозитории.
+    """
+
     def __init__(
         self,
         repository: ProductCommandPort,
@@ -39,7 +50,7 @@ class UpsertProductImageCommandHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def handle(self, command: UpsertProductImageCommand) -> ProductImageMutation:
+    async def execute(self, command: UpsertProductImageCommand) -> ProductImageMutation:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError

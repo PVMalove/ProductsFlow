@@ -75,10 +75,49 @@ backend/services/<service>/              # независимо разворач
 
 ## Направление зависимостей
 
-```text
-HTTP / AMQP adapter (presentation) ──> application ──> domain
-                  │                       │
-                  └── composition root ───┴──> domain repository <── infrastructure
+Архитектура строго следует правилу инверсии зависимостей (Dependency Inversion). Вектор зависимости направлен исключительно внутрь — к `domain`-слою.
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+graph TD
+    subgraph "Presentation Layer"
+        HTTP["FastAPI (HTTP)"]
+        AMQP["RabbitMQ (Consumers)"]
+        DI["Composition Root (DI)"]
+    end
+    
+    subgraph "Application Layer"
+        App["Use Cases<br/>(Commands & Queries)"]
+    end
+    
+    subgraph "Domain Layer"
+        Dom["Aggregates, Entities, Events"]
+        Port["Repository Contracts<br/>(Interfaces)"]
+    end
+    
+    subgraph "Infrastructure Layer"
+        SQL["SQLAlchemy (PostgreSQL)"]
+        Ext["External Clients"]
+    end
+    
+    HTTP --> DI
+    HTTP --> App
+    AMQP --> App
+    DI -. "Injects Repo" .-> App
+    
+    App --> Dom
+    App --> Port
+    
+    SQL -. "Implements" .-> Port
+    Ext -. "Implements" .-> Port
+    
+    style HTTP fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style AMQP fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style DI fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style App fill:#4c1d95,stroke:#a78bfa,color:#fff
+    style Dom fill:#14532d,stroke:#4ade80,color:#fff
+    style Port fill:#14532d,stroke:#4ade80,color:#fff
+    style SQL fill:#7c2d12,stroke:#fb923c,color:#fff
 ```
 
 - `domain` содержит агрегаты, value objects, доменные события, политики и
@@ -132,12 +171,12 @@ Protocol, диспетчер или глобальный реестр. FastAPI `
 - из `domain/` и `application/` нет импортов конкретных модулей
   `infrastructure/`, FastAPI или SQLAlchemy.
 
-## CQRS baseline
+## CQRS Enforced (Миграция завершена)
 
-Правила разделения команд и запросов, а также текущий аудит нарушений закреплены
-в [ADR 0028](adr/0028-cqrs-baseline-and-architecture-check.md). Быстрая локальная
-проверка выполняется командой `make -C backend architecture-check`; её же можно
-запускать в CI.
+Слияние пула задач #191–#195 завершило глобальный рефакторинг: паттерн CQRS **полностью внедрен и строго соблюдается** во всех активных микросервисах (`identity`, `catalog`, `support`). 
+
+Правила разделения команд и запросов закреплены в [ADR 0028](adr/0028-cqrs-baseline-and-architecture-check.md). 
+Быстрая локальная проверка, блокирующая нарушения архитектуры (выполняется как локально, так и в CI), запускается командой `make -C backend architecture-check` (которая вызывает `backend/scripts/check_architecture.py`). Фасады `*_use_cases.py` полностью удалены.
 
 Для нового сценария сначала создаётся входной DTO (`*Command` или `*Query`) и
 отдельный handler (`*CommandHandler` или `*QueryHandler`) в `application/`.

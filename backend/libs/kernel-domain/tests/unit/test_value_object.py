@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,7 +11,7 @@ class Money(ValueObject):
     currency: str
 
     def _equality_components(self) -> tuple[Any, ...]:
-        return (self.amount, self.currency)
+        return self.amount, self.currency
 
 
 @dataclass(frozen=True, eq=False)
@@ -19,7 +20,7 @@ class Weight(ValueObject):
     currency: str
 
     def _equality_components(self) -> tuple[Any, ...]:
-        return (self.amount, self.currency)
+        return self.amount, self.currency
 
 
 def test_value_objects_with_the_same_components_are_equal() -> None:

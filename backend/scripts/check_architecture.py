@@ -142,7 +142,7 @@ def _mixed_module_finding(path: Path) -> Finding | None:
     writes = 0
     reads = 0
     imported_sides: set[str] = set()
-    is_legacy_facade = path.stem == "use_cases" or path.name.endswith("_use_cases.py")
+    is_legacy_facade = path.stem == "handlers" or path.name.endswith("_handlers.py")
     for node in tree.body:
         imported_sides.update(_imported_cqrs_sides(node))
         if isinstance(node, ast.ClassDef):

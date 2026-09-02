@@ -14,17 +14,27 @@ from domain.user_id import UserId
 
 @dataclass(frozen=True)
 class ChangePasswordCommand:
+    """DTO для изменения пароля пользователя."""
+
     user_id: UserId
     old_password: str
     new_password: str
 
 
 class ChangePasswordCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Смена пароля текущего пользователя.
+    Validations: Сравнение старого пароля, проверка сложности нового пароля.
+    Side Effects: Пароль в репозитории обновляется (хешируется).
+    """
+
     def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
-    def handle(self, command: ChangePasswordCommand) -> Result[User]:
+    def execute(self, command: ChangePasswordCommand) -> Result[User]:
         user = self._users.get_by_id(command.user_id)
         if user is None or not self._password_hasher.verify(
             command.old_password, user.password_hash

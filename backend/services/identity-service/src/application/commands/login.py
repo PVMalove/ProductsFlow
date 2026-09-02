@@ -13,16 +13,26 @@ from domain.user import User
 
 @dataclass(frozen=True)
 class LoginCommand:
+    """DTO для входа пользователя в систему."""
+
     email: str
     password: str
 
 
 class LoginCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Аутентификация пользователя и генерация токена сессии.
+    Validations: Проверка валидности email и соответствия хеша пароля.
+    Side Effects: Нет.
+    """
+
     def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
-    def handle(self, command: LoginCommand) -> Result[User]:
+    def execute(self, command: LoginCommand) -> Result[User]:
         user = self._users.get_by_email(Email(command.email))
         if user is None or not self._password_hasher.verify(
             command.password, user.password_hash

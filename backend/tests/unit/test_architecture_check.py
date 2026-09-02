@@ -36,7 +36,7 @@ def test_scan_marks_forbidden_layer_imports_as_blocking(tmp_path: Path) -> None:
 def test_scan_marks_mixed_application_modules_as_blocking(tmp_path: Path) -> None:
     application = tmp_path / "services/example/src/application"
     application.mkdir(parents=True)
-    (application / "use_cases.py").write_text(
+    (application / "handlers.py").write_text(
         "class CreateThing:\n    pass\n\nclass ListThings:\n    pass\n",
         encoding="utf-8",
     )
@@ -108,7 +108,7 @@ def test_strict_cli_fails_for_mixed_application_modules(
 ) -> None:
     application = tmp_path / "services/example/src/application"
     application.mkdir(parents=True)
-    (application / "use_cases.py").write_text(
+    (application / "handlers.py").write_text(
         "class CreateThing:\n    pass\n\nclass ListThings:\n    pass\n",
         encoding="utf-8",
     )

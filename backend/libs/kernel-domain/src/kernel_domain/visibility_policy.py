@@ -1,11 +1,25 @@
+# ruff: noqa: E501
 from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
 class VisibilityPolicy[TViewer, TResource](Protocol):
-    """Форма политики видимости (ADR 0013): единый предикат «viewer видит
+    """Форма политики видимости: единый предикат «viewer видит
     resource», общий для read-моделей всех будущих сервисов. Kernel фиксирует
     только контракт — ни одна реализация здесь не живёт, каждый сервис пишет
     свою против собственной read-модели."""
 
-    def is_visible(self, viewer: TViewer, resource: TResource) -> bool: ...
+    def is_visible(self, viewer: TViewer, resource: TResource) -> bool:
+        """Проверяет, имеет ли субъект (viewer) право видеть конкретный ресурс.
+
+        Это контрактный метод, который должен резолвить права доступа на чтение.
+        Под капотом реализации должны сходить в свои read-модели или чекнуть стейт
+        переданного ресурса и сопоставить его с контекстом вьюера.
+
+        Args:
+            viewer (TViewer): Субъект, который запрашивает доступ (например, юзер или системный сервис).
+            resource (TResource): Объект (сущность, проекция), к которому запрашивается доступ.
+
+        Returns:
+            bool: True, если просмотр разрешен, иначе False."""
+        ...

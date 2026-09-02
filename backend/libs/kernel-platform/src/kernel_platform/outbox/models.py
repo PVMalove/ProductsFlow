@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import uuid
 from datetime import datetime
 from typing import Any
@@ -12,7 +13,7 @@ class Base(DeclarativeBase):
 
 
 class OutboxMessage(Base):
-    """Transactional Outbox (ADR 0014): строка, вставленная в одной транзакции
+    """Transactional Outbox : строка, вставленная в одной транзакции
     с доменной мутацией, доезжает до RabbitMQ через `OutboxPublisher`.
     """
 

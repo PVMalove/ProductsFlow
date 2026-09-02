@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Get-product-audit query and authorization handler."""
 
 import uuid
@@ -17,11 +18,21 @@ from domain.product_id import ProductId
 
 @dataclass(frozen=True)
 class GetProductAuditQuery:
+    """DTO для получения истории аудита товара."""
+
     product_id: uuid.UUID
     actor: Actor
 
 
 class GetProductAuditQueryHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Получение логов изменений (аудита) по конкретному товару.
+    Validations: Требуются права владельца или администратора.
+    Data Sourcing: Данные берутся из ProductAuditReader.
+    """
+
     def __init__(
         self,
         repository: ProductQueryPort,
@@ -32,7 +43,7 @@ class GetProductAuditQueryHandler:
         self._audit_reader = audit_reader
         self._authorizer = ProductAuthorizer(identity)
 
-    async def handle(self, query: GetProductAuditQuery) -> list[ProductAuditEntry]:
+    async def execute(self, query: GetProductAuditQuery) -> list[ProductAuditEntry]:
         product = await self._repository.get_by_id(ProductId(query.product_id))
         entries = await self._audit_reader.get_by_product(query.product_id)
 

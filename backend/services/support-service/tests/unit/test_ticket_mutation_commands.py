@@ -38,7 +38,7 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
     repository = FakeMutationRepository(ticket)
     actor_id = uuid.uuid4()
 
-    result = await AddTicketMessageCommandHandler(repository).handle(
+    result = await AddTicketMessageCommandHandler(repository).execute(
         AddTicketMessageCommand(
             ticket_id=ticket.id,
             actor_id=actor_id,
@@ -59,7 +59,7 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
     repository = FakeMutationRepository(ticket)
     actor_id = uuid.uuid4()
 
-    result = await ChangeTicketStatusCommandHandler(repository).handle(
+    result = await ChangeTicketStatusCommandHandler(repository).execute(
         ChangeTicketStatusCommand(
             ticket_id=ticket.id,
             actor_id=actor_id,

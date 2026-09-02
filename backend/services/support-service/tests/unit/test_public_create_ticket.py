@@ -2,7 +2,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_create_ticket_use_case
+from api.dependencies import get_create_ticket_handler
 from api.main import app
 from application.commands import CreateTicketCommand
 from domain.ticket import Ticket
@@ -33,8 +33,8 @@ def test_create_ticket_rejects_invalid_token() -> None:
 def test_create_ticket_returns_created_resource() -> None:
     author_id = uuid.uuid4()
 
-    class FakeUseCase:
-        async def handle(self, command: CreateTicketCommand) -> Ticket:
+    class FakeHandler:
+        async def execute(self, command: CreateTicketCommand) -> Ticket:
             return Ticket.create(
                 author_id=command.author_id,
                 subject=command.subject,
@@ -42,7 +42,7 @@ def test_create_ticket_returns_created_resource() -> None:
             )
 
     app.dependency_overrides[get_required_auth] = lambda: author_id
-    app.dependency_overrides[get_create_ticket_use_case] = lambda: FakeUseCase()
+    app.dependency_overrides[get_create_ticket_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.post(

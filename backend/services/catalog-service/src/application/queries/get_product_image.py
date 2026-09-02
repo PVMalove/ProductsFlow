@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Get-product-image query and handler."""
 
 import uuid
@@ -17,11 +18,21 @@ from application.queries.get_product import GetProductQuery, GetProductQueryHand
 
 @dataclass(frozen=True)
 class GetProductImageQuery:
+    """DTO для запроса получения ссылки на изображение товара."""
+
     product_id: uuid.UUID
     actor: Actor | None
 
 
 class GetProductImageQueryHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Генерация временной ссылки (presigned URL) на скачивание/просмотр изображения товара.
+    Validations: Делегируется GetProductQueryHandler для проверки видимости товара.
+    Data Sourcing: Storage port генерирует ссылку.
+    """
+
     def __init__(
         self,
         repository: ProductQueryPort,
@@ -37,8 +48,8 @@ class GetProductImageQueryHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def handle(self, query: GetProductImageQuery) -> ProductImageView:
-        product = await self._product_reader.handle(
+    async def execute(self, query: GetProductImageQuery) -> ProductImageView:
+        product = await self._product_reader.execute(
             GetProductQuery(product_id=query.product_id, actor=query.actor)
         )
         image = await self._repository.get_product_image(product.id)

@@ -1,10 +1,10 @@
 [project]
 name = "observability"
 version = "0.1.0"
-description = "Логирование/request-context ProductsFlow (formatters/ContextVar/RequestContextMiddleware, ADR 0016) — выделено из kernel-platform (ADR 0020)."
+description = "Логирование/request-context ProductsFlow (formatters/ContextVar/RequestContextMiddleware) — выделено из kernel-platform ."
 requires-python = ">=3.14"
 dependencies = [
-    # RequestContextMiddleware (ADR 0016) — ASGI-примитив, не завязан на
+    # RequestContextMiddleware  — ASGI-примитив, не завязан на
     # fastapi целиком.
     "starlette>=1.6.0",
 ]
@@ -27,7 +27,7 @@ dev = [
 ]
 
 # Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
-# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+#  — этот пакет наследует его через extend, а не дублирует.
 [tool.ruff]
 extend = "../../pyproject.toml"
 

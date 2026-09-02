@@ -52,7 +52,7 @@ async def create_product(
     auth: RequiredAuth,
     handler: CreateProductDI,
 ) -> ProductResponse:
-    result = await handler.handle(
+    result = await handler.execute(
         CreateProductCommand(
             actor=to_actor(auth),
             name=request.name,
@@ -78,7 +78,7 @@ async def list_products(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя одновременно указать after и before",
         )
-    page = await handler.handle(
+    page = await handler.execute(
         ListProductsQuery(
             limit=limit,
             after=_parse_cursor(after),
@@ -94,7 +94,7 @@ async def get_product(
     auth: OptionalAuth,
     handler: GetProductDI,
 ) -> ProductResponse:
-    product = await handler.handle(
+    product = await handler.execute(
         GetProductQuery(
             product_id=product_id,
             actor=to_actor(auth) if auth is not None else None,
@@ -110,7 +110,7 @@ async def update_product(
     auth: RequiredAuth,
     handler: UpdateProductDI,
 ) -> None:
-    result = await handler.handle(
+    result = await handler.execute(
         UpdateProductCommand(
             product_id=product_id,
             actor=to_actor(auth),
@@ -127,7 +127,7 @@ async def activate_product(
     auth: RequiredAuth,
     handler: ActivateProductDI,
 ) -> ProductResponse:
-    result = await handler.handle(
+    result = await handler.execute(
         ActivateProductCommand(product_id=product_id, actor=to_actor(auth))
     )
     if result.is_err:
@@ -141,7 +141,7 @@ async def deactivate_product(
     auth: RequiredAuth,
     handler: DeactivateProductDI,
 ) -> ProductResponse:
-    result = await handler.handle(
+    result = await handler.execute(
         DeactivateProductCommand(product_id=product_id, actor=to_actor(auth))
     )
     if result.is_err:
@@ -155,7 +155,7 @@ async def delete_product(
     auth: RequiredAuth,
     handler: DeleteProductDI,
 ) -> None:
-    await handler.handle(
+    await handler.execute(
         DeleteProductCommand(product_id=product_id, actor=to_actor(auth))
     )
 
@@ -166,7 +166,7 @@ async def get_product_audit(
     auth: RequiredAuth,
     handler: GetProductAuditDI,
 ) -> list[ProductAuditLogResponse]:
-    entries = await handler.handle(
+    entries = await handler.execute(
         GetProductAuditQuery(product_id=product_id, actor=to_actor(auth))
     )
     return [ProductAuditLogResponse.from_entry(entry) for entry in entries]

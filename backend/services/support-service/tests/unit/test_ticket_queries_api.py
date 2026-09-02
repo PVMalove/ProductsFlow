@@ -3,12 +3,12 @@ import uuid
 from fastapi.testclient import TestClient
 
 from api.dependencies import (
-    get_add_ticket_message_use_case,
-    get_change_ticket_status_use_case,
-    get_list_admin_tickets_use_case,
-    get_list_ticket_messages_use_case,
-    get_list_tickets_use_case,
-    get_ticket_use_case,
+    get_add_ticket_message_handler,
+    get_change_ticket_status_handler,
+    get_list_admin_tickets_handler,
+    get_list_ticket_messages_handler,
+    get_list_tickets_handler,
+    get_ticket_handler,
 )
 from api.main import app
 from application.commands import AddTicketMessageCommand, ChangeTicketStatusCommand
@@ -26,13 +26,13 @@ def test_ticket_list_returns_the_callers_page() -> None:
     author_id = uuid.uuid4()
     ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
 
-    class FakeUseCase:
-        async def handle(self, query: ListTicketsQuery) -> TicketPage:
+    class FakeHandler:
+        async def execute(self, query: ListTicketsQuery) -> TicketPage:
             assert query.author_id == author_id
             return TicketPage([ticket], PageInfo("next", None, True, False))
 
     app.dependency_overrides[get_required_auth] = lambda: author_id
-    app.dependency_overrides[get_list_tickets_use_case] = lambda: FakeUseCase()
+    app.dependency_overrides[get_list_tickets_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.get("/api/v1/tickets")
@@ -45,13 +45,13 @@ def test_ticket_list_returns_the_callers_page() -> None:
 
 
 def test_ticket_detail_is_404_when_not_owned_by_the_caller() -> None:
-    class FakeUseCase:
-        async def handle(self, query: GetTicketQuery) -> None:
+    class FakeHandler:
+        async def execute(self, query: GetTicketQuery) -> None:
             return None
 
     app.dependency_overrides[get_required_auth] = lambda: uuid.uuid4()
-    app.dependency_overrides[get_ticket_use_case] = lambda: FakeUseCase()
-    app.dependency_overrides[get_list_ticket_messages_use_case] = lambda: object()
+    app.dependency_overrides[get_ticket_handler] = lambda: FakeHandler()
+    app.dependency_overrides[get_list_ticket_messages_handler] = lambda: object()
     try:
         with TestClient(app) as client:
             response = client.get(f"/api/v1/tickets/{uuid.uuid4()}")
@@ -66,16 +66,16 @@ def test_ticket_detail_reads_messages_through_a_separate_query_handler() -> None
     ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
 
     class FakeTicketQuery:
-        async def handle(self, query: GetTicketQuery) -> Ticket:
+        async def execute(self, query: GetTicketQuery) -> Ticket:
             return ticket
 
     class FakeMessageQuery:
-        async def handle(self, query: object) -> MessagePage:
+        async def execute(self, query: object) -> MessagePage:
             return MessagePage(ticket.messages, PageInfo(None, None, False, False))
 
     app.dependency_overrides[get_required_auth] = lambda: author_id
-    app.dependency_overrides[get_ticket_use_case] = lambda: FakeTicketQuery()
-    app.dependency_overrides[get_list_ticket_messages_use_case] = lambda: (
+    app.dependency_overrides[get_ticket_handler] = lambda: FakeTicketQuery()
+    app.dependency_overrides[get_list_ticket_messages_handler] = lambda: (
         FakeMessageQuery()
     )
     try:
@@ -89,12 +89,12 @@ def test_ticket_detail_reads_messages_through_a_separate_query_handler() -> None
 
 
 def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
-    class FakeUseCase:
-        async def handle(self, query: ListAdminTicketsQuery) -> TicketPage:
+    class FakeHandler:
+        async def execute(self, query: ListAdminTicketsQuery) -> TicketPage:
             return TicketPage([], PageInfo(None, None, False, False))
 
     app.dependency_overrides[get_admin_auth] = lambda: uuid.uuid4()
-    app.dependency_overrides[get_list_admin_tickets_use_case] = lambda: FakeUseCase()
+    app.dependency_overrides[get_list_admin_tickets_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.get("/api/v1/tickets/admin")
@@ -108,8 +108,8 @@ def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
     author_id = uuid.uuid4()
     ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
 
-    class FakeUseCase:
-        async def handle(self, command: AddTicketMessageCommand) -> Ticket:
+    class FakeHandler:
+        async def execute(self, command: AddTicketMessageCommand) -> Ticket:
             assert command.ticket_id == ticket.id
             assert command.actor_id == author_id
             assert command.is_admin is False
@@ -117,7 +117,7 @@ def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
 
     app.dependency_overrides[get_required_auth] = lambda: author_id
     app.dependency_overrides[get_is_admin] = lambda: False
-    app.dependency_overrides[get_add_ticket_message_use_case] = lambda: FakeUseCase()
+    app.dependency_overrides[get_add_ticket_message_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.post(
@@ -136,15 +136,15 @@ def test_admin_status_endpoint_passes_status_command() -> None:
     )
     admin_id = uuid.uuid4()
 
-    class FakeUseCase:
-        async def handle(self, command: ChangeTicketStatusCommand) -> Ticket:
+    class FakeHandler:
+        async def execute(self, command: ChangeTicketStatusCommand) -> Ticket:
             assert command.ticket_id == ticket.id
             assert command.actor_id == admin_id
             assert command.status is TicketStatus.IN_PROGRESS
             return ticket
 
     app.dependency_overrides[get_admin_auth] = lambda: admin_id
-    app.dependency_overrides[get_change_ticket_status_use_case] = lambda: FakeUseCase()
+    app.dependency_overrides[get_change_ticket_status_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.patch(

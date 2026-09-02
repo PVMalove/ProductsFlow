@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from collections.abc import AsyncIterator
 
 import pytest

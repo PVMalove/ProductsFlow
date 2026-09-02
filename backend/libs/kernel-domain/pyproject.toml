@@ -1,7 +1,7 @@
 [project]
 name = "kernel-domain"
 version = "0.1.0"
-description = "Общие доменные примитивы ProductsFlow (Result/Error/Entity/DomainEvent) — только stdlib (ADR 0013)."
+description = "Общие доменные примитивы ProductsFlow (Result/Error/Entity/DomainEvent) — только stdlib."
 requires-python = ">=3.14"
 dependencies = []
 
@@ -21,7 +21,7 @@ dev = [
 ]
 
 # Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
-# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+# этот пакет наследует его через extend, а не дублирует.
 [tool.ruff]
 extend = "../../pyproject.toml"
 

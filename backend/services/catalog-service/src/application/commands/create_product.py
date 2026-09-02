@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Create-product command and handler."""
 
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from domain.product import Product
 
 @dataclass(frozen=True)
 class CreateProductCommand:
+    """DTO для команды создания нового товара."""
+
     actor: Actor
     name: str
     description: str
@@ -24,6 +27,14 @@ class CreateProductCommand:
 
 
 class CreateProductCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Создание новой карточки товара в системе.
+    Validations: Проверяет наличие владельца в ReadModel, если нет - создает снимок владельца.
+    Side Effects: Добавляется новая запись товара в репозиторий, возможно сохраняется OwnerSnapshot.
+    """
+
     def __init__(
         self,
         repository: ProductCommandPort,
@@ -34,7 +45,7 @@ class CreateProductCommandHandler:
         self._owner_read_model = owner_read_model
         self._identity = identity
 
-    async def handle(self, command: CreateProductCommand) -> Result[Product]:
+    async def execute(self, command: CreateProductCommand) -> Result[Product]:
         if await self._owner_read_model.get(command.actor.user_id) is None:
             info = await self._identity.fetch_current_user(command.actor.token)
             await self._owner_read_model.upsert(

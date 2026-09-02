@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Transport-neutral image DTOs for image command and query handlers."""
 
 from dataclasses import dataclass

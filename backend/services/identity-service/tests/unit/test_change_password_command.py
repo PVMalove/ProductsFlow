@@ -13,7 +13,7 @@ from tests.unit.fake_user_repository import FakeUserRepository
 def _register(repository: FakeUserRepository, hasher: FakePasswordHasher):
     return (
         RegisterUserCommandHandler(repository, hasher)
-        .handle(RegisterUserCommand("user@example.com", "password1"))
+        .execute(RegisterUserCommand("user@example.com", "password1"))
         .value
     )
 
@@ -24,7 +24,7 @@ def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -
     user = _register(repository, hasher)
     user.pull_events()
 
-    result = ChangePasswordCommandHandler(repository, hasher).handle(
+    result = ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "newpassword2")
     )
 
@@ -45,7 +45,7 @@ def test_change_password_fails_without_mutating_when_the_old_password_is_wrong()
     user = _register(repository, hasher)
     original_hash = user.password_hash
 
-    result = ChangePasswordCommandHandler(repository, hasher).handle(
+    result = ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "wrong-old-password", "newpassword2")
     )
 
@@ -60,7 +60,7 @@ def test_change_password_fails_with_validation_on_a_weak_new_password() -> None:
     user = _register(repository, hasher)
     original_hash = user.password_hash
 
-    result = ChangePasswordCommandHandler(repository, hasher).handle(
+    result = ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "short")
     )
 
@@ -75,7 +75,7 @@ def test_change_password_rejects_a_deactivated_user() -> None:
     user = _register(repository, hasher)
     user.is_active = False
 
-    result = ChangePasswordCommandHandler(repository, hasher).handle(
+    result = ChangePasswordCommandHandler(repository, hasher).execute(
         ChangePasswordCommand(user.id, "password1", "newpassword2")
     )
 

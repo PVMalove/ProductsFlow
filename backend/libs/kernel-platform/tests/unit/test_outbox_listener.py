@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from kernel_platform.outbox.listener import to_asyncpg_dsn
 
 

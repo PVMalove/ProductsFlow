@@ -27,11 +27,11 @@ class ReadOnlyUserProjection:
 
 def test_get_user_query_reads_through_a_read_handler() -> None:
     repository = FakeUserRepository()
-    registered = RegisterUserCommandHandler(repository, FakePasswordHasher()).handle(
+    registered = RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
         RegisterUserCommand("user@example.com", "password1")
     )
 
-    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).handle(
+    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
         GetUserQuery(registered.value.id)
     )
 
@@ -43,7 +43,7 @@ def test_get_user_query_reads_through_a_read_handler() -> None:
 def test_get_user_query_returns_not_found_without_mutating_the_repository() -> None:
     repository = FakeUserRepository()
 
-    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).handle(
+    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
         GetUserQuery(UserId.generate())
     )
 
@@ -56,13 +56,13 @@ def test_activate_user_command_persists_the_aggregate_and_domain_event() -> None
     repository = FakeUserRepository()
     user = (
         RegisterUserCommandHandler(repository, FakePasswordHasher())
-        .handle(RegisterUserCommand("user@example.com", "password1"))
+        .execute(RegisterUserCommand("user@example.com", "password1"))
         .value
     )
     user.pull_events()
     user.is_active = False
 
-    result = ActivateUserCommandHandler(repository).handle(
+    result = ActivateUserCommandHandler(repository).execute(
         ActivateUserCommand(target_user_id=user.id)
     )
 

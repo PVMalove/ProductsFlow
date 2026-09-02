@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from aio_pika.abc import HeadersType
 
 from kernel_platform.consumer import _next_stage_index

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from datetime import timedelta
 
 from kernel_platform.outbox.publisher import (
@@ -21,7 +22,7 @@ def test_compute_backoff_caps_at_ceiling() -> None:
 
 
 def test_compute_backoff_does_not_overflow_on_unbounded_attempts() -> None:
-    # Publisher никогда не сдаётся (ADR 0014) — attempts растёт без верхней
+    # Publisher никогда не сдаётся  — attempts растёт без верхней
     # границы при затяжном простое брокера; 2**(attempts - 1) не должен
     # переполнять float.
     assert compute_backoff(10_000_000) == timedelta(seconds=BACKOFF_CEILING_SECONDS)

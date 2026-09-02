@@ -1,7 +1,8 @@
+# ruff: noqa: E501
 from kernel_domain.errors import Error, ErrorType
 
 
-def test_error_type_has_exactly_the_seven_values_from_adr_0013() -> None:
+def test_error_type_has_exactly_the_seven_values() -> None:
     assert {member.name for member in ErrorType} == {
         "VALIDATION",
         "NOT_FOUND",

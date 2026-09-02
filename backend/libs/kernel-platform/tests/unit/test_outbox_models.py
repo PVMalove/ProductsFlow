@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from sqlalchemy.dialects.postgresql import UUID
 
 from kernel_platform.outbox.models import OutboxMessage

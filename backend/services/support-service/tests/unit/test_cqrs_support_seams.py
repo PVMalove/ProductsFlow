@@ -78,7 +78,7 @@ async def test_create_ticket_command_uses_the_command_port() -> None:
     repository = FakeTicketRepository()
     author_id = uuid.uuid4()
 
-    result = await CreateTicketCommandHandler(repository).handle(
+    result = await CreateTicketCommandHandler(repository).execute(
         CreateTicketCommand(
             author_id=author_id,
             subject="Subject",
@@ -101,22 +101,22 @@ async def test_ticket_queries_are_independent_handlers() -> None:
     repository.ticket_page = TicketPage([ticket], PageInfo(None, None, False, False))
 
     assert (
-        await GetTicketQueryHandler(repository).handle(
+        await GetTicketQueryHandler(repository).execute(
             GetTicketQuery(ticket_id=ticket.id, author_id=author_id)
         )
     ) is ticket
     assert (
-        await ListTicketsQueryHandler(repository).handle(
+        await ListTicketsQueryHandler(repository).execute(
             ListTicketsQuery(author_id=author_id, limit=20)
         )
     ).items == [ticket]
     assert (
-        await ListAdminTicketsQueryHandler(repository).handle(
+        await ListAdminTicketsQueryHandler(repository).execute(
             ListAdminTicketsQuery(limit=20)
         )
     ).items == [ticket]
     assert (
-        await ListTicketMessagesQueryHandler(repository).handle(
+        await ListTicketMessagesQueryHandler(repository).execute(
             ListTicketMessagesQuery(ticket_id=ticket.id, limit=20)
         )
     ) == repository.message_page

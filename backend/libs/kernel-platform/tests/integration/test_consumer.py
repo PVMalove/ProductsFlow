@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import asyncio
 
 import aio_pika
@@ -101,8 +102,7 @@ async def test_consume_routes_message_to_second_retry_stage_after_second_failure
 ) -> None:
     """Вторая неудача (после того как первая ступень по TTL вернула
     сообщение в основную очередь) уходит именно в `retry.30s` — прямая
-    проверка второй ступени, не только вывод по счётчику попыток (issue
-    #110)."""
+    проверка второй ступени, не только вывод по счётчику попыток."""
     main_queue = await declare_topology(
         channel, LADDER_SERVICE_NAME, retry_stage_ttl_ms=LADDER_RETRY_STAGE_TTL_MS
     )

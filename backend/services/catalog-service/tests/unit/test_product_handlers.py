@@ -167,7 +167,7 @@ async def test_create_product_seeds_owner_before_creating() -> None:
     repo, owners, identity = _dependencies(product=_product())
     handler = CreateProductCommandHandler(repo, owners, identity)
 
-    result = await handler.handle(
+    result = await handler.execute(
         CreateProductCommand(
             actor=_actor(),
             name="Товар",
@@ -198,7 +198,7 @@ async def test_get_product_denies_inactive_owner_to_other_viewer() -> None:
     handler = GetProductQueryHandler(repo, owners, identity)
 
     with pytest.raises(ProductNotFoundError):
-        await handler.handle(
+        await handler.execute(
             GetProductQuery(product_id=product.id.value, actor=_actor(OTHER_ID))
         )
 
@@ -210,7 +210,7 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     )
     handler = UpdateProductCommandHandler(repo, identity)
 
-    result = await handler.handle(
+    result = await handler.execute(
         UpdateProductCommand(
             product_id=product.id.value,
             actor=_actor(),
@@ -238,7 +238,7 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     handler = DeleteProductCommandHandler(repo, identity)
 
     with pytest.raises(ProductAccessDeniedError):
-        await handler.handle(
+        await handler.execute(
             DeleteProductCommand(product_id=product.id.value, actor=_actor(OTHER_ID))
         )
 
@@ -246,7 +246,7 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     assert owners.upserts == []
 
 
-async def test_remaining_use_cases_delegate_to_repository_and_audit_port() -> None:
+async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> None:
     product = _product()
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
@@ -254,21 +254,21 @@ async def test_remaining_use_cases_delegate_to_repository_and_audit_port() -> No
     actor = _actor()
 
     assert (
-        await ActivateProductCommandHandler(repo, identity).handle(
+        await ActivateProductCommandHandler(repo, identity).execute(
             ActivateProductCommand(product_id=product.id.value, actor=actor)
         )
     ).is_ok
     assert (
-        await DeactivateProductCommandHandler(repo, identity).handle(
+        await DeactivateProductCommandHandler(repo, identity).execute(
             DeactivateProductCommand(product_id=product.id.value, actor=actor)
         )
     ).is_ok
-    page = await ListProductsQueryHandler(repo).handle(
+    page = await ListProductsQueryHandler(repo).execute(
         ListProductsQuery(limit=20, after=None, before=None)
     )
-    audit = await GetProductAuditQueryHandler(repo, FakeAuditReader(), identity).handle(
-        GetProductAuditQuery(product_id=product.id.value, actor=actor)
-    )
+    audit = await GetProductAuditQueryHandler(
+        repo, FakeAuditReader(), identity
+    ).execute(GetProductAuditQuery(product_id=product.id.value, actor=actor))
 
     assert page.items == [product]
     assert audit[0].action == "created"

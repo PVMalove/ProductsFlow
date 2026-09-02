@@ -1,14 +1,14 @@
 [project]
 name = "kernel-platform"
 version = "0.1.0"
-description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/consumer) — httpx/SQLAlchemy допустимы (ADR 0013)."
+description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/consumer) — httpx/SQLAlchemy допустимы ."
 requires-python = ">=3.14"
 dependencies = [
     "aio-pika>=10.0.1",
     # aiormq/pamqp — импортируются напрямую в outbox/publisher.py
     # (DeliveryError, Basic.Ack), не только транзитивно через aio-pika.
     "aiormq>=7.0.0",
-    # LISTEN/NOTIFY (outbox/listener.py, ADR 0014) — dedicated raw connection,
+    # LISTEN/NOTIFY (outbox/listener.py) — dedicated raw connection,
     # выделенное соединение не через SQLAlchemy-пул.
     "asyncpg>=0.31.0",
     "cryptography>=50.0.0",
@@ -34,13 +34,13 @@ dev = [
     "ruff>=0.16.1",
     # tests/integration/conftest.py: RabbitMQ-фикстура для test_consumer.py/
     # test_topology.py (issue #99-style заглушка вместо libs/test-support,
-    # ADR 0018).
+    # ).
     "testcontainers[rabbitmq]>=4.15.0",
     "vulture>=2.14",
 ]
 
 # Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
-# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+#  — этот пакет наследует его через extend, а не дублирует.
 [tool.ruff]
 extend = "../../pyproject.toml"
 
@@ -48,7 +48,7 @@ extend = "../../pyproject.toml"
 exclude = ["^whitelist\\.py$"]
 
 [[tool.mypy.overrides]]
-# asyncpg (OutboxListener's dedicated LISTEN connection, ADR 0014/issue #102)
+# asyncpg (OutboxListener's dedicated LISTEN connection, /issue #102)
 # ships no stubs/py.typed — same treatment as monolith's aioboto3.
 module = ["asyncpg.*"]
 ignore_missing_imports = true

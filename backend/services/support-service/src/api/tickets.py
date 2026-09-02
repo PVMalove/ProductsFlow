@@ -65,9 +65,9 @@ def _ensure_one_cursor(after: str | None, before: str | None) -> None:
 async def create_ticket(
     request: TicketCreateRequest,
     author_id: RequiredAuth,
-    use_case: CreateTicketDI,
+    handler: CreateTicketDI,
 ) -> TicketResponse:
-    ticket = await use_case.handle(
+    ticket = await handler.execute(
         CreateTicketCommand(
             author_id=author_id,
             subject=request.subject,
@@ -80,13 +80,13 @@ async def create_ticket(
 @router.get("", response_model=TicketListResponse)
 async def list_tickets(
     author_id: RequiredAuth,
-    use_case: ListTicketsDI,
+    handler: ListTicketsDI,
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     after: str | None = Query(None),
     before: str | None = Query(None),
 ) -> TicketListResponse:
     _ensure_one_cursor(after, before)
-    page = await use_case.handle(
+    page = await handler.execute(
         ListTicketsQuery(
             author_id=author_id,
             limit=limit,
@@ -100,13 +100,13 @@ async def list_tickets(
 @router.get("/admin", response_model=TicketListResponse)
 async def list_admin_tickets(
     _admin_id: AdminAuth,
-    use_case: ListAdminTicketsDI,
+    handler: ListAdminTicketsDI,
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     after: str | None = Query(None),
     before: str | None = Query(None),
 ) -> TicketListResponse:
     _ensure_one_cursor(after, before)
-    page = await use_case.handle(
+    page = await handler.execute(
         ListAdminTicketsQuery(limit=limit, after=_cursor(after), before=_cursor(before))
     )
     return TicketListResponse.from_domain(page)
@@ -122,10 +122,10 @@ async def add_ticket_message(
     request: TicketMessageCreateRequest,
     actor_id: RequiredAuth,
     is_admin: OptionalAdmin,
-    use_case: AddTicketMessageDI,
+    handler: AddTicketMessageDI,
 ) -> TicketResponse:
     try:
-        ticket = await use_case.handle(
+        ticket = await handler.execute(
             AddTicketMessageCommand(
                 ticket_id=ticket_id,
                 actor_id=actor_id,
@@ -150,10 +150,10 @@ async def change_ticket_status(
     ticket_id: uuid.UUID,
     request: TicketStatusChangeRequest,
     admin_id: AdminAuth,
-    use_case: ChangeTicketStatusDI,
+    handler: ChangeTicketStatusDI,
 ) -> TicketResponse:
     try:
-        ticket = await use_case.handle(
+        ticket = await handler.execute(
             ChangeTicketStatusCommand(
                 ticket_id=ticket_id,
                 actor_id=admin_id,
@@ -176,22 +176,22 @@ async def change_ticket_status(
 async def get_ticket(
     ticket_id: uuid.UUID,
     author_id: RequiredAuth,
-    use_case: GetTicketDI,
+    handler: GetTicketDI,
     is_admin: OptionalAdmin,
-    messages_use_case: ListTicketMessagesDI,
+    messages_handler: ListTicketMessagesDI,
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     after: str | None = Query(None),
     before: str | None = Query(None),
 ) -> TicketResponse:
     _ensure_one_cursor(after, before)
-    ticket = await use_case.handle(
+    ticket = await handler.execute(
         GetTicketQuery(ticket_id=ticket_id, author_id=author_id, is_admin=is_admin)
     )
     if ticket is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
         )
-    page = await messages_use_case.handle(
+    page = await messages_handler.execute(
         ListTicketMessagesQuery(
             ticket_id=ticket_id,
             limit=limit,

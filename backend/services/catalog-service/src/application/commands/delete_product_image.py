@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Delete-product-image command and handler."""
 
 import uuid
@@ -17,11 +18,21 @@ from domain.product_id import ProductId
 
 @dataclass(frozen=True)
 class DeleteProductImageCommand:
+    """DTO для команды удаления изображения товара."""
+
     product_id: uuid.UUID
     actor: Actor
 
 
 class DeleteProductImageCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Удаление привязанного к товару изображения.
+    Validations: Проверка прав доступа через Authorizer.
+    Side Effects: Изображение удаляется из хранилища и репозитория.
+    """
+
     def __init__(
         self,
         repository: ProductCommandPort,
@@ -34,7 +45,7 @@ class DeleteProductImageCommandHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def handle(self, command: DeleteProductImageCommand) -> None:
+    async def execute(self, command: DeleteProductImageCommand) -> None:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError

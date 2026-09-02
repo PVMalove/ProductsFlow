@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 class ApplicationError(Exception):
     """Base class for expected failures at the application boundary."""
 

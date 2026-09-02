@@ -13,7 +13,7 @@ from tests.unit.fake_user_repository import FakeUserRepository
 def _register(repository: FakeUserRepository, hasher: FakePasswordHasher, email: str):
     return (
         RegisterUserCommandHandler(repository, hasher)
-        .handle(RegisterUserCommand(email, "password1"))
+        .execute(RegisterUserCommand(email, "password1"))
         .value
     )
 
@@ -23,7 +23,7 @@ def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
     hasher = FakePasswordHasher()
     user = _register(repository, hasher, "user@example.com")
 
-    result = DeactivateUserCommandHandler(repository).handle(
+    result = DeactivateUserCommandHandler(repository).execute(
         DeactivateUserCommand(target_user_id=user.id, actor_user_id=user.id)
     )
 
@@ -39,7 +39,7 @@ def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -> None
     target.pull_events()
     actor = _register(repository, hasher, "actor@example.com")
 
-    result = DeactivateUserCommandHandler(repository).handle(
+    result = DeactivateUserCommandHandler(repository).execute(
         DeactivateUserCommand(target_user_id=target.id, actor_user_id=actor.id)
     )
 

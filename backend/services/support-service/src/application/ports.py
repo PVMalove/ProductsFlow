@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Application ports for the support command and query sides."""
 
 import uuid

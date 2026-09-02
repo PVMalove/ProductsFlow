@@ -14,16 +14,26 @@ from domain.user import User
 
 @dataclass(frozen=True)
 class RegisterUserCommand:
+    """DTO для регистрации нового пользователя."""
+
     email: str
     password: str
 
 
 class RegisterUserCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Регистрация новой учетной записи пользователя.
+    Validations: Уникальность email, требования к сложности пароля.
+    Side Effects: В репозитории создается новый пользователь с хешированным паролем.
+    """
+
     def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
         self._users = users
         self._password_hasher = password_hasher
 
-    def handle(self, command: RegisterUserCommand) -> Result[User]:
+    def execute(self, command: RegisterUserCommand) -> Result[User]:
         email = Email(command.email)
         if self._users.exists_by_email(email):
             return Result.fail(

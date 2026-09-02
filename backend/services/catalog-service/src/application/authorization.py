@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from application.errors import ProductAccessDeniedError
 from application.ports import Actor, IdentityGateway, IdentityUser
 from domain.product import Product

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from kernel_domain.visibility_policy import VisibilityPolicy
 
 

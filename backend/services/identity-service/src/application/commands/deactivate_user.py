@@ -20,7 +20,7 @@ class DeactivateUserCommandHandler:
     def __init__(self, users: UserRepository) -> None:
         self._users = users
 
-    def handle(self, command: DeactivateUserCommand) -> Result[User]:
+    def execute(self, command: DeactivateUserCommand) -> Result[User]:
         if command.target_user_id == command.actor_user_id:
             return Result.fail(
                 Error(
@@ -47,14 +47,24 @@ class DeactivateUserCommandHandler:
 
 @dataclass(frozen=True)
 class ActivateUserCommand:
+    """DTO для активации пользователя."""
+
     target_user_id: UserId
 
 
 class ActivateUserCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Активация учетной записи пользователя.
+    Validations: Проверка прав доступа.
+    Side Effects: Статус пользователя меняется на активный.
+    """
+
     def __init__(self, users: UserRepository) -> None:
         self._users = users
 
-    def handle(self, command: ActivateUserCommand) -> Result[User]:
+    def execute(self, command: ActivateUserCommand) -> Result[User]:
         user = self._users.get_by_id(command.target_user_id)
         if user is None:
             return Result.fail(

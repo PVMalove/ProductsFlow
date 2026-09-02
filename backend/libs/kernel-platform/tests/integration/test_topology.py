@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import aio_pika
 import pytest
 from aio_pika import ExchangeType

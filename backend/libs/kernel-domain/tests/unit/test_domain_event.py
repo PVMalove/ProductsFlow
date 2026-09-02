@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime

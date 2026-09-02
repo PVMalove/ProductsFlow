@@ -17,62 +17,62 @@ from infrastructure.db.session import DbSessionDI
 from infrastructure.db.ticket_repository import TicketRepository
 
 
-def get_create_ticket_use_case(session: DbSessionDI) -> CreateTicketCommandHandler:
+def get_create_ticket_handler(session: DbSessionDI) -> CreateTicketCommandHandler:
     return CreateTicketCommandHandler(TicketRepository(session))
 
 
 CreateTicketDI = Annotated[
-    CreateTicketCommandHandler, Depends(get_create_ticket_use_case)
+    CreateTicketCommandHandler, Depends(get_create_ticket_handler)
 ]
 
 
-def get_add_ticket_message_use_case(
+def get_add_ticket_message_handler(
     session: DbSessionDI,
 ) -> AddTicketMessageCommandHandler:
     return AddTicketMessageCommandHandler(TicketRepository(session))
 
 
 AddTicketMessageDI = Annotated[
-    AddTicketMessageCommandHandler, Depends(get_add_ticket_message_use_case)
+    AddTicketMessageCommandHandler, Depends(get_add_ticket_message_handler)
 ]
 
 
-def get_change_ticket_status_use_case(
+def get_change_ticket_status_handler(
     session: DbSessionDI,
 ) -> ChangeTicketStatusCommandHandler:
     return ChangeTicketStatusCommandHandler(TicketRepository(session))
 
 
 ChangeTicketStatusDI = Annotated[
-    ChangeTicketStatusCommandHandler, Depends(get_change_ticket_status_use_case)
+    ChangeTicketStatusCommandHandler, Depends(get_change_ticket_status_handler)
 ]
 
 
-def get_ticket_use_case(session: DbSessionDI) -> GetTicketQueryHandler:
+def get_ticket_handler(session: DbSessionDI) -> GetTicketQueryHandler:
     return GetTicketQueryHandler(TicketRepository(session))
 
 
-def get_list_tickets_use_case(session: DbSessionDI) -> ListTicketsQueryHandler:
+def get_list_tickets_handler(session: DbSessionDI) -> ListTicketsQueryHandler:
     return ListTicketsQueryHandler(TicketRepository(session))
 
 
-def get_list_admin_tickets_use_case(
+def get_list_admin_tickets_handler(
     session: DbSessionDI,
 ) -> ListAdminTicketsQueryHandler:
     return ListAdminTicketsQueryHandler(TicketRepository(session))
 
 
-def get_list_ticket_messages_use_case(
+def get_list_ticket_messages_handler(
     session: DbSessionDI,
 ) -> ListTicketMessagesQueryHandler:
     return ListTicketMessagesQueryHandler(TicketRepository(session))
 
 
-GetTicketDI = Annotated[GetTicketQueryHandler, Depends(get_ticket_use_case)]
-ListTicketsDI = Annotated[ListTicketsQueryHandler, Depends(get_list_tickets_use_case)]
+GetTicketDI = Annotated[GetTicketQueryHandler, Depends(get_ticket_handler)]
+ListTicketsDI = Annotated[ListTicketsQueryHandler, Depends(get_list_tickets_handler)]
 ListAdminTicketsDI = Annotated[
-    ListAdminTicketsQueryHandler, Depends(get_list_admin_tickets_use_case)
+    ListAdminTicketsQueryHandler, Depends(get_list_admin_tickets_handler)
 ]
 ListTicketMessagesDI = Annotated[
-    ListTicketMessagesQueryHandler, Depends(get_list_ticket_messages_use_case)
+    ListTicketMessagesQueryHandler, Depends(get_list_ticket_messages_handler)
 ]

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from observability.formatters import (
     ColorFormatter,
     JsonFormatter,

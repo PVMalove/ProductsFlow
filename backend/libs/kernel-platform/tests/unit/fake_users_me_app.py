@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import json
 from typing import Any
 
@@ -5,7 +6,7 @@ from typing import Any
 class FakeUsersMeApp:
     """Минимальный ASGI-стаб GET /api/v1/users/me — не настоящий identity-service
     (у него ещё нет HTTP-роута для этого эндпоинта), только форма ответа из
-    контракта ADR 0012 (`id` — GUID `identity.UserId`)."""
+    контракта  (`id` — GUID `identity.UserId`)."""
 
     def __init__(
         self, response: dict[str, Any] | None = None, status: int = 200

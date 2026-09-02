@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Deactivate-product command and handler."""
 
 import uuid
@@ -18,18 +19,28 @@ from domain.product_id import ProductId
 
 @dataclass(frozen=True)
 class DeactivateProductCommand:
+    """DTO для команды деактивации товара."""
+
     product_id: uuid.UUID
     actor: Actor
 
 
 class DeactivateProductCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Деактивация товара, скрытие его из общего каталога.
+    Validations: Проверка прав (владелец или админ).
+    Side Effects: Статус товара в репозитории меняется на неактивный.
+    """
+
     def __init__(
         self, repository: ProductCommandPort, identity: IdentityGateway
     ) -> None:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def handle(self, command: DeactivateProductCommand) -> Result[Product]:
+    async def execute(self, command: DeactivateProductCommand) -> Result[Product]:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError

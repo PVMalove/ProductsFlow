@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from collections.abc import AsyncIterator, Iterator
 from urllib.parse import quote
 
@@ -9,7 +10,7 @@ from testcontainers.community.rabbitmq import RabbitMqContainer
 
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
 
-# Заглушка вместо libs/test-support (ADR 0018, issue #99) — этой библиотеки
+# Заглушка вместо libs/test-support (issue #99) — этой библиотеки
 # ещё нет в дереве. Повторяет паттерн identity-service's
 # tests/integration/conftest.py (issue #103), только RabbitMQ-часть:
 # declare_topology не трогает Postgres.
@@ -60,7 +61,7 @@ async def channel(
 
 @pytest_asyncio.fixture(autouse=True, loop_scope="session")
 async def events_exchange_exists(channel: AbstractChannel) -> None:
-    """Симулирует объявление identity-service при своём старте (ADR 0015):
+    """Симулирует объявление identity-service при своём старте :
     `declare_topology` только passive-проверяет `productsflow.events` через
     `get_exchange`, сам его не создаёт."""
     await channel.declare_exchange(

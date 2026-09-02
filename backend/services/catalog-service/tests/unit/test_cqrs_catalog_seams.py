@@ -142,7 +142,7 @@ async def test_create_product_command_handler_seeds_owner_and_creates_product() 
         identity=FakeIdentityGateway(),
     )
 
-    result = await handler.handle(
+    result = await handler.execute(
         CreateProductCommand(
             actor=Actor(user_id=OWNER_ID, token="token"),
             name="Товар",

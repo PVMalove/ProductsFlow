@@ -31,7 +31,7 @@ async def get_product_image(
     auth: OptionalAuth,
     handler: GetProductImageDI,
 ) -> ProductImageResponse:
-    view = await handler.handle(
+    view = await handler.execute(
         GetProductImageQuery(
             product_id=product_id,
             actor=to_actor(auth) if auth is not None else None,
@@ -61,7 +61,7 @@ async def upload_product_image(
             detail="Файл больше 5 МБ",
         )
 
-    mutation: ProductImageMutation = await handler.handle(
+    mutation: ProductImageMutation = await handler.execute(
         UpsertProductImageCommand(
             product_id=product_id,
             actor=to_actor(auth),
@@ -72,7 +72,7 @@ async def upload_product_image(
     response.status_code = (
         status.HTTP_200_OK if mutation.replaced else status.HTTP_201_CREATED
     )
-    view = await read_handler.handle(
+    view = await read_handler.execute(
         GetProductImageQuery(product_id=product_id, actor=to_actor(auth))
     )
     return ProductImageResponse.from_view(view)
@@ -84,7 +84,7 @@ async def delete_product_image(
     auth: RequiredAuth,
     handler: DeleteProductImageDI,
 ) -> None:
-    await handler.handle(
+    await handler.execute(
         DeleteProductImageCommand(product_id=product_id, actor=to_actor(auth))
     )
 
