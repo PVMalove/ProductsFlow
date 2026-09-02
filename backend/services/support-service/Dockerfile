@@ -16,6 +16,7 @@ FROM python:3.14-slim
 WORKDIR /srv
 
 COPY --from=builder /srv/services/support-service/.venv /srv/services/support-service/.venv
+COPY --from=builder /srv/services/support-service/src/infrastructure/db /srv/infrastructure/db
 ENV PATH="/srv/services/support-service/.venv/bin:$PATH"
 
 EXPOSE 8000

@@ -72,6 +72,7 @@ jobs:
           - kernel-domain
           - test-support
           - catalog-service
+          - support-service
     env:
       PYTEST_ADDOPTS: --junitxml=test-results.xml
     steps:
