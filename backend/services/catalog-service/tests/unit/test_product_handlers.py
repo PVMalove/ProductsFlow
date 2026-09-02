@@ -32,6 +32,7 @@ from application.queries import (
     ListProductsQuery,
     ListProductsQueryHandler,
 )
+from contracts.product import ProductView
 from domain.product import Product
 from domain.product_id import ProductId
 from domain.product_image import ProductImage
@@ -167,7 +168,8 @@ def _dependencies(
 
 
 async def test_create_product_seeds_owner_before_creating() -> None:
-    repo, owners, identity = _dependencies(product=_product())
+    product = _product()
+    repo, owners, identity = _dependencies(product=product)
     handler = CreateProductCommandHandler(repo, owners, identity)
 
     result = await handler.execute(
@@ -181,6 +183,7 @@ async def test_create_product_seeds_owner_before_creating() -> None:
     )
 
     assert result.is_ok
+    assert result.value == ProductView.from_domain(product)
     assert owners.upserts == [OwnerSnapshot(OWNER_ID, "user", True, 0)]
     assert identity.fetches == 1
     assert repo.created == {

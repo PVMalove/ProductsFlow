@@ -1,7 +1,7 @@
 [project]
 name = "kernel-platform"
 version = "0.1.0"
-description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/consumer) — httpx/SQLAlchemy допустимы ."
+description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/consumer/BFF HTTP-контракт) — httpx/SQLAlchemy/FastAPI допустимы ."
 requires-python = ">=3.14"
 dependencies = [
     "aio-pika>=10.0.1",
@@ -12,6 +12,9 @@ dependencies = [
     # выделенное соединение не через SQLAlchemy-пул.
     "asyncpg>=0.31.0",
     "cryptography>=50.0.0",
+    # ADR 0031 — generic BFF response envelope + platform exception handlers
+    # (kernel_platform.http.*).
+    "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "kernel-domain",
     "pamqp>=4.0.1",

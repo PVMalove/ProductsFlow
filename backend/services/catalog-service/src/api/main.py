@@ -2,12 +2,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from kernel_platform.http.exception_handlers import register_error_handlers
 from kernel_platform.security.identity_client import IdentityClient
 from observability.middleware import RequestContextMiddleware
 
-from api.errors import to_http_exception
 from api.product_images import router as product_images_router
 from api.products import router as products_router
 from application.errors import ApplicationError
@@ -35,16 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
-
-
-@app.exception_handler(ApplicationError)
-async def application_error_handler(
-    _request: Request, exc: ApplicationError
-) -> JSONResponse:
-    error = to_http_exception(exc)
-    content = {"detail": error.detail}
-    return JSONResponse(status_code=error.status_code, content=content)
-
+register_error_handlers(app, service_error_type=ApplicationError)
 
 app.add_middleware(RequestContextMiddleware, verifier=_identity_client)
 app.include_router(products_router)

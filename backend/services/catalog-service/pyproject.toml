@@ -34,6 +34,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = [
     "src/application",
+    "src/contracts",
     "src/domain",
     "src/infrastructure",
     "src/api",

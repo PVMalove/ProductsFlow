@@ -47,7 +47,8 @@ async def _create_product(client: httpx.AsyncClient, token: str) -> dict[str, ob
         "/api/v1/products", json=_PRODUCT_PAYLOAD, headers=_auth(token)
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    data: dict[str, object] = response.json()["data"]
+    return data
 
 
 def _file(
@@ -112,9 +113,9 @@ async def test_visible_product_without_image_has_distinct_not_found_message(
     response = await catalog_client.get(f"/api/v1/products/{product['id']}/image")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "У товара нет картинки!"
+    assert response.json()["error"]["message"] == "У товара нет картинки!"
     unknown = await catalog_client.get(f"/api/v1/products/{uuid.uuid4()}/image")
-    assert unknown.json()["detail"] == "Товар не найден"
+    assert unknown.json()["error"]["message"] == "Товар не найден"
 
 
 async def test_image_visibility_follows_product_visibility(
@@ -139,7 +140,7 @@ async def test_image_visibility_follows_product_visibility(
     )
 
     assert anonymous.status_code == 404
-    assert anonymous.json()["detail"] == "Товар не найден"
+    assert anonymous.json()["error"]["message"] == "Товар не найден"
     assert owner.status_code == 200
     admin = await catalog_client.get(
         f"/api/v1/products/{product['id']}/image",
@@ -195,7 +196,7 @@ async def test_delete_without_image_is_distinct_and_non_owner_is_forbidden(
     )
 
     assert missing.status_code == 404
-    assert missing.json()["detail"] == "У товара нет картинки!"
+    assert missing.json()["error"]["message"] == "У товара нет картинки!"
     assert forbidden.status_code == 403
 
 

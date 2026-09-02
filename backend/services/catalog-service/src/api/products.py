@@ -1,6 +1,9 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
+from kernel_domain.result import Result
+from kernel_platform.http.envelope import ApiResponse
+from kernel_platform.http.match import match_created
 from kernel_platform.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -32,7 +35,6 @@ from api.schemas import (
 )
 from application.commands import (
     ActivateProductCommand,
-    CreateProductCommand,
     DeactivateProductCommand,
     DeleteProductCommand,
     UpdateProductCommand,
@@ -42,28 +44,24 @@ from application.queries import (
     GetProductQuery,
     ListProductsQuery,
 )
+from contracts.product import ProductView
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
 
-@router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ApiResponse[ProductView],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_product(
     request: ProductCreateRequest,
     auth: RequiredAuth,
     handler: CreateProductDI,
-) -> ProductResponse:
-    result = await handler.execute(
-        CreateProductCommand(
-            actor=to_actor(auth),
-            name=request.name,
-            description=request.description,
-            price=request.price,
-            category=request.category,
-        )
-    )
-    if result.is_err:
-        raise to_http_exception(result.error)
-    return ProductResponse.from_domain(result.value)
+) -> ApiResponse[ProductView]:
+    command = request.to_command(actor=to_actor(auth))
+    result: Result[ProductView] = await handler.execute(command)
+    return match_created(result)
 
 
 @router.get("", response_model=ProductListResponse)
