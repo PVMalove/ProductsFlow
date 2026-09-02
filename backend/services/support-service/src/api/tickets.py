@@ -6,14 +6,22 @@ from api.dependencies import (
     CreateTicketDI,
     GetTicketDI,
     ListAdminTicketsDI,
+    ListTicketMessagesDI,
     ListTicketsDI,
 )
 from api.schemas import TicketCreateRequest, TicketListResponse, TicketResponse
+from application.commands import CreateTicketCommand
 from application.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
     InvalidCursorError,
     decode_cursor,
+)
+from application.queries import (
+    GetTicketQuery,
+    ListAdminTicketsQuery,
+    ListTicketMessagesQuery,
+    ListTicketsQuery,
 )
 from infrastructure.security.auth import AdminAuth, OptionalAdmin, RequiredAuth
 
@@ -45,10 +53,12 @@ async def create_ticket(
     author_id: RequiredAuth,
     use_case: CreateTicketDI,
 ) -> TicketResponse:
-    ticket = await use_case.execute(
-        author_id=author_id,
-        subject=request.subject,
-        first_message=request.first_message,
+    ticket = await use_case.handle(
+        CreateTicketCommand(
+            author_id=author_id,
+            subject=request.subject,
+            first_message=request.first_message,
+        )
     )
     return TicketResponse.from_domain(ticket)
 
@@ -62,8 +72,13 @@ async def list_tickets(
     before: str | None = Query(None),
 ) -> TicketListResponse:
     _ensure_one_cursor(after, before)
-    page = await use_case.execute(
-        author_id=author_id, limit=limit, after=_cursor(after), before=_cursor(before)
+    page = await use_case.handle(
+        ListTicketsQuery(
+            author_id=author_id,
+            limit=limit,
+            after=_cursor(after),
+            before=_cursor(before),
+        )
     )
     return TicketListResponse.from_domain(page)
 
@@ -77,8 +92,8 @@ async def list_admin_tickets(
     before: str | None = Query(None),
 ) -> TicketListResponse:
     _ensure_one_cursor(after, before)
-    page = await use_case.execute(
-        author_id=_admin_id, limit=limit, after=_cursor(after), before=_cursor(before)
+    page = await use_case.handle(
+        ListAdminTicketsQuery(limit=limit, after=_cursor(after), before=_cursor(before))
     )
     return TicketListResponse.from_domain(page)
 
@@ -89,27 +104,31 @@ async def get_ticket(
     author_id: RequiredAuth,
     use_case: GetTicketDI,
     is_admin: OptionalAdmin,
+    messages_use_case: ListTicketMessagesDI,
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     after: str | None = Query(None),
     before: str | None = Query(None),
 ) -> TicketResponse:
     _ensure_one_cursor(after, before)
-    ticket = await use_case.execute(
-        ticket_id=ticket_id, author_id=author_id, is_admin=is_admin
+    ticket = await use_case.handle(
+        GetTicketQuery(ticket_id=ticket_id, author_id=author_id, is_admin=is_admin)
     )
     if ticket is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
         )
-    page = await use_case.messages(
-        ticket_id=ticket_id,
-        limit=limit,
-        after=_cursor(after),
-        before=_cursor(before),
+    page = await messages_use_case.handle(
+        ListTicketMessagesQuery(
+            ticket_id=ticket_id,
+            limit=limit,
+            after=_cursor(after),
+            before=_cursor(before),
+        )
     )
-    ticket.messages = page.items
     from api.schemas import PageInfoResponse
 
     return TicketResponse.from_domain(
-        ticket, page_info=PageInfoResponse.from_domain(page.page_info)
+        ticket,
+        page_info=PageInfoResponse.from_domain(page.page_info),
+        messages=page.items,
     )

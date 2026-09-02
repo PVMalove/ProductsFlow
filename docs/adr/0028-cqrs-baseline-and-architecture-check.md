@@ -106,7 +106,7 @@ class ListTicketsQueryHandler:
 | --- | --- | --- |
 | `identity-service/src/application` | команды и запросы identity выделены в пакеты `commands/` и `queries/`, по одному модулю на операцию; старые command-файлы оставлены compatibility adapters | считать identity эталонным примером пакетного CQRS layout |
 | `catalog-service/src/application/commands/` and `queries/` | product CRUD, visibility, pagination, audit, and image operations have one immutable DTO and dedicated handler per operation; old compatibility modules were removed | migrated in #187 |
-| `support-service/src/application/ticket_use_cases.py` | `CreateTicket` смешан с `GetTicket/ListTickets/ListAdminTickets` | migration finding; разделить в #188 |
+| `support-service/src/application/commands/` and `queries/` | ticket creation, ticket visibility, ticket lists and message pagination use dedicated command/query DTOs and handlers | migrated in #188 |
 | shared libraries | прикладных use case-модулей нет | нарушений CQRS не найдено |
 | все `domain/` и `application/` | blocking imports `infrastructure`, FastAPI или SQLAlchemy не обнаружены | enforced автоматически |
 
@@ -128,6 +128,6 @@ class ListTicketsQueryHandler:
 
 Команды получают явную транзакционную границу и сохраняют текущие security,
 visibility и outbox-контракты. Запросы можно оптимизировать read models без
-изменения агрегатов. На время миграции архитектурный check сообщает известные
-несмешанные violations отдельно от blocking layer violations; issues #186–#189
-закрывают migration findings по bounded context и enforcement.
+изменения агрегатов. Архитектурный check сообщает blocking layer violations,
+а миграции identity, catalog и support больше не оставляют mixed-use-case
+finding; issue #189 закрывает enforcement по bounded context.
