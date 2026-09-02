@@ -85,6 +85,46 @@ services:
     networks:
       - backend-network
 
+  support-db:
+    image: postgres:18.0
+    container_name: support-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: support
+    volumes:
+      - support_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d support"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  support-bootstrap:
+    # One-off bootstrap step (ADR 0017): alembic upgrade head, then a DB
+    # connectivity check. support has no bucket-ensure and no seed stage —
+    # an empty ticket table is a legitimate starting state.
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    container_name: support-bootstrap
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+    depends_on:
+      support-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
   support-api:
     build:
       context: .
@@ -93,6 +133,9 @@ services:
     environment:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+    depends_on:
+      support-bootstrap:
+        condition: service_completed_successfully
     networks:
       - backend-network
 
@@ -106,6 +149,9 @@ services:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
       SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL}
+    depends_on:
+      support-bootstrap:
+        condition: service_completed_successfully
     networks:
       - backend-network
 
@@ -115,3 +161,4 @@ networks:
 
 volumes:
   minio_data:
+  support_db_data:
