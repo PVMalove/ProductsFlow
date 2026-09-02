@@ -88,10 +88,6 @@ class UserAuditQueryPort(Protocol):
     async def get_by_user(self, user_id: UserId) -> list[UserAuditEntry]: ...
 
 
-# ``UserAuditReader`` mirrors the naming used by catalog-service's audit port.
-UserAuditReader = UserAuditQueryPort
-
-
 class PasswordHasher(Protocol):
     """Port for password hashing; implementations belong to infrastructure."""
 
