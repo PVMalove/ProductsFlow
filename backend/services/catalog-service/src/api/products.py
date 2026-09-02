@@ -1,6 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
+from kernel_platform.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    Cursor,
+    InvalidCursorError,
+    decode_cursor,
+)
 
 from api.dependencies import (
     ActivateProductDI,
@@ -29,13 +36,6 @@ from application.commands import (
     DeactivateProductCommand,
     DeleteProductCommand,
     UpdateProductCommand,
-)
-from application.pagination import (
-    DEFAULT_PAGE_LIMIT,
-    MAX_PAGE_LIMIT,
-    Cursor,
-    InvalidCursorError,
-    decode_cursor,
 )
 from application.queries import (
     GetProductAuditQuery,

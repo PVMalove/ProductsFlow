@@ -2,11 +2,11 @@ import uuid
 
 from kernel_domain.result import Result
 from kernel_platform.outbox.drain import drain_events_to_outbox
+from kernel_platform.pagination import encode_cursor
 from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.pagination import encode_cursor
 from application.ports import (
     ProductAuditAction,
     ProductCommandPort,

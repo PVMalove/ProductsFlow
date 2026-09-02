@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from infrastructure.db.pagination import (
+from kernel_platform.pagination import (
     Cursor,
     InvalidCursorError,
     decode_cursor,
@@ -14,11 +14,11 @@ from infrastructure.db.pagination import (
 
 def test_encode_decode_roundtrip() -> None:
     created_at = datetime(2026, 8, 30, 12, 0, 0, tzinfo=UTC)
+    entity_id = uuid.uuid4()
 
-    product_id = uuid.uuid4()
-    token = encode_cursor(created_at, product_id)
+    token = encode_cursor(created_at, entity_id)
 
-    assert decode_cursor(token) == Cursor(created_at=created_at, id=product_id)
+    assert decode_cursor(token) == Cursor(created_at=created_at, id=entity_id)
 
 
 def test_decode_invalid_base64_raises_invalid_cursor_error() -> None:
