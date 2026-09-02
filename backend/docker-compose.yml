@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: identity
     volumes:
-      - identity_db_data:/var/lib/postgresql/data
+      - identity_db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d identity"]
       interval: 5s
@@ -87,7 +87,7 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: catalog
     volumes:
-      - catalog_db_data:/var/lib/postgresql/data
+      - catalog_db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d catalog"]
       interval: 5s
@@ -205,6 +205,23 @@ services:
     networks:
       - backend-network
 
+  rabbitmq:
+    # Broker for outbox publishing (ADR 0014) and the ADR 0015 topology —
+    # identity/catalog/support declare their own exchange/queues on startup
+    # (idempotently), this is just the broker itself. Quorum queues need
+    # RabbitMQ 4.x (ADR 0015: x-delivery-limit defaults arrived in 4.0).
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
   support-db:
     image: postgres:18.0
     container_name: support-db
@@ -213,7 +230,7 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: support
     volumes:
-      - support_db_data:/var/lib/postgresql/data
+      - support_db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d support"]
       interval: 5s
