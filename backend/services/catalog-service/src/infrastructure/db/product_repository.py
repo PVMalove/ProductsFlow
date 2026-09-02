@@ -1,8 +1,7 @@
 import uuid
 
-from kernel_domain.domain_event import DomainEvent
 from kernel_domain.result import Result
-from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.outbox.drain import drain_events_to_outbox
 from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,14 +11,6 @@ from application.ports import (
     ProductAuditAction,
     ProductCommandPort,
     ProductQueryPort,
-)
-from domain.events import (
-    ProductActivated,
-    ProductCreated,
-    ProductDeactivated,
-    ProductDeleted,
-    ProductEvent,
-    ProductUpdated,
 )
 from domain.product import Product
 from domain.product_id import ProductId
@@ -42,14 +33,6 @@ from infrastructure.db.owner_read_model import OwnerReadModelRow
 # методов этого класса в сам метод, а не в builtin (известная особенность
 # self-referencing имён в теле класса).
 _ProductRows = list[ProductModel]
-
-_EVENT_TYPES: dict[type[ProductEvent], str] = {
-    ProductCreated: "product.created.v1",
-    ProductUpdated: "product.updated.v1",
-    ProductActivated: "product.activated.v1",
-    ProductDeactivated: "product.deactivated.v1",
-    ProductDeleted: "product.deleted.v1",
-}
 
 
 def _to_domain(row: ProductModel) -> Product:
@@ -75,35 +58,13 @@ def _to_image_domain(row: ProductImageModel) -> ProductImage:
     )
 
 
-def _to_outbox_message(event: DomainEvent) -> OutboxMessage:
-    # Все домeнные события Product наследуют ProductEvent (product_id) —
-    # `pull_events()` типизирован общим `DomainEvent` на уровне kernel-domain
-    # (Entity не параметризуется по типу события), поэтому здесь нужен явный
-    # guard для сужения типа.
-    assert isinstance(event, ProductEvent)
-    payload: dict[str, object] = {"product_id": str(event.product_id.value)}
-    if isinstance(event, ProductCreated):
-        payload.update(
-            user_id=str(event.user_id),
-            name=event.name,
-            category=event.category,
-            price=event.price,
-        )
-
-    return OutboxMessage(
-        aggregate_type="Product",
-        aggregate_id=event.product_id.value,
-        event_type=_EVENT_TYPES[type(event)],
-        payload=payload,
-        occurred_at=event.occurred_on_utc,
-    )
-
-
 class ProductRepository:
     """CRUD + keyset-пагинация для `Product` (issue #148). `_commit` —
     единственное место, которое видит и доменную сущность, и `AsyncSession`
     (ADR 0021): каждый мутирующий метод сам коммитит свою транзакцию, атомарно
     фиксируя изменение `ProductModel` и вставленные строки `outbox_messages`.
+    Маппинг событий в строки Outbox — generic `drain_events_to_outbox` из
+    `kernel_platform` (ADR 0029), репозиторий его не переопределяет.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -204,7 +165,7 @@ class ProductRepository:
         row, product = loaded
 
         product.mark_deleted()
-        await self._drain_outbox(product)
+        await drain_events_to_outbox(self.session, product)
         await self.session.delete(row)
         await self.session.commit()
         return product
@@ -354,12 +315,8 @@ class ProductRepository:
         return rows[:limit], len(rows) > limit
 
     async def _commit(self, product: Product) -> None:
-        await self._drain_outbox(product)
+        await drain_events_to_outbox(self.session, product)
         await self.session.commit()
-
-    async def _drain_outbox(self, product: Product) -> None:
-        for event in product.pull_events():
-            self.session.add(_to_outbox_message(event))
 
 
 # Static structural check: mypy verifies that the concrete implementation
