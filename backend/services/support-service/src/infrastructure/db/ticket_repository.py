@@ -5,6 +5,7 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domain.events import TicketMessageAdded, TicketStatusChanged
 from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket, TicketStatus
@@ -39,6 +40,63 @@ class TicketRepository:
         for event in ticket.pull_events():
             self._session.add(_to_outbox(event))
         await self._session.commit()
+        return ticket
+
+    async def add_message(
+        self,
+        *,
+        ticket_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        body: str,
+        is_admin: bool,
+    ) -> Ticket | None:
+        row = await self._load_for_update(ticket_id)
+        if row is None or (not is_admin and row.author_id != actor_id):
+            await self._session.rollback()
+            return None
+
+        ticket = await self._to_domain(row)
+        try:
+            message = ticket.add_message(
+                author_id=actor_id,
+                body=body,
+                actor_category="admin" if is_admin else "user",
+            )
+            row.status = ticket.status.value
+            self._session.add(
+                TicketMessageModel(
+                    id=message.id,
+                    ticket_id=message.ticket_id,
+                    author_id=message.author_id,
+                    body=message.body,
+                    created_at=message.created_at,
+                    is_system=message.is_system,
+                )
+            )
+            await self._drain_outbox(ticket)
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+        return ticket
+
+    async def change_status(
+        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+    ) -> Ticket | None:
+        row = await self._load_for_update(ticket_id)
+        if row is None:
+            await self._session.rollback()
+            return None
+
+        ticket = await self._to_domain(row)
+        try:
+            ticket.change_status(status, actor_category="admin")
+            row.status = ticket.status.value
+            await self._drain_outbox(ticket)
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
         return ticket
 
     async def get_for_author(
@@ -220,16 +278,45 @@ class TicketRepository:
             created_at=row.created_at,
         )
 
+    async def _load_for_update(self, ticket_id: uuid.UUID) -> TicketModel | None:
+        statement = (
+            select(TicketModel).where(TicketModel.id == ticket_id).with_for_update()
+        )
+        return await self._session.scalar(statement)
+
+    async def _drain_outbox(self, ticket: Ticket) -> None:
+        for event in ticket.pull_events():
+            self._session.add(_to_outbox(event))
+
 
 def _to_outbox(event: DomainEvent) -> OutboxMessage:
     from domain.events.ticket_created import TicketCreated
 
-    assert isinstance(event, TicketCreated)
+    if isinstance(event, TicketCreated):
+        payload = {
+            "ticket_id": str(event.ticket_id),
+            "author_id": str(event.author_id),
+        }
+    elif isinstance(event, TicketMessageAdded):
+        payload = {
+            "ticket_id": str(event.ticket_id),
+            "message_id": str(event.message_id),
+            "actor_category": event.actor_category,
+        }
+    elif isinstance(event, TicketStatusChanged):
+        payload = {
+            "ticket_id": str(event.ticket_id),
+            "previous_status": event.previous_status,
+            "status": event.status,
+            "actor_category": event.actor_category,
+        }
+    else:
+        raise TypeError(f"unsupported ticket event: {type(event).__name__}")
     return OutboxMessage(
         aggregate_type="Ticket",
         aggregate_id=event.ticket_id,
         event_type=event.event_type,
-        payload={"ticket_id": str(event.ticket_id), "author_id": str(event.author_id)},
+        payload=payload,
         occurred_at=event.occurred_on_utc,
     )
 

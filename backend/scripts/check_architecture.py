@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +30,7 @@ _WRITE_MARKERS = (
     "upsert",
 )
 _READ_MARKERS = ("get", "list", "search", "find", "count", "audit")
+_NAME_TOKEN = re.compile(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+")
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,12 @@ def _imported_cqrs_sides(node: ast.AST) -> set[str]:
     }
 
 
+def _name_tokens(name: str) -> set[str]:
+    """Split CamelCase and snake_case names before matching use-case markers."""
+
+    return {token.lower() for token in _NAME_TOKEN.findall(name)}
+
+
 def _cqrs_import_findings(path: Path) -> list[Finding]:
     side = next((part for part in ("commands", "queries") if part in path.parts), None)
     if side is None:
@@ -153,9 +161,9 @@ def _mixed_module_finding(path: Path) -> Finding | None:
             names = []
 
         for name in names:
-            lowered = name.lower()
-            writes += any(marker in lowered for marker in _WRITE_MARKERS)
-            reads += any(marker in lowered for marker in _READ_MARKERS)
+            tokens = _name_tokens(name)
+            writes += bool(tokens.intersection(_WRITE_MARKERS))
+            reads += bool(tokens.intersection(_READ_MARKERS))
 
     writes += "commands" in imported_sides
     reads += "queries" in imported_sides

@@ -1,8 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
 import pytest
+from kernel_platform.outbox.models import OutboxMessage
 
-from domain.ticket import Ticket
+from domain.ticket import Ticket, TicketStatus
+from infrastructure.db.models import TicketMessageModel, TicketModel
 from infrastructure.db.ticket_repository import SqlTicketRepository
 
 
@@ -21,6 +24,27 @@ class RecordingSession:
         pass
 
 
+class MutationSession(RecordingSession):
+    def __init__(self, ticket: TicketModel, message: TicketMessageModel) -> None:
+        super().__init__()
+        self.ticket = ticket
+        self.message = message
+        self.rollback_count = 0
+
+    async def scalar(self, statement: object) -> TicketModel:
+        return self.ticket
+
+    async def scalars(self, statement: object) -> object:
+        class Result:
+            def all(_inner_self: object) -> list[TicketMessageModel]:
+                return [self.message]
+
+        return Result()
+
+    async def rollback(self) -> None:
+        self.rollback_count += 1
+
+
 @pytest.mark.asyncio
 async def test_create_adds_ticket_message_and_outbox_before_one_commit() -> None:
     session = RecordingSession()
@@ -36,3 +60,66 @@ async def test_create_adds_ticket_message_and_outbox_before_one_commit() -> None
         "OutboxMessage",
     }
     assert session.commit_count == 1
+
+
+def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageModel]:
+    ticket_id = uuid.uuid4()
+    created_at = datetime.now(UTC)
+    return (
+        TicketModel(
+            id=ticket_id,
+            author_id=author_id,
+            subject="Subject",
+            status=TicketStatus.OPEN.value,
+            created_at=created_at,
+        ),
+        TicketMessageModel(
+            id=uuid.uuid4(),
+            ticket_id=ticket_id,
+            author_id=author_id,
+            body="First message",
+            created_at=created_at,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_message_writes_only_technical_outbox_data_before_one_commit() -> (
+    None
+):
+    author_id = uuid.uuid4()
+    row, first_message = _stored_ticket(author_id)
+    session = MutationSession(row, first_message)
+
+    result = await SqlTicketRepository(session).add_message(  # type: ignore[arg-type]
+        ticket_id=row.id,
+        actor_id=uuid.uuid4(),
+        body="Reply text",
+        is_admin=True,
+    )
+
+    assert result is not None
+    assert row.status == TicketStatus.OPEN.value
+    assert session.commit_count == 1
+    outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
+    assert len(outbox) == 1
+    assert outbox[0].event_type == "ticket.message_added.v1"
+    assert "body" not in outbox[0].payload
+
+
+@pytest.mark.asyncio
+async def test_rejected_status_change_rolls_back_without_persisting_mutation() -> None:
+    author_id = uuid.uuid4()
+    row, first_message = _stored_ticket(author_id)
+    session = MutationSession(row, first_message)
+
+    with pytest.raises(ValueError):
+        await SqlTicketRepository(session).change_status(  # type: ignore[arg-type]
+            ticket_id=row.id,
+            actor_id=uuid.uuid4(),
+            status=TicketStatus.RESOLVED,
+        )
+
+    assert session.added == []
+    assert session.commit_count == 0
+    assert session.rollback_count == 1

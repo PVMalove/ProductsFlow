@@ -22,6 +22,10 @@ class TicketModel(Base):
         CheckConstraint(
             "length(btrim(subject)) BETWEEN 1 AND 200", name="ck_tickets_subject_length"
         ),
+        CheckConstraint(
+            "status IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')",
+            name="ck_tickets_status",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
