@@ -21,7 +21,7 @@ class UserReadModel:
 class UserQueryPort(Protocol):
     """Read-only access to the identity read model."""
 
-    def get_by_id(self, user_id: UserId) -> UserReadModel | None: ...
+    async def get_by_id(self, user_id: UserId) -> UserReadModel | None: ...
 
 
 class PasswordHasher(Protocol):

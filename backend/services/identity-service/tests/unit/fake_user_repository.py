@@ -11,20 +11,20 @@ class FakeUserRepository(UserRepository):
     def __init__(self) -> None:
         self.users: dict[str, User] = {}
 
-    def exists_by_email(self, email: Email) -> bool:
+    async def exists_by_email(self, email: Email) -> bool:
         return email.value in self.users
 
-    def get_by_email(self, email: Email) -> User | None:
+    async def get_by_email(self, email: Email) -> User | None:
         return self.users.get(email.value)
 
-    def get_by_id(self, user_id: UserId) -> User | None:
+    async def get_by_id(self, user_id: UserId) -> User | None:
         for user in self.users.values():
             if user.id == user_id:
                 return user
         return None
 
-    def add(self, user: User) -> None:
+    async def add(self, user: User) -> None:
         self.users[user.email.value] = user
 
-    def save(self, user: User) -> None:
+    async def save(self, user: User) -> None:
         self.users[user.email.value] = user

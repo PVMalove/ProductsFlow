@@ -20,3 +20,10 @@ query and a package-level public facade. `GetUserQueryHandler` accepts only
 no `add` or `save` operation, so a query handler cannot accidentally mutate the
 aggregate through its declared dependency. The old per-operation module paths
 remain thin re-export adapters for callers during the migration.
+
+`infrastructure.db.user_repository.UserRepository` maps the aggregate to the
+SQLAlchemy `UserModel`. Every mutating method drains domain events through the
+shared kernel-platform outbox operation and commits once, so the user row and
+its outbox rows share one transaction. ORM listeners in `infrastructure.db.audit`
+write the immutable user audit trail and resolve the actor from the shared
+request `ContextVar` (falling back to the affected user's id outside HTTP).

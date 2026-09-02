@@ -26,3 +26,18 @@ def test_register_pulls_a_user_registered_event_with_the_new_id_and_email() -> N
     assert isinstance(event, UserRegistered)
     assert event.user_id == user.id
     assert event.email == Email("user@example.com")
+
+
+def test_user_registered_event_implements_the_outbox_contract() -> None:
+    result = User.register(Email("user@example.com"), "some-password-hash")
+    event = result.value.pull_events()[0]
+
+    assert isinstance(event, UserRegistered)
+    assert event.event_type == "user.registered.v1"
+    assert event.aggregate_type == "User"
+    assert event.aggregate_id() == result.value.id.value
+    assert event.to_payload() == {
+        "user_id": str(result.value.id.value),
+        "email": "user@example.com",
+    }
+    assert event.email == Email("user@example.com")

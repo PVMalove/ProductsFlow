@@ -10,20 +10,21 @@ from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
-def _register(repository: FakeUserRepository, hasher: FakePasswordHasher, email: str):
-    return (
-        RegisterUserCommandHandler(repository, hasher)
-        .execute(RegisterUserCommand(email, "password1"))
-        .value
+async def _register(
+    repository: FakeUserRepository, hasher: FakePasswordHasher, email: str
+):
+    result = await RegisterUserCommandHandler(repository, hasher).execute(
+        RegisterUserCommand(email, "password1")
     )
+    return result.value
 
 
-def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
+async def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    user = _register(repository, hasher, "user@example.com")
+    user = await _register(repository, hasher, "user@example.com")
 
-    result = DeactivateUserCommandHandler(repository).execute(
+    result = await DeactivateUserCommandHandler(repository).execute(
         DeactivateUserCommand(target_user_id=user.id, actor_user_id=user.id)
     )
 
@@ -32,20 +33,20 @@ def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
     assert user.is_active is True
 
 
-def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -> None:
+async def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    target = _register(repository, hasher, "target@example.com")
+    target = await _register(repository, hasher, "target@example.com")
     target.pull_events()
-    actor = _register(repository, hasher, "actor@example.com")
+    actor = await _register(repository, hasher, "actor@example.com")
 
-    result = DeactivateUserCommandHandler(repository).execute(
+    result = await DeactivateUserCommandHandler(repository).execute(
         DeactivateUserCommand(target_user_id=target.id, actor_user_id=actor.id)
     )
 
     assert result.is_ok
     assert result.value.is_active is False
-    persisted = repository.get_by_id(target.id)
+    persisted = await repository.get_by_id(target.id)
     assert persisted is not None
     assert persisted.is_active is False
     events = result.value.pull_events()

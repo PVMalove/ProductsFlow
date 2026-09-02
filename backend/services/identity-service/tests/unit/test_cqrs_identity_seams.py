@@ -1,4 +1,4 @@
-from application.commands.deactivate_user import (
+from application.commands.activate_user import (
     ActivateUserCommand,
     ActivateUserCommandHandler,
 )
@@ -14,8 +14,8 @@ class ReadOnlyUserProjection:
     def __init__(self, repository: FakeUserRepository) -> None:
         self._repository = repository
 
-    def get_by_id(self, user_id: UserId) -> UserReadModel | None:
-        user = self._repository.get_by_id(user_id)
+    async def get_by_id(self, user_id: UserId) -> UserReadModel | None:
+        user = await self._repository.get_by_id(user_id)
         return (
             None
             if user is None
@@ -25,13 +25,13 @@ class ReadOnlyUserProjection:
         )
 
 
-def test_get_user_query_reads_through_a_read_handler() -> None:
+async def test_get_user_query_reads_through_a_read_handler() -> None:
     repository = FakeUserRepository()
-    registered = RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
-        RegisterUserCommand("user@example.com", "password1")
-    )
+    registered = await RegisterUserCommandHandler(
+        repository, FakePasswordHasher()
+    ).execute(RegisterUserCommand("user@example.com", "password1"))
 
-    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
+    result = await GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
         GetUserQuery(registered.value.id)
     )
 
@@ -40,10 +40,12 @@ def test_get_user_query_reads_through_a_read_handler() -> None:
     assert result.value.is_active is True
 
 
-def test_get_user_query_returns_not_found_without_mutating_the_repository() -> None:
+async def test_get_user_query_returns_not_found_without_mutating_the_repository() -> (
+    None
+):
     repository = FakeUserRepository()
 
-    result = GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
+    result = await GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
         GetUserQuery(UserId.generate())
     )
 
@@ -52,21 +54,21 @@ def test_get_user_query_returns_not_found_without_mutating_the_repository() -> N
     assert repository.users == {}
 
 
-def test_activate_user_command_persists_the_aggregate_and_domain_event() -> None:
+async def test_activate_user_command_persists_the_aggregate_and_domain_event() -> None:
     repository = FakeUserRepository()
     user = (
-        RegisterUserCommandHandler(repository, FakePasswordHasher())
-        .execute(RegisterUserCommand("user@example.com", "password1"))
-        .value
-    )
+        await RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
+            RegisterUserCommand("user@example.com", "password1")
+        )
+    ).value
     user.pull_events()
     user.is_active = False
 
-    result = ActivateUserCommandHandler(repository).execute(
+    result = await ActivateUserCommandHandler(repository).execute(
         ActivateUserCommand(target_user_id=user.id)
     )
 
     assert result.is_ok
-    assert repository.get_by_id(user.id) is user
+    assert await repository.get_by_id(user.id) is user
     assert user.is_active is True
     assert user.pull_events()[0].__class__.__name__ == "Activated"

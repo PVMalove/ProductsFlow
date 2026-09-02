@@ -33,9 +33,9 @@ class RegisterUserCommandHandler:
         self._users = users
         self._password_hasher = password_hasher
 
-    def execute(self, command: RegisterUserCommand) -> Result[User]:
+    async def execute(self, command: RegisterUserCommand) -> Result[User]:
         email = Email(command.email)
-        if self._users.exists_by_email(email):
+        if await self._users.exists_by_email(email):
             return Result.fail(
                 Error(
                     code="email_already_registered",
@@ -48,5 +48,5 @@ class RegisterUserCommandHandler:
             return Result.fail(password.error)
         result = User.register(email, self._password_hasher.hash(password.value.value))
         if result.is_ok:
-            self._users.add(result.value)
+            await self._users.add(result.value)
         return result

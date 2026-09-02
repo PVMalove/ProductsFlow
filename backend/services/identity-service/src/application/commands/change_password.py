@@ -34,8 +34,8 @@ class ChangePasswordCommandHandler:
         self._users = users
         self._password_hasher = password_hasher
 
-    def execute(self, command: ChangePasswordCommand) -> Result[User]:
-        user = self._users.get_by_id(command.user_id)
+    async def execute(self, command: ChangePasswordCommand) -> Result[User]:
+        user = await self._users.get_by_id(command.user_id)
         if user is None or not self._password_hasher.verify(
             command.old_password, user.password_hash
         ):
@@ -52,5 +52,5 @@ class ChangePasswordCommandHandler:
         result = user.change_password(self._password_hasher.hash(password.value.value))
         if result.is_err:
             return Result.fail(result.error)
-        self._users.save(user)
+        await self._users.save(user)
         return Result.ok(user)

@@ -32,8 +32,8 @@ class LoginCommandHandler:
         self._users = users
         self._password_hasher = password_hasher
 
-    def execute(self, command: LoginCommand) -> Result[User]:
-        user = self._users.get_by_email(Email(command.email))
+    async def execute(self, command: LoginCommand) -> Result[User]:
+        user = await self._users.get_by_email(Email(command.email))
         if user is None or not self._password_hasher.verify(
             command.password, user.password_hash
         ):
