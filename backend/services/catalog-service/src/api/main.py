@@ -13,7 +13,6 @@ from api.products import router as products_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
-from infrastructure.storage import ensure_minio_buckets
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
 # экземпляр verifier'а при регистрации (app.add_middleware), до того как
@@ -29,9 +28,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.sessionmaker = build_sessionmaker(settings.catalog_database_url)
     app.state.identity_gateway = _identity_client
     await _identity_client.preload()
-    # Временно выполняем bootstrap MinIO в lifespan; по ADR 0017 это будет
-    # перенесено в отдельный bootstrap-шаг, когда он появится.
-    await ensure_minio_buckets()
     try:
         yield
     finally:

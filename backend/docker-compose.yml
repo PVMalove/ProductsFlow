@@ -79,6 +79,64 @@ services:
     networks:
       - backend-network
 
+  catalog-db:
+    image: postgres:18.0
+    container_name: catalog-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: catalog
+    volumes:
+      - catalog_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  catalog-bootstrap:
+    # One-off bootstrap step (ADR 0017, issue #208): alembic upgrade head,
+    # then ensure_minio_buckets, then a bounded wait for catalog-worker to
+    # project identity's admin user into OwnerReadModel before seeding 360
+    # demo products through the real CreateProductCommand/
+    # UpsertProductImageCommand handlers. Deliberately NOT a dependency of
+    # catalog-worker (see below) — catalog-worker is what performs that
+    # projection, and gating it behind this step would deadlock the wait.
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    container_name: catalog-bootstrap
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9002}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
+      MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
+      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
+      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
+      # Settings' default resolves relative to the installed package's own
+      # file (site-packages in this image) — override with where the
+      # Dockerfile actually copies the asset (WORKDIR /srv).
+      CATALOG_SEED_PLACEHOLDER_IMAGE_PATH: /srv/assets/placeholder.jpg
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - backend-network
+
   catalog-api:
     build:
       context: .
@@ -96,23 +154,37 @@ services:
       MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
       MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
     depends_on:
-      minio:
-        condition: service_healthy
+      catalog-bootstrap:
+        condition: service_completed_successfully
     networks:
       - backend-network
 
   catalog-worker:
     # User-event projection worker (ADR 0010/0019) — тот же образ catalog,
-    # отдельный процесс и CMD, что и catalog-api.
+    # отдельный процесс и CMD, что и catalog-api. Зависит только от
+    # catalog-db (issue #208): catalog-bootstrap's admin-discovery poll
+    # relies on THIS service to project identity's events into
+    # OwnerReadModel, so it must be able to start independently of
+    # catalog-bootstrap, not gated behind it. It can race the "alembic
+    # upgrade head" step of catalog-bootstrap on a cold start; the retry
+    # loop below rides out that window with a fixed 3s backoff.
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
     container_name: catalog-worker
-    command: ["python", "-m", "api.worker"]
+    command:
+      [
+        "sh",
+        "-c",
+        "for i in 1 2 3 4 5; do python -m api.worker && exit 0; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
+      ]
     environment:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
       CATALOG_AMQP_URL: ${CATALOG_AMQP_URL}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
     networks:
       - backend-network
 
@@ -210,4 +282,5 @@ networks:
 volumes:
   minio_data:
   identity_db_data:
+  catalog_db_data:
   support_db_data:

@@ -16,6 +16,7 @@ COPY libs/kernel-domain/src /srv/libs/kernel-domain/src
 COPY libs/kernel-platform/src /srv/libs/kernel-platform/src
 COPY libs/observability/src /srv/libs/observability/src
 COPY services/catalog-service/src /srv/services/catalog-service/src
+COPY services/catalog-service/assets /srv/services/catalog-service/assets
 RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.14-slim
@@ -23,6 +24,9 @@ WORKDIR /srv
 
 COPY --from=builder /srv/services/catalog-service/.venv /srv/services/catalog-service/.venv
 COPY --from=builder /srv/services/catalog-service/src/infrastructure/db /srv/infrastructure/db
+# catalog-bootstrap (issue #208) reads this relative to WORKDIR, same as the
+# `infrastructure/db` copy above.
+COPY --from=builder /srv/services/catalog-service/assets /srv/assets
 ENV PATH="/srv/services/catalog-service/.venv/bin:$PATH"
 
 # HTTP entrypoint is provided by the service API package.

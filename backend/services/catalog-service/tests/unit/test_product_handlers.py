@@ -128,6 +128,9 @@ class FakeOwnerReadModel:
         self.upserts.append(owner)
         self.owner = owner
 
+    async def find_by_role(self, role: str) -> OwnerSnapshot | None:
+        return self.owner if self.owner and self.owner.role == role else None
+
 
 class FakeIdentity:
     def __init__(self, *, role: str = "user") -> None:

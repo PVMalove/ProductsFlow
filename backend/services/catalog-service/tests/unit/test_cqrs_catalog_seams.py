@@ -126,6 +126,9 @@ class FakeOwnerReadModel:
     async def upsert(self, owner: OwnerSnapshot) -> None:
         self.owner = owner
 
+    async def find_by_role(self, role: str) -> OwnerSnapshot | None:
+        return self.owner if self.owner and self.owner.role == role else None
+
 
 class FakeIdentityGateway:
     async def fetch_current_user(self, token: str) -> IdentityUser:

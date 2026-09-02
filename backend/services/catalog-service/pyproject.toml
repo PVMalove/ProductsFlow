@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.19.1",
     "asyncpg>=0.31.0",
     "botocore>=1.40.61",
+    "faker>=40.37.0",
     "fastapi>=0.141.1",
     "kernel-domain",
     "kernel-platform",

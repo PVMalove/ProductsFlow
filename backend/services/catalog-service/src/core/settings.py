@@ -1,4 +1,15 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Default resolves against this file's on-disk location (stable regardless
+# of the process's CWD — `make test`/`make dev` run pytest/uvicorn from
+# `backend/`, not from this package's own directory). Overridden by an
+# absolute path in the container image, where this module is installed into
+# `.venv/site-packages` instead (Dockerfile copies assets/ to /srv/assets).
+_DEFAULT_SEED_PLACEHOLDER_IMAGE_PATH = str(
+    Path(__file__).resolve().parents[2] / "assets" / "placeholder.jpg"
+)
 
 
 class Settings(BaseSettings):
@@ -16,6 +27,7 @@ class Settings(BaseSettings):
     minio_bucket_name_product: str = "product-chunks"
     minio_bucket_name_loki: str = "loki-chunks"
     minio_bucket_name_tempo: str = "tempo-traces"
+    catalog_seed_placeholder_image_path: str = _DEFAULT_SEED_PLACEHOLDER_IMAGE_PATH
 
     @property
     def minio_bucket_names(self) -> tuple[str, ...]:

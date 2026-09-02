@@ -1,7 +1,7 @@
 import uuid
 
 from kernel_platform.outbox.models import Base
-from sqlalchemy import BigInteger, Boolean, Text
+from sqlalchemy import BigInteger, Boolean, Text, select
 from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -32,6 +32,14 @@ async def get_owner_read_model(
     session: AsyncSession, user_id: uuid.UUID
 ) -> OwnerReadModelRow | None:
     return await session.get(OwnerReadModelRow, user_id)
+
+
+async def find_owner_read_model_by_role(
+    session: AsyncSession, role: str
+) -> OwnerReadModelRow | None:
+    return await session.scalar(
+        select(OwnerReadModelRow).where(OwnerReadModelRow.role == role).limit(1)
+    )
 
 
 async def upsert_owner_read_model(
@@ -104,6 +112,17 @@ class SqlOwnerReadModel:
             role=owner.role,
             is_active=owner.is_active,
             last_applied_outbox_id=owner.last_applied_outbox_id,
+        )
+
+    async def find_by_role(self, role: str) -> OwnerSnapshot | None:
+        row = await find_owner_read_model_by_role(self._session, role)
+        if row is None:
+            return None
+        return OwnerSnapshot(
+            user_id=row.user_id,
+            role=row.role,
+            is_active=row.is_active,
+            last_applied_outbox_id=row.last_applied_outbox_id,
         )
 
 
