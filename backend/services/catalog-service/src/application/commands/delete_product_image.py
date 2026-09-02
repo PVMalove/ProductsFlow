@@ -3,16 +3,16 @@
 import uuid
 from dataclasses import dataclass
 
-from application._product_helpers import get_product
 from application.authorization import ProductAuthorizer
 from application.commands.upsert_product_image import SEED_KEY_PREFIX
-from application.errors import ProductImageNotFoundError
+from application.errors import ProductImageNotFoundError, ProductNotFoundError
 from application.ports import (
     Actor,
     IdentityGateway,
     ProductCommandPort,
     ProductImageStorage,
 )
+from domain.product_id import ProductId
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,9 @@ class DeleteProductImageCommandHandler:
         self._bucket_name = bucket_name
 
     async def handle(self, command: DeleteProductImageCommand) -> None:
-        product = await get_product(self._repository, command.product_id)
+        product = await self._repository.get_by_id(ProductId(command.product_id))
+        if product is None:
+            raise ProductNotFoundError
         await self._authorizer.require_owner_or_admin(command.actor, product)
         image = await self._repository.get_product_image(product.id)
         if image is None:

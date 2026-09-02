@@ -3,8 +3,8 @@
 import uuid
 from dataclasses import dataclass
 
-from application._product_helpers import get_product
 from application.authorization import ProductAuthorizer
+from application.errors import ProductNotFoundError
 from application.image_dto import ProductImageMutation
 from application.ports import (
     Actor,
@@ -12,6 +12,7 @@ from application.ports import (
     ProductCommandPort,
     ProductImageStorage,
 )
+from domain.product_id import ProductId
 
 SEED_KEY_PREFIX = "seed/"
 IMAGE_KEY_TEMPLATE = "products/{product_id}/image"
@@ -39,7 +40,9 @@ class UpsertProductImageCommandHandler:
         self._bucket_name = bucket_name
 
     async def handle(self, command: UpsertProductImageCommand) -> ProductImageMutation:
-        product = await get_product(self._repository, command.product_id)
+        product = await self._repository.get_by_id(ProductId(command.product_id))
+        if product is None:
+            raise ProductNotFoundError
         await self._authorizer.require_owner_or_admin(command.actor, product)
         existing = await self._repository.get_product_image(product.id)
         key = IMAGE_KEY_TEMPLATE.format(product_id=product.id.value)
