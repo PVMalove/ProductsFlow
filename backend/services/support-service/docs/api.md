@@ -15,6 +15,13 @@ The support HTTP surface is designed in the Phase 5 domain session.
   message; an `admin` may use it for moderation.
 - `PATCH /api/v1/tickets/{ticket_id}/status` changes a Ticket status.
 
+Appending a message returns the updated Ticket with `201`. A normal caller may
+append only to their own non-closed Ticket; an administrator may append to any
+non-closed Ticket. Status changes require an administrator and return the
+updated Ticket with `200`. Invalid lifecycle transitions and attempts to
+mutate a closed Ticket return `409`; an inaccessible Ticket is reported as
+`404`.
+
 Tickets themselves are neither edited nor deleted in Phase 5. Message editing
 and deletion are separate operations whose authorization and retention rules
 are defined above. Message edits and soft deletions publish

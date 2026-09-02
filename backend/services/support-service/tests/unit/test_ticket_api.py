@@ -1,6 +1,11 @@
 from pydantic import ValidationError
 
-from api.schemas import TicketCreateRequest
+from api.schemas import (
+    TicketCreateRequest,
+    TicketMessageCreateRequest,
+    TicketStatusChangeRequest,
+)
+from domain.ticket import TicketStatus
 
 
 def test_ticket_create_request_trims_plaintext() -> None:
@@ -16,3 +21,11 @@ def test_ticket_create_request_rejects_non_text_values() -> None:
     except ValidationError:
         return
     raise AssertionError("non-text subject must be rejected")
+
+
+def test_ticket_mutation_requests_validate_and_trim_plaintext() -> None:
+    message = TicketMessageCreateRequest(body="  Reply  ")
+    status_request = TicketStatusChangeRequest(status=TicketStatus.IN_PROGRESS)
+
+    assert message.body == "Reply"
+    assert status_request.status is TicketStatus.IN_PROGRESS

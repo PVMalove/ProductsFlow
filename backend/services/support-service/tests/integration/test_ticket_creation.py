@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -6,10 +7,10 @@ import pytest
 import pytest_asyncio
 from kernel_platform.outbox.models import Base, OutboxMessage
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from application.pagination import decode_cursor
-from domain.ticket import Ticket
+from domain.ticket import Ticket, TicketStatus
 from infrastructure.db.models import TicketMessageModel, TicketModel
 from infrastructure.db.ticket_repository import SqlTicketRepository
 
@@ -99,4 +100,132 @@ async def test_ticket_list_is_owner_scoped_and_cursor_is_stable_for_timestamp_ti
         "First",
         "Second",
         "Hidden",
+    }
+
+
+async def test_ticket_mutations_persist_messages_statuses_and_text_free_events(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+
+    updated = await repository.add_message(
+        ticket_id=ticket.id,
+        actor_id=author_id,
+        body="Follow-up message",
+        is_admin=False,
+    )
+    assert updated is not None
+    assert updated.status is TicketStatus.OPEN
+
+    await repository.change_status(
+        ticket_id=ticket.id,
+        actor_id=uuid.uuid4(),
+        status=TicketStatus.IN_PROGRESS,
+    )
+    await repository.change_status(
+        ticket_id=ticket.id,
+        actor_id=uuid.uuid4(),
+        status=TicketStatus.RESOLVED,
+    )
+    reopened = await repository.add_message(
+        ticket_id=ticket.id,
+        actor_id=author_id,
+        body="It is still broken",
+        is_admin=False,
+    )
+
+    assert reopened is not None
+    assert reopened.status is TicketStatus.IN_PROGRESS
+    events = list(
+        (
+            await db_session.scalars(
+                select(OutboxMessage)
+                .where(OutboxMessage.aggregate_id == ticket.id)
+                .order_by(OutboxMessage.id)
+            )
+        ).all()
+    )
+    assert [event.event_type for event in events] == [
+        "ticket.created.v1",
+        "ticket.message_added.v1",
+        "ticket.status_changed.v1",
+        "ticket.status_changed.v1",
+        "ticket.message_added.v1",
+        "ticket.status_changed.v1",
+    ]
+    assert all("body" not in event.payload for event in events)
+
+
+async def test_non_owner_message_is_not_persisted(
+    db_session: AsyncSession,
+) -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Subject", first_message="First message"
+    )
+    repository = SqlTicketRepository(db_session)
+    await repository.create(ticket)
+
+    result = await repository.add_message(
+        ticket_id=ticket.id,
+        actor_id=uuid.uuid4(),
+        body="Should be rejected",
+        is_admin=False,
+    )
+
+    assert result is None
+    messages = list(
+        (
+            await db_session.scalars(
+                select(TicketMessageModel).where(
+                    TicketMessageModel.ticket_id == ticket.id
+                )
+            )
+        ).all()
+    )
+    assert len(messages) == 1
+
+
+async def test_concurrent_admin_messages_are_serialized(
+    db_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    async with session_factory() as session:
+        await SqlTicketRepository(session).create(ticket)
+
+    async def append(body: str) -> Ticket | None:
+        async with session_factory() as session:
+            return await SqlTicketRepository(session).add_message(
+                ticket_id=ticket.id,
+                actor_id=uuid.uuid4(),
+                body=body,
+                is_admin=True,
+            )
+
+    first, second = await asyncio.gather(append("First reply"), append("Second reply"))
+
+    assert first is not None
+    assert second is not None
+    async with session_factory() as session:
+        messages = list(
+            (
+                await session.scalars(
+                    select(TicketMessageModel).where(
+                        TicketMessageModel.ticket_id == ticket.id
+                    )
+                )
+            ).all()
+        )
+    assert {message.body for message in messages} == {
+        "First message",
+        "First reply",
+        "Second reply",
     }

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from domain.message import TicketMessage
 from domain.repositories import PageInfo, TicketPage
-from domain.ticket import Ticket
+from domain.ticket import Ticket, TicketStatus
 
 
 class TicketCreateRequest(BaseModel):
@@ -17,6 +17,19 @@ class TicketCreateRequest(BaseModel):
     @classmethod
     def trim_plaintext(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
+
+
+class TicketMessageCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=10_000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def trim_plaintext(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+
+class TicketStatusChangeRequest(BaseModel):
+    status: TicketStatus
 
 
 class TicketMessageResponse(BaseModel):

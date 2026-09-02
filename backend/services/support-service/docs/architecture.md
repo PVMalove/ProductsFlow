@@ -8,10 +8,12 @@ migrations.
 
 ## CQRS application boundary
 
-The command side currently exposes `CreateTicketCommand` and
-`CreateTicketCommandHandler` through `application/commands/`. The handler
-creates the Ticket aggregate and delegates the atomic aggregate, first-message
-and outbox write to `TicketCommandPort`.
+The command side exposes `CreateTicketCommand`, `AddTicketMessageCommand`, and
+`ChangeTicketStatusCommand` with handlers under `application/commands/`.
+Creation uses `TicketCommandPort`; mutations use the separate
+`TicketMutationPort`, whose repository adapter locks the ticket row, applies
+the domain rule, and commits the aggregate change and outbox rows as one
+transaction.
 
 The query side exposes separate handlers in `application/queries/` for getting
 one Ticket, listing the caller's Tickets, listing all Tickets for an admin, and
@@ -40,3 +42,7 @@ The Ticket aggregate moves through `OPEN → IN_PROGRESS → RESOLVED → CLOSED
 A new author message reopens only a resolved Ticket to `IN_PROGRESS`; a closed
 Ticket is terminal. Ticket messages are plaintext: a subject has 1–200
 characters and a message body has 1–10,000 characters after trimming.
+Normal status commands can only move one step forward through the lifecycle.
+User message access is owner-scoped, while an admin may append to any
+non-closed Ticket and advance its status. The repository uses a `FOR UPDATE`
+ticket-row lock so concurrent mutations observe one serialized state.

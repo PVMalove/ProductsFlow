@@ -2,7 +2,11 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from application.commands import CreateTicketCommandHandler
+from application.commands import (
+    AddTicketMessageCommandHandler,
+    ChangeTicketStatusCommandHandler,
+    CreateTicketCommandHandler,
+)
 from application.queries import (
     GetTicketQueryHandler,
     ListAdminTicketsQueryHandler,
@@ -19,6 +23,28 @@ def get_create_ticket_use_case(session: DbSessionDI) -> CreateTicketCommandHandl
 
 CreateTicketDI = Annotated[
     CreateTicketCommandHandler, Depends(get_create_ticket_use_case)
+]
+
+
+def get_add_ticket_message_use_case(
+    session: DbSessionDI,
+) -> AddTicketMessageCommandHandler:
+    return AddTicketMessageCommandHandler(TicketRepository(session))
+
+
+AddTicketMessageDI = Annotated[
+    AddTicketMessageCommandHandler, Depends(get_add_ticket_message_use_case)
+]
+
+
+def get_change_ticket_status_use_case(
+    session: DbSessionDI,
+) -> ChangeTicketStatusCommandHandler:
+    return ChangeTicketStatusCommandHandler(TicketRepository(session))
+
+
+ChangeTicketStatusDI = Annotated[
+    ChangeTicketStatusCommandHandler, Depends(get_change_ticket_status_use_case)
 ]
 
 

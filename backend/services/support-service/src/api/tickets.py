@@ -3,14 +3,27 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, status
 
 from api.dependencies import (
+    AddTicketMessageDI,
+    ChangeTicketStatusDI,
     CreateTicketDI,
     GetTicketDI,
     ListAdminTicketsDI,
     ListTicketMessagesDI,
     ListTicketsDI,
 )
-from api.schemas import TicketCreateRequest, TicketListResponse, TicketResponse
-from application.commands import CreateTicketCommand
+from api.schemas import (
+    TicketCreateRequest,
+    TicketListResponse,
+    TicketMessageCreateRequest,
+    TicketResponse,
+    TicketStatusChangeRequest,
+)
+from application.commands import (
+    AddTicketMessageCommand,
+    ChangeTicketStatusCommand,
+    CreateTicketCommand,
+)
+from application.errors import TicketNotFoundError
 from application.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -23,6 +36,7 @@ from application.queries import (
     ListTicketMessagesQuery,
     ListTicketsQuery,
 )
+from domain.ticket import InvalidStatusTransitionError, TicketClosedError
 from infrastructure.security.auth import AdminAuth, OptionalAdmin, RequiredAuth
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
@@ -96,6 +110,66 @@ async def list_admin_tickets(
         ListAdminTicketsQuery(limit=limit, after=_cursor(after), before=_cursor(before))
     )
     return TicketListResponse.from_domain(page)
+
+
+@router.post(
+    "/{ticket_id}/messages",
+    response_model=TicketResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_ticket_message(
+    ticket_id: uuid.UUID,
+    request: TicketMessageCreateRequest,
+    actor_id: RequiredAuth,
+    is_admin: OptionalAdmin,
+    use_case: AddTicketMessageDI,
+) -> TicketResponse:
+    try:
+        ticket = await use_case.handle(
+            AddTicketMessageCommand(
+                ticket_id=ticket_id,
+                actor_id=actor_id,
+                body=request.body,
+                is_admin=is_admin,
+            )
+        )
+    except TicketNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
+        ) from exc
+    except TicketClosedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Закрытый тикет нельзя изменять",
+        ) from exc
+    return TicketResponse.from_domain(ticket)
+
+
+@router.patch("/{ticket_id}/status", response_model=TicketResponse)
+async def change_ticket_status(
+    ticket_id: uuid.UUID,
+    request: TicketStatusChangeRequest,
+    admin_id: AdminAuth,
+    use_case: ChangeTicketStatusDI,
+) -> TicketResponse:
+    try:
+        ticket = await use_case.handle(
+            ChangeTicketStatusCommand(
+                ticket_id=ticket_id,
+                actor_id=admin_id,
+                status=request.status,
+            )
+        )
+    except TicketNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
+        ) from exc
+    except (TicketClosedError, InvalidStatusTransitionError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Недопустимый переход статуса тикета",
+        ) from exc
+    return TicketResponse.from_domain(ticket)
 
 
 @router.get("/{ticket_id}", response_model=TicketResponse)

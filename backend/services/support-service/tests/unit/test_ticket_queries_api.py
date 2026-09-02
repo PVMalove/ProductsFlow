@@ -3,20 +3,23 @@ import uuid
 from fastapi.testclient import TestClient
 
 from api.dependencies import (
+    get_add_ticket_message_use_case,
+    get_change_ticket_status_use_case,
     get_list_admin_tickets_use_case,
     get_list_ticket_messages_use_case,
     get_list_tickets_use_case,
     get_ticket_use_case,
 )
 from api.main import app
+from application.commands import AddTicketMessageCommand, ChangeTicketStatusCommand
 from application.queries import (
     GetTicketQuery,
     ListAdminTicketsQuery,
     ListTicketsQuery,
 )
 from domain.repositories import MessagePage, PageInfo, TicketPage
-from domain.ticket import Ticket
-from infrastructure.security.auth import get_admin_auth, get_required_auth
+from domain.ticket import Ticket, TicketStatus
+from infrastructure.security.auth import get_admin_auth, get_is_admin, get_required_auth
 
 
 def test_ticket_list_returns_the_callers_page() -> None:
@@ -95,6 +98,59 @@ def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
     try:
         with TestClient(app) as client:
             response = client.get("/api/v1/tickets/admin")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+
+def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+
+    class FakeUseCase:
+        async def handle(self, command: AddTicketMessageCommand) -> Ticket:
+            assert command.ticket_id == ticket.id
+            assert command.actor_id == author_id
+            assert command.is_admin is False
+            return ticket
+
+    app.dependency_overrides[get_required_auth] = lambda: author_id
+    app.dependency_overrides[get_is_admin] = lambda: False
+    app.dependency_overrides[get_add_ticket_message_use_case] = lambda: FakeUseCase()
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/v1/tickets/{ticket.id}/messages", json={"body": "Reply"}
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert response.json()["messages"][0]["body"] == "Body"
+
+
+def test_admin_status_endpoint_passes_status_command() -> None:
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    admin_id = uuid.uuid4()
+
+    class FakeUseCase:
+        async def handle(self, command: ChangeTicketStatusCommand) -> Ticket:
+            assert command.ticket_id == ticket.id
+            assert command.actor_id == admin_id
+            assert command.status is TicketStatus.IN_PROGRESS
+            return ticket
+
+    app.dependency_overrides[get_admin_auth] = lambda: admin_id
+    app.dependency_overrides[get_change_ticket_status_use_case] = lambda: FakeUseCase()
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/tickets/{ticket.id}/status",
+                json={"status": "IN_PROGRESS"},
+            )
     finally:
         app.dependency_overrides.clear()
 
