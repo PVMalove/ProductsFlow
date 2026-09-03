@@ -9,6 +9,8 @@ import enum
 import uuid
 from dataclasses import dataclass
 
+from kernel_platform.http.errors import ApiError
+
 
 class ActorRole(enum.StrEnum):
     ADMIN = "admin"
@@ -21,3 +23,17 @@ class Actor:
 
     id: uuid.UUID
     role: ActorRole
+
+
+_ADMIN_ONLY = ApiError(
+    status_code=403, code="FORBIDDEN", message="Доступ только для администраторов!"
+)
+
+
+def require_admin(actor: Actor) -> Actor:
+    """Shared admin-only gate: every service's `AdminActor` FastAPI
+    dependency wraps this instead of duplicating the role check and error
+    message (ADR 0033)."""
+    if actor.role is not ActorRole.ADMIN:
+        raise _ADMIN_ONLY
+    return actor

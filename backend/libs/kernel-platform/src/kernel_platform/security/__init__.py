@@ -1,3 +1,3 @@
-from kernel_platform.security.actor import Actor, ActorRole
+from kernel_platform.security.actor import Actor, ActorRole, require_admin
 
-__all__ = ["Actor", "ActorRole"]
+__all__ = ["Actor", "ActorRole", "require_admin"]

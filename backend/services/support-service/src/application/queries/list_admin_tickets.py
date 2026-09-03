@@ -3,6 +3,9 @@
 
 from dataclasses import dataclass
 
+from kernel_domain.errors import Error, ErrorType
+from kernel_domain.result import Result
+
 from application.ports import TicketQueryPort
 from domain.repositories import Cursor, TicketPage
 
@@ -12,6 +15,7 @@ class ListAdminTicketsQuery:
     """DTO для получения всех тикетов (админ)."""
 
     limit: int
+    is_admin: bool = False
     after: Cursor | None = None
     before: Cursor | None = None
 
@@ -21,16 +25,25 @@ class ListAdminTicketsQueryHandler:
     Business Logic Summary
 
     Context & Purpose: Получение полного списка тикетов в системе для администраторов.
-    Validations: Проверяется наличие роли администратора (на уровне контроллера/middleware).
+    Validations: Владеет решением об авторизации сама (ADR 0033) — не контроллер.
     Data Sourcing: TicketRepository, с поддержкой курсорной пагинации.
     """
 
     def __init__(self, repository: TicketQueryPort) -> None:
         self._repository = repository
 
-    async def execute(self, query: ListAdminTicketsQuery) -> TicketPage:
-        return await self._repository.list_all(
+    async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
+        if not query.is_admin:
+            return Result.fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
+        page = await self._repository.list_all(
             limit=query.limit,
             after=query.after,
             before=query.before,
         )
+        return Result.ok(page)

@@ -5,7 +5,7 @@ import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from kernel_platform.http.errors import ApiError
-from kernel_platform.security import Actor, ActorRole
+from kernel_platform.security import Actor, ActorRole, require_admin
 
 from api.dependencies import UserQueryRepositoryDI
 from core.security.tokens import decode_access_token
@@ -18,9 +18,6 @@ _INVALID_TOKEN = ApiError(
 )
 _ACCOUNT_DISABLED = ApiError(
     status_code=403, code="FORBIDDEN", message="Учётная запись отключена"
-)
-_ADMIN_ONLY = ApiError(
-    status_code=403, code="FORBIDDEN", message="Доступ только для администраторов!"
 )
 
 
@@ -49,9 +46,7 @@ RequiredActor = Annotated[Actor, Depends(get_current_actor)]
 
 
 async def require_admin_actor(actor: RequiredActor) -> Actor:
-    if actor.role is not ActorRole.ADMIN:
-        raise _ADMIN_ONLY
-    return actor
+    return require_admin(actor)
 
 
 AdminActor = Annotated[Actor, Depends(require_admin_actor)]

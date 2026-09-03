@@ -39,8 +39,6 @@ class UserProjectionSnapshot:
 class UserProjectionPort(Protocol):
     async def get(self, user_id: uuid.UUID) -> UserProjectionSnapshot | None: ...
 
-    async def upsert(self, snapshot: UserProjectionSnapshot) -> None: ...
-
 
 class TicketMutationPort(Protocol):
     """Serialized ticket mutation operations used by command handlers."""

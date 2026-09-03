@@ -75,8 +75,12 @@ from that projection instead of trusting JWT claims: `_verify_token` decodes
 and validates the JWT with no DB access (so a missing/invalid token never
 opens a database session), then `get_current_actor` looks up the caller by
 id — a missing row is `401`, an inactive or tombstoned one is `403`.
-`RequiredActor`/`AdminActor` replace the old `RequiredAuth`/`AdminAuth`
-UUID-only dependencies.
+`RequiredActor` replaces the old `RequiredAuth`/`AdminAuth` UUID-only
+dependencies. There is no `AdminActor`: admin-only access is business
+authorization, not authentication, so `ListAdminTicketsQueryHandler` and
+`ChangeTicketStatusCommandHandler` own that check themselves and return
+`Result.fail(Error(code="FORBIDDEN", ...))` (ADR 0033) rather than a route
+dependency rejecting the request before a handler ever runs.
 
 `api/tickets.py` is thin: `api/schemas.py` request/dependency models build
 commands and queries via `to_command()`/`to_query()`, and

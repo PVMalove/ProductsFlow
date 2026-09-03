@@ -108,15 +108,5 @@ class SqlUserProjection:
             last_applied_outbox_id=row.last_applied_outbox_id,
         )
 
-    async def upsert(self, snapshot: UserProjectionSnapshot) -> None:
-        await upsert_user_projection(
-            self._session,
-            user_id=snapshot.user_id,
-            role=snapshot.role,
-            is_active=snapshot.is_active,
-            deleted=snapshot.deleted,
-            last_applied_outbox_id=snapshot.last_applied_outbox_id,
-        )
-
 
 _user_projection_port_implementation: type[UserProjectionPort] = SqlUserProjection

@@ -27,9 +27,6 @@ _UNKNOWN_ACTOR = ApiError(
 _ACCOUNT_DISABLED = ApiError(
     status_code=403, code="FORBIDDEN", message="Учётная запись отключена"
 )
-_ADMIN_ONLY = ApiError(
-    status_code=403, code="FORBIDDEN", message="Доступ только для администраторов!"
-)
 
 
 @lru_cache(maxsize=1)
@@ -91,13 +88,4 @@ async def get_current_actor(
 RequiredActor = Annotated[Actor, Depends(get_current_actor)]
 
 
-async def require_admin_actor(actor: RequiredActor) -> Actor:
-    if actor.role is not ActorRole.ADMIN:
-        raise _ADMIN_ONLY
-    return actor
-
-
-AdminActor = Annotated[Actor, Depends(require_admin_actor)]
-
-
-__all__ = ["AdminActor", "RequiredActor", "get_current_actor", "require_admin_actor"]
+__all__ = ["RequiredActor", "get_current_actor"]

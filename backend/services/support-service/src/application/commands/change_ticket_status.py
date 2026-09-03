@@ -21,6 +21,7 @@ class ChangeTicketStatusCommand:
     ticket_id: uuid.UUID
     actor_id: uuid.UUID
     status: TicketStatus
+    is_admin: bool = False
 
 
 class ChangeTicketStatusCommandHandler:
@@ -28,6 +29,14 @@ class ChangeTicketStatusCommandHandler:
         self._repository = repository
 
     async def execute(self, command: ChangeTicketStatusCommand) -> Result[Ticket]:
+        if not command.is_admin:
+            return Result.fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
         try:
             ticket = await self._repository.change_status(
                 ticket_id=command.ticket_id,

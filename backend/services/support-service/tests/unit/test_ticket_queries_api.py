@@ -117,8 +117,9 @@ def test_ticket_detail_reads_messages_through_one_combined_query() -> None:
 
 def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
     class FakeHandler:
-        async def execute(self, query: ListAdminTicketsQuery) -> TicketPage:
-            return TicketPage([], PageInfo(None, None, False, False))
+        async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
+            assert query.is_admin is True
+            return Result.ok(TicketPage([], PageInfo(None, None, False, False)))
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(
         uuid.uuid4(), admin=True
@@ -134,7 +135,19 @@ def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
 
 
 def test_non_admin_cannot_reach_the_admin_ticket_list() -> None:
+    class FakeHandler:
+        async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
+            assert query.is_admin is False
+            return Result.fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
+
     app.dependency_overrides[get_current_actor] = lambda: _actor(uuid.uuid4())
+    app.dependency_overrides[get_list_admin_tickets_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
             response = client.get("/api/v1/tickets/admin")
@@ -181,6 +194,7 @@ def test_admin_status_endpoint_passes_status_command() -> None:
             assert command.ticket_id == ticket.id
             assert command.actor_id == admin_id
             assert command.status is TicketStatus.IN_PROGRESS
+            assert command.is_admin is True
             return Result.ok(ticket)
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(admin_id, admin=True)
@@ -195,6 +209,37 @@ def test_admin_status_endpoint_passes_status_command() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
+
+
+def test_non_admin_status_change_is_forbidden() -> None:
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+
+    class FakeHandler:
+        async def execute(self, command: ChangeTicketStatusCommand) -> Result[Ticket]:
+            assert command.is_admin is False
+            return Result.fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
+
+    app.dependency_overrides[get_current_actor] = lambda: _actor(uuid.uuid4())
+    app.dependency_overrides[get_change_ticket_status_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/tickets/{ticket.id}/status",
+                json={"status": "IN_PROGRESS"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
 def test_ticket_message_edit_endpoint_passes_message_command() -> None:

@@ -94,12 +94,34 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
             ticket_id=ticket.id,
             actor_id=actor_id,
             status=TicketStatus.IN_PROGRESS,
+            is_admin=True,
         )
     )
 
     assert result.is_ok
     assert result.value is ticket
     assert repository.status_calls == [(actor_id, TicketStatus.IN_PROGRESS)]
+
+
+@pytest.mark.asyncio
+async def test_change_status_command_forbids_a_non_admin_actor() -> None:
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    repository = FakeMutationRepository(ticket)
+
+    result = await ChangeTicketStatusCommandHandler(repository).execute(
+        ChangeTicketStatusCommand(
+            ticket_id=ticket.id,
+            actor_id=uuid.uuid4(),
+            status=TicketStatus.IN_PROGRESS,
+            is_admin=False,
+        )
+    )
+
+    assert result.is_err
+    assert result.error.code == "FORBIDDEN"
+    assert repository.status_calls == []
 
 
 @pytest.mark.asyncio

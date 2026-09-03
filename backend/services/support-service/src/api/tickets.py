@@ -30,7 +30,7 @@ from application.queries import TicketDetail
 from contracts.ticket import TicketDetailView, TicketView
 from domain.repositories import PageInfo
 from domain.ticket import Ticket
-from infrastructure.security.auth import AdminActor, RequiredActor
+from infrastructure.security.auth import RequiredActor
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -105,10 +105,10 @@ async def list_tickets(
 @router.get("/admin", response_model=ApiResponse[list[TicketView]])
 async def list_admin_tickets(
     request: Annotated[AdminTicketListRequest, Depends()],
-    _admin: AdminActor,
+    actor: RequiredActor,
     handler: ListAdminTicketsDI,
 ) -> ApiResponse[list[TicketView]]:
-    page = await handler.execute(request.to_query())
+    page = _unwrap(await handler.execute(request.to_query(actor=actor)))
     return ApiResponse(
         data=[TicketView.from_domain(ticket) for ticket in page.items],
         meta=_page_meta(page.page_info),
@@ -135,10 +135,10 @@ async def add_ticket_message(
 async def change_ticket_status(
     ticket_id: uuid.UUID,
     request: TicketStatusChangeRequest,
-    admin: AdminActor,
+    actor: RequiredActor,
     handler: ChangeTicketStatusDI,
 ) -> ApiResponse[TicketView]:
-    command = request.to_command(ticket_id=ticket_id, actor=admin)
+    command = request.to_command(ticket_id=ticket_id, actor=actor)
     result = await handler.execute(command)
     return match_result(_view_result(result))
 

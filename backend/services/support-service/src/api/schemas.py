@@ -84,10 +84,13 @@ class AdminTicketListRequest(BaseModel):
     after: str | None = Query(default=None)
     before: str | None = Query(default=None)
 
-    def to_query(self) -> ListAdminTicketsQuery:
+    def to_query(self, *, actor: Actor) -> ListAdminTicketsQuery:
         after_cursor, before_cursor = _decode_cursors(self.after, self.before)
         return ListAdminTicketsQuery(
-            limit=self.limit, after=after_cursor, before=before_cursor
+            limit=self.limit,
+            is_admin=_is_admin(actor),
+            after=after_cursor,
+            before=before_cursor,
         )
 
 
@@ -149,7 +152,10 @@ class TicketStatusChangeRequest(BaseModel):
         self, *, ticket_id: uuid.UUID, actor: Actor
     ) -> ChangeTicketStatusCommand:
         return ChangeTicketStatusCommand(
-            ticket_id=ticket_id, actor_id=actor.id, status=self.status
+            ticket_id=ticket_id,
+            actor_id=actor.id,
+            status=self.status,
+            is_admin=_is_admin(actor),
         )
 
 
