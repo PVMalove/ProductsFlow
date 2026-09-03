@@ -23,18 +23,14 @@ _require-pkg:
 architecture-check: ## Проверить направление зависимостей и вывести CQRS-аудит
 	python scripts/check_architecture.py --strict
 
-# uv run --project <dir> из backend/ (а не `cd <dir> && uv run`): mypy
-# --explicit-package-bases выводит имя модуля из позиционного пути относительно
-# cwd, и при cwd=<dir> путь "src" — валидный идентификатор, из-за чего
-# value_object.py находится дважды под разными именами модуля
-# ("src.kernel_domain.value_object" и "kernel_domain.value_object" через
-# editable-инсталл в .venv). При cwd=backend/ путь "libs/kernel-domain/src"
-# содержит дефис ("kernel-domain"), который обрывает сборку dotted-имени, и
-# конфликта не возникает.
+# mypy запускается из backend/ с путём пакета. Не передаём
+# --explicit-package-bases: для пакетов с валидным путём, например
+# libs/observability, этот флаг создаёт второе имя модуля
+# (libs.observability.src.*) наряду с именем editable-инсталляции.
 check: _require-pkg ## Прогнать все линтеры на пакете (make check pkg=<member>) — своё изолированное окружение
 	uv --project $(member_dir) sync
 	uv run --project $(member_dir) ruff check $(member_dir)
-	uv run --project $(member_dir) mypy --cache-dir $(member_dir)/.mypy_cache --explicit-package-bases $(member_dir)
+	uv run --project $(member_dir) mypy --cache-dir $(member_dir)/.mypy_cache $(member_dir)
 	uv run --project $(member_dir) ruff format --check $(member_dir)
 	uv run --project $(member_dir) vulture whitelist.py $(member_dir)
 
