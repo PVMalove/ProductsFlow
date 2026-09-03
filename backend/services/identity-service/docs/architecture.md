@@ -38,3 +38,22 @@ write the immutable user audit trail and resolve the actor from the shared
 request `ContextVar` (falling back to the affected user's id outside HTTP).
 `SqlUserQueryRepository` and `SqlUserAuditReader` provide the corresponding
 read-side SQL adapters without exposing password hashes.
+
+## BFF migration (ADR 0033)
+
+`api/users.py` and `/api/v1/auth/register` are thin: `api/schemas.py`
+dependency models turn the request into a command/query via
+`to_command()`/`to_query()`, and `kernel_platform.http.match.match_result`/
+`match_created` wrap the application `Result` into the shared `ApiResponse`
+envelope. `api/security.py` decodes the bearer JWT, reloads the caller
+through `UserQueryPort` and returns a `kernel_platform.security.Actor` — the
+same reload also enforces `is_active` for every authenticated identity
+endpoint, not only `/users/me`. `GetCurrentUserHandler`
+(`application/queries/get_current_user.py`) is the dedicated `/users/me`
+read path: it reloads the caller's row again and returns
+`contracts.user.UserView`, so the response never trusts JWT claims.
+`GetUserAuditQueryHandler` now takes both `UserAuditQueryPort` and
+`UserQueryPort`, returning `Result` and failing `NOT_FOUND` for an unknown
+target user instead of leaving that check to the router. `/api/v1/auth/login`
+keeps its flat OAuth2 password-grant response — the ADR excludes it from the
+envelope so `OAuth2PasswordBearer`/Swagger UI keep working unchanged.

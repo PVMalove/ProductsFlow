@@ -74,7 +74,8 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
         json={"email": "user@example.com", "password": "Password1"},
     )
     assert registered.status_code == 201
-    user = registered.json()
+    user = registered.json()["data"]
+    assert registered.json()["meta"] == {}
     assert UUID(user["id"])
     assert user["email"] == "user@example.com"
     assert user["role"] == "user"
@@ -91,7 +92,7 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
     authorized = {"Authorization": f"Bearer {user_token}"}
     me = await client.get("/api/v1/users/me", headers=authorized)
     assert me.status_code == 200
-    assert me.json()["id"] == user["id"]
+    assert me.json()["data"]["id"] == user["id"]
 
     changed = await client.patch(
         "/api/v1/users/me/password",
@@ -99,19 +100,19 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
         json={"old_password": "Password1", "new_password": "NewPassword2"},
     )
     assert changed.status_code == 200
-    assert (
-        await client.post(
-            "/api/v1/auth/login",
-            data={"username": "user@example.com", "password": "Password1"},
-        )
-    ).status_code == 401
+    assert changed.json()["data"]["id"] == user["id"]
+    bad_login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "user@example.com", "password": "Password1"},
+    )
+    assert bad_login.status_code == 401
 
     admin_registration = await client.post(
         "/api/v1/auth/register",
         json={"email": "admin@example.com", "password": "AdminPass1"},
     )
     assert admin_registration.status_code == 201
-    admin_id = UUID(admin_registration.json()["id"])
+    admin_id = UUID(admin_registration.json()["data"]["id"])
     admin = await UserRepository(db_session).get_by_id(UserId(admin_id))
     assert admin is not None
     admin.role = Role.ADMIN
@@ -129,25 +130,32 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
         f"/api/v1/users/{user['id']}/deactivate", headers=admin_headers
     )
     assert deactivated.status_code == 200
-    assert deactivated.json()["is_active"] is False
-    assert (await client.get("/api/v1/users/me", headers=authorized)).status_code == 403
+    assert deactivated.json()["data"]["is_active"] is False
+    denied_me = await client.get("/api/v1/users/me", headers=authorized)
+    assert denied_me.status_code == 403
+    assert denied_me.json()["error"]["code"] == "FORBIDDEN"
 
     activated = await client.patch(
         f"/api/v1/users/{user['id']}/activate", headers=admin_headers
     )
     assert activated.status_code == 200
-    assert activated.json()["is_active"] is True
+    assert activated.json()["data"]["is_active"] is True
 
     listing = await client.get("/api/v1/users/", headers=admin_headers)
     assert listing.status_code == 200
-    assert {item["email"] for item in listing.json()["items"]} == {
+    assert {item["email"] for item in listing.json()["data"]} == {
         "user@example.com",
         "admin@example.com",
     }
 
+    forbidden_listing = await client.get("/api/v1/users/", headers=authorized)
+    assert forbidden_listing.status_code == 403
+    assert forbidden_listing.json()["error"]["code"] == "FORBIDDEN"
+
     own_audit = await client.get("/api/v1/users/me/audit", headers=authorized)
     assert own_audit.status_code == 200
-    assert [entry["action"] for entry in own_audit.json()] == [
+    assert own_audit.json()["meta"] == {}
+    assert [entry["action"] for entry in own_audit.json()["data"]] == [
         "registered",
         "password_changed",
         "deactivated",
@@ -158,16 +166,23 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
         f"/api/v1/users/{user['id']}/audit", headers=admin_headers
     )
     assert target_audit.status_code == 200
-    assert len(target_audit.json()) == 4
+    assert len(target_audit.json()["data"]) == 4
+
+    missing_target_audit = await client.get(
+        f"/api/v1/users/{UUID(int=0)}/audit", headers=admin_headers
+    )
+    assert missing_target_audit.status_code == 404
+    assert missing_target_audit.json()["error"]["code"] == "user_not_found"
 
     global_audit = await client.get(
         "/api/v1/users/audit?page_index=1&page_size=2", headers=admin_headers
     )
     assert global_audit.status_code == 200
-    assert global_audit.json()["total"] == 6
-    assert global_audit.json()["total_pages"] == 3
+    assert global_audit.json()["meta"]["total"] == 6
+    assert global_audit.json()["meta"]["total_pages"] == 3
 
     self_deactivation = await client.patch(
         f"/api/v1/users/{admin_id}/deactivate", headers=admin_headers
     )
     assert self_deactivation.status_code == 403
+    assert self_deactivation.json()["error"]["code"] == "cannot_deactivate_self"

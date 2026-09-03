@@ -88,23 +88,37 @@ async def test_list_users_query_returns_cursor_page_from_read_repository() -> No
 async def test_user_audit_query_returns_global_offset_page() -> None:
     repository = FakeUserReadRepository()
 
-    result = await GetUserAuditQueryHandler(repository).execute(
+    result = await GetUserAuditQueryHandler(repository, repository).execute(
         GetUserAuditQuery(page_index=2, page_size=10)
     )
 
-    assert result is repository.audit_page
+    assert result.is_ok
+    assert result.value is repository.audit_page
     assert repository.audit_list_call == (2, 10)
     assert repository.audit_user_call is None
 
 
 async def test_user_audit_query_reads_personal_audit_without_pagination() -> None:
     repository = FakeUserReadRepository()
-    user_id = UserId.generate()
+    user_id = repository.users.items[0].id
 
-    result = await GetUserAuditQueryHandler(repository).execute(
+    result = await GetUserAuditQueryHandler(repository, repository).execute(
         GetUserAuditQuery(user_id=user_id)
     )
 
-    assert result is repository.audit_entries
+    assert result.is_ok
+    assert result.value is repository.audit_entries
     assert repository.audit_user_call == user_id
     assert repository.audit_list_call is None
+
+
+async def test_user_audit_query_returns_not_found_for_an_unknown_target_user() -> None:
+    repository = FakeUserReadRepository()
+
+    result = await GetUserAuditQueryHandler(repository, repository).execute(
+        GetUserAuditQuery(user_id=UserId.generate())
+    )
+
+    assert result.is_err
+    assert result.error.code == "user_not_found"
+    assert repository.audit_user_call is None
