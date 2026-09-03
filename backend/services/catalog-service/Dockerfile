@@ -27,6 +27,7 @@ COPY --from=builder /srv/services/catalog-service/src/infrastructure/db /srv/inf
 # catalog-bootstrap (issue #208) reads this relative to WORKDIR, same as the
 # `infrastructure/db` copy above.
 COPY --from=builder /srv/services/catalog-service/assets /srv/assets
+COPY --from=builder /srv/libs /srv/libs
 COPY --from=builder /srv/services/catalog-service/src /srv/services/catalog-service/src
 ENV PATH="/srv/.venv/bin:$PATH"
 ENV PYTHONPATH="/srv/services/catalog-service/src"

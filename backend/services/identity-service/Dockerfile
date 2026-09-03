@@ -23,6 +23,7 @@ WORKDIR /srv
 
 COPY --from=builder /srv/.venv /srv/.venv
 COPY --from=builder /srv/services/identity-service/src/infrastructure/db /srv/infrastructure/db
+COPY --from=builder /srv/libs /srv/libs
 COPY --from=builder /srv/services/identity-service/src /srv/services/identity-service/src
 ENV PATH="/srv/.venv/bin:$PATH"
 ENV PYTHONPATH="/srv/services/identity-service/src"
