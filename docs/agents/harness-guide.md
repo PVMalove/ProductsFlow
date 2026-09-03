@@ -130,7 +130,7 @@ python3 harness/bin/harness lock-project-skills /path/to/repository
 python3 harness/bin/harness health /path/to/repository
 ```
 
-Проверяет: есть ли `.harness/harness.lock`; есть ли `AGENTS.md` и нет ли в нём нерешённых `{{...}}`-маркеров; что discovery-symlink'и не битые и резолвятся; и, если lock есть — что снимок capability-скиллов не разошёлся с диском, что `.harness/skills/REGISTRY.md` совпадает с тем, что построил бы `harness registry` прямо сейчас, что каждый project-owned скилл под `.harness/skills` подтверждён в `.harness/overlays/project-local.lock`, и что каждый реально существующий на диске нативный интеграционный файл (`.mcp.json`, `.claude/settings.local.json` и т.п.) заинвентаризирован в `.harness/integrations.json`. Печатает `ERROR ...` построчно и код `1` при любой проблеме; иначе `files: healthy (N skills, M integrations): <repo>` плюс строку-напоминание `activation: ...` (хэш в `integrations.json` доказывает целостность файла, не то, что интеграция реально подключена и работает — это проверяется только в свежей рантайм-сессии) и код `0`.
+Проверяет: есть ли `.harness/harness.lock`; есть ли `AGENTS.md` и нет ли в нём нерешённых `{{...}}`-маркеров; что discovery-symlink'и не битые и резолвятся; и, если есть `.harness/project.json`, что это объект со всеми обязательными полями `language`, `base_branch`, `branch_pattern`, `qa_gate_commands` и без неизвестных полей (разрешён только необязательный `$schema`). Если lock есть, также проверяет, что снимок capability-скиллов не разошёлся с диском, что `.harness/skills/REGISTRY.md` совпадает с тем, что построил бы `harness registry` прямо сейчас, что каждый project-owned скилл под `.harness/skills` подтверждён в `.harness/overlays/project-local.lock`, и что каждый реально существующий на диске нативный интеграционный файл (`.mcp.json`, `.claude/settings.local.json` и т.п.) заинвентаризирован в `.harness/integrations.json`. Печатает `ERROR ...` построчно и код `1` при любой проблеме; иначе `files: healthy (N skills, M integrations): <repo>` плюс строку-напоминание `activation: ...` (хэш в `integrations.json` доказывает целостность файла, не то, что интеграция реально подключена и работает — это проверяется только в свежей рантайм-сессии) и код `0`.
 
 **`list` — какие скиллы сейчас установлены** (построчно, по алфавиту):
 
@@ -188,6 +188,7 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 | `selected skill names already exist; inspect them or use --replace-conflicts` | `adopt` — под именами выбранной capability уже лежат свои скиллы | Проверить перечисленные конфликты; если замена ожидаема — повторить с `--replace-conflicts` (конфликтующие каталоги заменяются без backup). |
 | `local skill changes would be overwritten; review them or use --force` | `update` — на диске есть локальные правки managed-файлов | Изучить напечатанный diff; если перезапись осознанная — повторить с `--force`. |
 | `discovery path already exists and is not managed: <path> (...)` | `.agents/skills`/`.claude/skills` — что-то постороннее на месте discovery-symlink'а | Подсказка в скобках зависит от команды: `init` — убрать вручную или использовать `adopt`; `adopt` — `--replace-conflicts`; `update` — `--force`. |
+| `.harness/project.json has unknown field(s): <name>` | В конфиг добавлено поле, которого нет в строгом контракте | Удалить поле либо реализовать его одновременно в `project.schema.json`, шаблоне, валидаторе и потребителе; для существующего контракта допустимы только `language`, `base_branch`, `branch_pattern`, `qa_gate_commands` и `$schema`. |
 | `install-global`: `[CONFLICT] ... (re-run with --replace-conflicts ...)` | На месте профиля/симлинка глобального слоя уже что-то другое | Повторить с `--replace-conflicts` — сначала бэкапит в `~/.agent-harness-backups/<timestamp>/...`. |
 | `install-global`: `[ERROR] Failed to create symlink: ...` + подсказка про Developer Mode (только Windows) | Windows требует включённый Developer Mode либо администраторские права для символьных ссылок на директории | Включить Developer Mode (Settings → For developers) либо перезапустить терминал от имени администратора. |
 
@@ -311,14 +312,15 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 
 **Выполняется в две фазы** — вторая не начинается без явного одобрения первой:
 
-1. **Исследование и seam'ы.** Исследовать репозиторий (словарь домена из `CONTEXT.md`, ADR в затрагиваемой области), наметить **seam'ы** — точки, где фича будет тестироваться: предпочитать существующие новым, брать самый высокий возможный уровень, идеал — один seam на всю фичу. **Стоп и спросить** — предложенные seam'ы явно подтверждаются пользователем, дальше фаза 2 не начинается.
-2. **Черновик и публикация** (после одобрения). Записать спеку по `<spec-template>` — сначала файлом в `docs/tasks/` (конвенция именования — `docs/agents/artifacts.md`: ID тикета, если уже известен, иначе описательный слаг с переименованием после публикации), затем опубликовать в трекер: `gh issue create --body-file <path>` — **никогда** не инлайн `--body`/heredoc, тело спеки регулярно ломает такое квотирование (вложенные кавычки, backticks).
+1. **Исследование и seam'ы.** Исследовать репозиторий (словарь домена из `CONTEXT.md`, ADR в затрагиваемой области), наметить **seam'ы** — точки, где фича будет тестироваться: предпочитать существующие новым, брать самый высокий возможный уровень, идеал — один seam на всю фичу. Одновременно предложить один epic-scoped branch `integration/<service-or-team>`; слаг брать только из явно названной области, сервиса или команды. **Стоп и спросить** — пользователь подтверждает seam'ы и имя integration-ветки, дальше фаза 2 не начинается.
+2. **Черновик и публикация** (после одобрения). Записать спеку по `<spec-template>` — сначала файлом в `docs/tasks/` (конвенция именования — `docs/agents/artifacts.md`: ID тикета, если уже известен, иначе описательный слаг с переименованием после публикации), включив точное имя integration-ветки, затем опубликовать в трекер: `gh issue create --body-file <path>` — **никогда** не инлайн `--body`/heredoc, тело спеки регулярно ломает такое квотирование (вложенные кавычки, backticks).
+3. **Создать integration-ветку после успешной публикации эпика.** Взять `base_branch` из `.harness/project.json` (по умолчанию `main`), создать `integration/<service-or-team>` от `origin/<base_branch>` и запушить её. Текущий worktree не переключать. Существующую ветку не сбрасывать, не force-push'ить и не удалять; при частичном сбое сообщить точное состояние и восстановление, не создавая эпик повторно.
 
 **Шаблон спеки:** Problem Statement → Solution → User Stories (длинный нумерованный список «As an X, I want Y, so that Z») → Implementation Decisions (модули, интерфейсы, архитектурные решения — без путей к файлам и кода, кроме сниппета из прототипа, если решение он кодирует точно) → Testing Decisions → **Out of Scope** → Further Notes.
 
 Блок **Out of Scope** — ваша страховка от инициативности ИИ. Модели склонны к переинженерии: если явно не указать, что агенту запрещено трогать, скажем, конфигурацию инфраструктуры или прикручивать лишнее кэширование, он с большой вероятностью попытается это сделать.
 
-**В этом репозитории** (локальная кастомизация, раздел 7): публикуемый issue — это **эпик**. Получает `bug`/`enhancement` + `workflow::specs` (не `workflow::ready` — декомпозиции ещё не было) + `task-report::required` по умолчанию. Никакого ad hoc лейбла-слага для эпика больше не создаётся (раздел 8) — `/to-tickets` линкует дочерние тикеты к этому issue как native GitHub sub-issue.
+**В этом репозитории** (локальная кастомизация, раздел 7): публикуемый issue — это **эпик**. Получает `bug`/`enhancement` + `workflow::specs` (не `workflow::ready` — декомпозиции ещё не было) + `task-report::required` по умолчанию и содержит `## Integration Branch`. `/to-spec` выбирает указанную ветку и создаёт её от project `base_branch`, если она отсутствует; `/to-tickets` переносит её в дочерние тикеты. Никакого ad hoc лейбла-слага для эпика больше не создаётся (раздел 8) — `/to-tickets` линкует дочерние тикеты к этому issue как native GitHub sub-issue.
 
 ---
 
@@ -415,7 +417,7 @@ AI-агенты неизбежно «глупеют» и начинают гал
 ### `pr-composer` (subagent, `.claude/agents/pr-composer.md`)
 
 - **Назначение:** заполняет структурированный PR-шаблон из `docs/agents/git-workflow.md` §3 (язык — из `.harness/project.json`) — в изолированном контексте, чтобы полный diff и история коммитов не засоряли основную сессию. Тело — не открытие PR: возвращает только готовый markdown, `gh pr create --body` вызывает вызвавшая сессия.
-- **Вход:** номер issue, база для сравнения (`base_branch` из `.harness/project.json`, иначе `main`), результат последнего `qa-gate` этой сессии, если он запускался — используется для секции «Проверка»; не запускался — честно пишет это в раздел рисков, а не выдумывает покрытие тестами.
+- **Вход:** номер issue, точная integration-ветка эпика из тикета/родительского эпика (для задачи вне эпика — `base_branch` из `.harness/project.json`), результат последнего `qa-gate` этой сессии, если он запускался — используется для секции «Проверка»; не запускался — честно пишет это в раздел рисков, а не выдумывает покрытие тестами.
 - Вызывается из `/implement` на шаге открытия PR, если `git-workflow.md` требует структурированный шаблон, а не короткое summary.
 
 ### `/to-guide` (skill)
@@ -464,9 +466,9 @@ AI-агенты неизбежно «глупеют» и начинают гал
 | Скилл | Что изменено |
 |---|---|
 | `triage` | Заменяет пять канонических состояний апстрима на namespaced-таксономию `workflow::*` (`specs`/`ready`/`in-progress`/`blocked`) + отдельная ось исполнения `hitl`/`afk`; категорийная пара `bug`/`enhancement` не тронута. `wontfix` → `out-of-scope`. См. ADR 0004 в `docs/adr/`. |
-| `to-spec` | Проставляет `workflow::specs` на публикуемый эпик-issue вместо `ready-for-agent` + `epic::<slug>` (последнего больше нет — см. раздел 8); пишет спеку сначала файлом в `docs/tasks/`, публикует через `gh issue create --body-file`, а не инлайн-heredoc (тело спеки регулярно ломает heredoc-квотинг). |
+| `to-spec` | Проставляет `workflow::specs` на публикуемый эпик-issue вместо `ready-for-agent` + `epic::<slug>` (последнего больше нет — см. раздел 8); согласует и создаёт при необходимости `integration/<service-or-team>` от `base_branch`, записывает её в эпик, пишет спеку сначала файлом в `docs/tasks/` и публикует через `gh issue create --body-file`, а не инлайн-heredoc. |
 | `to-tickets` | Линкует дочерние тикеты к эпику как native GitHub sub-issues вместо общей метки `epic::<slug>`; тикету, заблокированному другим ещё не закрытым тикетом той же декомпозиции, ставит `workflow::blocked` вместо `workflow::ready`; не переписывает содержимое родительского issue (кроме списка дочерних номеров). |
-| `implement` | Перед стартом по ссылке на тикет с `workflow::blocked` — проверяет блокеры, снимает состояние либо отказывается стартовать; ставит `workflow::in-progress`, начиная работу. Добавлен шаг открытия PR по `docs/agents/git-workflow.md` с паузой на ревью разработчика, без авто-мерджа; плюс вызов `qa-gate`/`pr-composer` перед PR (раздел 6); публикует отчёт о завершении, если тикет несёт `task-report::required`; для локального трекера ставит `**Workflow:** done` по завершении. |
+| `implement` | Перед стартом по ссылке на тикет с `workflow::blocked` — проверяет блокеры, снимает состояние либо отказывается стартовать; разрешает integration-ветку из тикета/эпика, создаёт issue-ветку от неё и ставит `workflow::in-progress`, начиная работу. Добавлен шаг открытия PR в integration-ветку по `docs/agents/git-workflow.md` с паузой на ревью разработчика, без авто-мерджа; плюс вызов `qa-gate`/`pr-composer` перед PR (раздел 6); публикует отчёт о завершении, если тикет несёт `task-report::required`; для локального трекера ставит `**Workflow:** done` по завершении. |
 | `ask-matt` | Та же PR-пауза отражена в описании `/implement`, которое `ask-matt` предлагает как маршрут. |
 | `code-review` | Отчёт обязан выводиться на языке из `.harness/project.json` (`### Communication language`). |
 | `grilling` | Вопросы фронтира задаются через тул `AskUserQuestion` (вкладка на вопрос, выбор варианта или свой ответ через «Other») вместо простого пронумерованного текста; текстовый формат остаётся запасным для по-настоящему открытых вопросов, не сводимых к 2-4 вариантам. |
@@ -521,22 +523,21 @@ AI-агенты неизбежно «глупеют» и начинают гал
 
 | Hook | Событие | Что блокирует |
 |---|---|---|
-| `block-direct-master.sh` | `PreToolUse(Bash)` | `git commit`/`git push`, если текущая ветка `master`/`main`. |
+| `block-direct-master.sh` | `PreToolUse(Bash)` | `git commit`/`git push` из `base_branch` или `integration/*`, а также push в эти защищённые рефы. |
+| `block-public-attribution.sh` | `PreToolUse(Bash)` | Commit messages и PR titles/bodies с автоматической атрибуцией, именами моделей, session URL или `Co-Authored-By`; push непереданных коммитов с тем же содержимым. |
 | `block-pr-merge.sh` | `PreToolUse(Bash)` | `gh pr merge` — безусловно, мердж только вручную. |
-| `check-branch-name.sh` | `PreToolUse(Bash)` | `git checkout -b <имя>`, не соответствующее `branch_pattern` из `.harness/project.json`. |
+| `check-branch-name.sh` | `PreToolUse(Bash)` | `git checkout -b`/`git switch -c <имя>`, не соответствующее `branch_pattern` из `.harness/project.json`. |
 | `check-worktree-branch-name.sh` | `PreToolUse(EnterWorktree)` | То же правило имени для нативного worktree-инструмента (раздел 10). |
 | `block-scratch-outside-docs-tasks.sh` | `PreToolUse(Write\|Edit)` | Запись спек/скретчпадов в системные temp-директории вместо `docs/tasks/`. |
 | `require-qa-gate.sh` | `PreToolUse(Bash)` | `gh pr create`, если `qa-gate` ещё не запускался/провалился для текущего состояния рабочего дерева (маркер пишет сам скилл `qa-gate` через `record-qa-gate-pass.sh` после успеха последней команды из `qa_gate_commands` — `mark-qa-gate-passed.sh`, `PostToolUse(Bash)`, дублирует эту запись как fallback для прямого запуска команд в основной сессии, без гарантии сработать внутри форкнутой сессии скилла). |
-| `block-dangerous-git.sh` | `PreToolUse(Bash)` | `git reset --hard`, `git clean -f`/`-fd`, `git branch -D`, `git checkout .`, `git restore .` — адаптировано из апстримного скилла `git-guardrails-claude-code`, не входит в вендоренный `mattpocock-suite`. В отличие от апстрима **не** блокирует `git push` целиком — `git-workflow.md` требует пуш фиче-веток; push в `master`/`main` уже отдельно закрыт `block-direct-master.sh`. |
+| `block-dangerous-git.sh` | `PreToolUse(Bash)` | `git reset --hard`, `git clean -f`/`-fd`, `git branch -D`, `git checkout .`, `git restore .` — адаптировано из апстримного скилла `git-guardrails-claude-code`, не входит в вендоренный `mattpocock-suite`. В отличие от апстрима **не** блокирует `git push` целиком — `git-workflow.md` требует пуш issue-веток; push в `base_branch` и `integration/*` отдельно закрыт `block-direct-master.sh`. |
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Ничего не блокирует — аналитика на будущее: считает частоту вызова каждого скилла в `.claude/.skill-usage.json`. |
 
-Файл личный (`.claude/settings.local.json`, в `.gitignore`) — защищает только локальные сессии на этой машине, не CI и не других контрибьюторов.
+Файл личный (`.claude/settings.local.json`, в `.gitignore`) — hook защищает локальные сессии; CI-проверка защищает PR до merge.
 
 ### Атрибуция коммитов
 
-`.claude/settings.local.json` также несёт `"attribution": {"commit": "", "pr": ""}` — детерминированно убирает строку `Co-Authored-By: Claude ...` из коммитов и футер из тела PR, вместо того чтобы полагаться на то, что никто не попросит иначе.
-
-**Известная оговорка:** в апстриме Claude Code есть открытые баг-репорты о том, что `attribution.commit`/`attribution.pr` иногда не соблюдаются — системный trailer иногда побеждает настройку. Считайте это дополнительным слоем, а не гарантией; если атрибуция всё же проскочит в коммит, поправьте вручную.
+`.claude/settings.local.json` оставляет встроенную атрибуцию пустой. Это дополнительный слой; фактический запрет обеспечивают `block-public-attribution.sh` до команды и `scripts/check-public-metadata.py` в CI. При блокировке исправь только метаданные проекта и повтори проверку.
 
 ---
 
@@ -650,11 +651,11 @@ AI-агенты неизбежно «глупеют» и начинают гал
 Фича умещается в одну сессию грилинга, но нужна декомпозиция на тикеты — без Wayfinder.
 
 1. **`/grill-with-docs`** — «Хочу экспорт отчётов в CSV». Пара раундов фронтира: какие отчёты (только текущий вид таблицы, не все типы сразу), кто инициирует (кнопка на странице, не отдельный API endpoint), формат чисел (locale проекта, не Excel-specific). Устоялось — `CONTEXT.md` пополнился термином «Экспортируемый отчёт».
-2. **`/to-spec`** — Phase 1: предложен один seam (сервис форматирования отчёта, уже используется для PDF-экспорта) → подтверждено. Phase 2: спека сохранена в `docs/tasks/add-csv-export.md`, опубликована `gh issue create --body-file` → **#101**, лейблы `enhancement` + `workflow::specs` + `task-report::required`.
+2. **`/to-spec`** — Phase 1: предложен один seam (сервис форматирования отчёта, уже используется для PDF-экспорта) и `integration/reports` → подтверждено. Phase 2: спека сохранена в `docs/tasks/add-csv-export.md`, опубликована `gh issue create --body-file` → **#101**, создана и запушена `integration/reports` от `base_branch`, лейблы `enhancement` + `workflow::specs` + `task-report::required`.
 3. **`/to-tickets #101`** — Phase 1: два вертикальных слайса показаны, подтверждены без правок. Phase 2 публикует:
    - **#102** «CSV-сервис форматирования» — `workflow::ready`, `afk`, sub-issue от #101, blocked by: none.
    - **#103** «Кнопка экспорта на странице отчёта» — `workflow::blocked` (ждёт #102), `afk`, sub-issue от #101.
-4. **`/implement #102`** — Phase 1: тикет уже `workflow::ready`+`afk`, блокеров нет → сразу `workflow::in-progress`. Phase 2: `/tdd` пишет тест на форматирование чисел/дат под locale, реализует сервис, `/code-review` проходит без замечаний, коммит `feat: add CSV formatting service (#102)`. Phase 3: разработчик подтверждает готовность к PR → `qa-gate` PASS → `gh pr create` с `Closes #102` → разработчик подтверждает ревью на месте — **мерджит сам**, агент не трогает мердж.
+4. **`/implement #102`** — Phase 1: тикет уже `workflow::ready`+`afk`, блокеров нет → сразу `workflow::in-progress`; issue-ветка создаётся от `integration/reports`, PR направляется туда. Phase 2: `/tdd` пишет тест на форматирование чисел/дат под locale, реализует сервис, `/code-review` проходит без замечаний, коммит `feat: add CSV formatting service (#102)`. Phase 3: разработчик подтверждает готовность к PR → `qa-gate` PASS → `gh pr create` с `Closes #102` → разработчик подтверждает ревью на месте — **мерджит сам**, агент не трогает мердж.
 5. Мердж PR закрывает #102 автоматически → #103 становится разблокированным (`blocked_by: 0`) → `/implement #101` (уже на эпик, без конкретного тикета) сам находит и клеймит #103 по фронтиру, повторяет Phase 1-3.
 6. Оба дочерних тикета закрыты → эпик #101 остаётся открытым с дописанным списком «Sub-issues: #102, #103» (раздел 3) — закрывать его руками не нужно.
 
