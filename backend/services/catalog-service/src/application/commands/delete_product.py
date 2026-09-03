@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.authorization import ProductAuthorizer
 from application.errors import ProductNotFoundError
 from application.ports import (
@@ -11,7 +13,6 @@ from application.ports import (
     IdentityGateway,
     ProductCommandPort,
 )
-from domain.product import Product
 from domain.product_id import ProductId
 
 
@@ -38,7 +39,7 @@ class DeleteProductCommandHandler:
         self._repository = repository
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, command: DeleteProductCommand) -> Product:
+    async def execute(self, command: DeleteProductCommand) -> Result[None]:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError
@@ -46,4 +47,4 @@ class DeleteProductCommandHandler:
         deleted = await self._repository.delete(product.id)
         if deleted is None:
             raise ProductNotFoundError
-        return deleted
+        return Result.ok(None)
