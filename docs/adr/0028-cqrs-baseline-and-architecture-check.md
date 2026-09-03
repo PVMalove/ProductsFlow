@@ -83,6 +83,14 @@ class DeactivateUserCommandHandler:
         return Result.success(user)
 ```
 
+> **Superseded [ADR 0034](0034-unit-of-work.md):** порт `Transaction` и метод
+> `commit_with_outbox()` в примере выше никогда не были реализованы ни в
+> одном сервисе. Транзакционная граница command handler'а — теперь
+> `UnitOfWork` (ADR 0034): `async with self.uow:` + явный
+> `await self.uow.commit()` на успешном пути, rollback по умолчанию. Остальной
+> текст этого ADR (термины, CQRS-граница, layout, аудит по сервисам) не
+> пересматривается.
+
 ### Пример запроса
 
 ```python
