@@ -36,12 +36,12 @@ async def test_get_current_user_reloads_state_and_returns_a_view() -> None:
     ).execute(RegisterUserCommand("user@example.com", "password1"))
 
     result = await GetCurrentUserHandler(ReadOnlyUserProjection(repository)).execute(
-        GetCurrentUserQuery(registered.value.id)
+        GetCurrentUserQuery(UserId(registered.value.id))
     )
 
     assert result.is_ok
     assert result.value == UserView(
-        id=registered.value.id.value,
+        id=registered.value.id,
         email="user@example.com",
         role=Role.USER,
         is_active=True,

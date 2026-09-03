@@ -85,12 +85,18 @@ dependency rejecting the request before a handler ever runs.
 `api/tickets.py` is thin: `api/schemas.py` request/dependency models build
 commands and queries via `to_command()`/`to_query()`, and
 `kernel_platform.http.match.match_result`/`match_created` wrap application
-`Result`s into the shared `ApiResponse` envelope. The four mutation command
+`Result`s into the shared `ApiResponse` envelope directly — the router
+never converts one `Result` type into another. The four mutation command
 handlers (`add_ticket_message`, `change_ticket_status`,
-`edit_ticket_message`, `delete_ticket_message`) now catch the `Ticket`
+`edit_ticket_message`, `delete_ticket_message`) catch the `Ticket`
 aggregate's domain exceptions and the `None`-for-not-found/not-owned
-repository result themselves, returning `Result` — routers no longer
-translate errors. `application/queries/get_ticket_detail.py` is the single
+repository result themselves and build `contracts.ticket.TicketView`
+(`delete_ticket_message` returns `Result[None]` directly, matching
+catalog's `DeleteProductCommandHandler`) before returning `Result` — routers
+no longer translate errors or reshape a handler's success value.
+`CreateTicketCommandHandler` builds the richer `contracts.ticket.TicketDetailView`
+(ticket plus its messages) the same way, so `POST` also needs no router-side
+mapping. `application/queries/get_ticket_detail.py` is the single
 combined query the endpoint calls for `GET /{ticket_id}`: it loads the
 ticket and its first page of messages together, so the endpoint never
 orchestrates two handler calls. Every `DELETE` returns `200` with

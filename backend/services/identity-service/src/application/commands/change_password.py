@@ -6,9 +6,9 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
+from contracts.user import UserView
 from domain.raw_password import RawPassword
 from domain.repositories import UserRepository
-from domain.user import User
 from domain.user_id import UserId
 
 
@@ -34,12 +34,12 @@ class ChangePasswordCommandHandler:
         self._users = users
         self._password_hasher = password_hasher
 
-    async def execute(self, command: ChangePasswordCommand) -> Result[User]:
+    async def execute(self, command: ChangePasswordCommand) -> Result[UserView]:
         user = await self._users.get_by_id(command.user_id)
         if user is None or not self._password_hasher.verify(
             command.old_password, user.password_hash
         ):
-            return Result[User].fail(
+            return Result[UserView].fail(
                 Error(
                     code="invalid_credentials",
                     description="Текущий пароль не совпадает",
@@ -48,9 +48,9 @@ class ChangePasswordCommandHandler:
             )
         password = RawPassword.create(command.new_password)
         if password.is_err:
-            return Result[User].fail(password.error)
+            return Result[UserView].fail(password.error)
         result = user.change_password(self._password_hasher.hash(password.value.value))
         if result.is_err:
-            return Result[User].fail(result.error)
+            return Result[UserView].fail(result.error)
         await self._users.save(user)
-        return Result[User].ok(user)
+        return Result[UserView].ok(UserView.from_user(user))

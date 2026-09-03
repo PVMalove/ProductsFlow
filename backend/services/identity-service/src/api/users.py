@@ -25,7 +25,7 @@ from api.schemas import (
 from api.security import AdminActor, RequiredActor
 from application.ports import UserAuditEntry, UserAuditPage
 from application.queries import GetCurrentUserQuery, GetUserAuditQuery
-from contracts.user import UserView, user_view_result
+from contracts.user import UserView
 from domain.user_id import UserId
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -57,8 +57,9 @@ async def read_current_user(
 async def change_own_password(
     request: PasswordChange, actor: RequiredActor, handler: ChangePasswordDI
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(request.to_command(actor=actor))
-    return match_result(user_view_result(result))
+    command = request.to_command(actor=actor)
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.get("/me/audit", response_model=ApiResponse[list[UserAuditEntry]])
@@ -115,8 +116,9 @@ async def activate_user(
     _admin: AdminActor,
     handler: ActivateUserDI,
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(request.to_command())
-    return match_result(user_view_result(result))
+    command = request.to_command()
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.patch("/{user_id}/deactivate", response_model=ApiResponse[UserView])
@@ -125,8 +127,9 @@ async def deactivate_user(
     admin: AdminActor,
     handler: DeactivateUserDI,
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(request.to_command(actor=admin))
-    return match_result(user_view_result(result))
+    command = request.to_command(actor=admin)
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.get("/{user_id}/audit", response_model=ApiResponse[list[UserAuditEntry]])

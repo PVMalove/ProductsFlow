@@ -45,7 +45,12 @@ read-side SQL adapters without exposing password hashes.
 dependency models turn the request into a command/query via
 `to_command()`/`to_query()`, and `kernel_platform.http.match.match_result`/
 `match_created` wrap the application `Result` into the shared `ApiResponse`
-envelope. `api/security.py` decodes the bearer JWT, reloads the caller
+envelope directly — the router never converts one `Result` type into
+another. `RegisterUserCommandHandler`, `ChangePasswordCommandHandler`,
+`ActivateUserCommandHandler`, and `DeactivateUserCommandHandler` each build
+`contracts.user.UserView` themselves before returning
+`Result[UserView]`, matching how catalog's product command handlers already
+return `Result[ProductView]` (ADR 0031). `api/security.py` decodes the bearer JWT, reloads the caller
 through `UserQueryPort` and returns a `kernel_platform.security.Actor` — the
 same reload also enforces `is_active` for every authenticated identity
 endpoint, not only `/users/me`. `GetCurrentUserHandler`

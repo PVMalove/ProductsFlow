@@ -6,15 +6,16 @@ from application.change_password import (
 )
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.events import PasswordChanged
+from domain.user import User
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
-async def _register(repository: FakeUserRepository, hasher: FakePasswordHasher):
-    result = await RegisterUserCommandHandler(repository, hasher).execute(
+async def _register(repository: FakeUserRepository, hasher: FakePasswordHasher) -> User:
+    await RegisterUserCommandHandler(repository, hasher).execute(
         RegisterUserCommand("user@example.com", "password1")
     )
-    return result.value
+    return repository.users["user@example.com"]
 
 
 async def test_change_password_updates_hash_and_records_event() -> None:
@@ -28,8 +29,9 @@ async def test_change_password_updates_hash_and_records_event() -> None:
     )
 
     assert result.is_ok
-    assert result.value.password_hash == hasher.hash("newpassword2")
-    events = result.value.pull_events()
+    assert result.value.id == user.id.value
+    assert user.password_hash == hasher.hash("newpassword2")
+    events = user.pull_events()
     assert len(events) == 1
     event = events[0]
     assert isinstance(event, PasswordChanged)

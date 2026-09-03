@@ -7,6 +7,7 @@ from kernel_platform.security import Actor, ActorRole
 from api.dependencies import get_create_ticket_handler
 from api.main import app
 from application.commands import CreateTicketCommand
+from contracts.ticket import TicketDetailView
 from domain.ticket import Ticket
 from infrastructure.security.auth import get_current_actor
 
@@ -37,13 +38,16 @@ def test_create_ticket_returns_created_resource() -> None:
     author_id = uuid.uuid4()
 
     class FakeHandler:
-        async def execute(self, command: CreateTicketCommand) -> Result[Ticket]:
-            return Result[Ticket].ok(
-                Ticket.create(
-                    author_id=command.author_id,
-                    subject=command.subject,
-                    first_message=command.first_message,
-                )
+        async def execute(
+            self, command: CreateTicketCommand
+        ) -> Result[TicketDetailView]:
+            ticket = Ticket.create(
+                author_id=command.author_id,
+                subject=command.subject,
+                first_message=command.first_message,
+            )
+            return Result[TicketDetailView].ok(
+                TicketDetailView.from_domain(ticket, ticket.messages)
             )
 
     app.dependency_overrides[get_current_actor] = lambda: Actor(

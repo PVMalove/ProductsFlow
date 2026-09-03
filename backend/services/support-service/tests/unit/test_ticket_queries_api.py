@@ -27,7 +27,7 @@ from application.queries import (
     ListTicketsQuery,
     TicketDetail,
 )
-from contracts.ticket import TicketDetailView
+from contracts.ticket import TicketDetailView, TicketView
 from domain.repositories import PageInfo, TicketPage
 from domain.ticket import Ticket, TicketStatus
 from infrastructure.security.auth import get_current_actor
@@ -165,11 +165,11 @@ def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
     ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
 
     class FakeHandler:
-        async def execute(self, command: AddTicketMessageCommand) -> Result[Ticket]:
+        async def execute(self, command: AddTicketMessageCommand) -> Result[TicketView]:
             assert command.ticket_id == ticket.id
             assert command.actor_id == author_id
             assert command.is_admin is False
-            return Result[Ticket].ok(ticket)
+            return Result[TicketView].ok(TicketView.from_domain(ticket))
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(author_id)
     app.dependency_overrides[get_add_ticket_message_handler] = lambda: FakeHandler()
@@ -192,12 +192,14 @@ def test_admin_status_endpoint_passes_status_command() -> None:
     admin_id = uuid.uuid4()
 
     class FakeHandler:
-        async def execute(self, command: ChangeTicketStatusCommand) -> Result[Ticket]:
+        async def execute(
+            self, command: ChangeTicketStatusCommand
+        ) -> Result[TicketView]:
             assert command.ticket_id == ticket.id
             assert command.actor_id == admin_id
             assert command.status is TicketStatus.IN_PROGRESS
             assert command.is_admin is True
-            return Result[Ticket].ok(ticket)
+            return Result[TicketView].ok(TicketView.from_domain(ticket))
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(admin_id, admin=True)
     app.dependency_overrides[get_change_ticket_status_handler] = lambda: FakeHandler()
@@ -219,9 +221,11 @@ def test_non_admin_status_change_is_forbidden() -> None:
     )
 
     class FakeHandler:
-        async def execute(self, command: ChangeTicketStatusCommand) -> Result[Ticket]:
+        async def execute(
+            self, command: ChangeTicketStatusCommand
+        ) -> Result[TicketView]:
             assert command.is_admin is False
-            return Result[Ticket].fail(
+            return Result[TicketView].fail(
                 Error(
                     code="FORBIDDEN",
                     description="Доступ только для администраторов!",
@@ -250,13 +254,15 @@ def test_ticket_message_edit_endpoint_passes_message_command() -> None:
     message_id = ticket.messages[0].id
 
     class FakeHandler:
-        async def execute(self, command: EditTicketMessageCommand) -> Result[Ticket]:
+        async def execute(
+            self, command: EditTicketMessageCommand
+        ) -> Result[TicketView]:
             assert command.ticket_id == ticket.id
             assert command.message_id == message_id
             assert command.actor_id == author_id
             assert command.body == "Corrected"
             assert command.is_admin is True
-            return Result[Ticket].ok(ticket)
+            return Result[TicketView].ok(TicketView.from_domain(ticket))
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(author_id, admin=True)
     app.dependency_overrides[get_edit_ticket_message_handler] = lambda: FakeHandler()
@@ -280,12 +286,12 @@ def test_ticket_message_delete_endpoint_returns_null_data() -> None:
     message_id = ticket.messages[0].id
 
     class FakeHandler:
-        async def execute(self, command: DeleteTicketMessageCommand) -> Result[Ticket]:
+        async def execute(self, command: DeleteTicketMessageCommand) -> Result[None]:
             assert command.ticket_id == ticket.id
             assert command.message_id == message_id
             assert command.actor_id == actor_id
             assert command.is_admin is True
-            return Result[Ticket].ok(ticket)
+            return Result[None].ok(None)
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(actor_id, admin=True)
     app.dependency_overrides[get_delete_ticket_message_handler] = lambda: FakeHandler()
@@ -307,8 +313,10 @@ def test_ticket_message_edit_maps_a_closed_ticket_to_conflict() -> None:
     message_id = ticket.messages[0].id
 
     class FakeHandler:
-        async def execute(self, command: EditTicketMessageCommand) -> Result[Ticket]:
-            return Result[Ticket].fail(
+        async def execute(
+            self, command: EditTicketMessageCommand
+        ) -> Result[TicketView]:
+            return Result[TicketView].fail(
                 Error(
                     code="TICKET_MESSAGE_IMMUTABLE",
                     description="Сообщение нельзя изменить",

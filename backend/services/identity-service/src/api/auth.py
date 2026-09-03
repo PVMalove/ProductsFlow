@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
+from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
 from kernel_platform.http.match import match_created
 
@@ -9,7 +10,7 @@ from api.dependencies import LoginDI, RegisterUserDI
 from api.errors import raise_command_error
 from api.schemas import TokenResponse, UserCreate
 from application.commands import LoginCommand
-from contracts.user import UserView, user_view_result
+from contracts.user import UserView
 from core.security.tokens import create_access_token
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -23,8 +24,9 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 async def register_user(
     request: UserCreate, handler: RegisterUserDI
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(request.to_command())
-    return match_created(user_view_result(result))
+    command = request.to_command()
+    result: Result[UserView] = await handler.execute(command)
+    return match_created(result)
 
 
 @router.post("/login", response_model=TokenResponse)

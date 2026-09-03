@@ -29,37 +29,16 @@ from api.schemas import (
 from application.queries import TicketDetail
 from contracts.ticket import TicketDetailView, TicketView
 from domain.repositories import PageInfo
-from domain.ticket import Ticket
 from infrastructure.security.auth import RequiredActor
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
 
-def _detail_result(result: Result[Ticket]) -> Result[TicketDetailView]:
-    if result.is_err:
-        return Result[TicketDetailView].fail(result.error)
-    ticket = result.value
-    return Result[TicketDetailView].ok(
-        TicketDetailView.from_domain(ticket, ticket.messages)
-    )
-
-
-def _view_result(result: Result[Ticket]) -> Result[TicketView]:
-    if result.is_err:
-        return Result[TicketView].fail(result.error)
-    return Result[TicketView].ok(TicketView.from_domain(result.value))
-
-
-def _null_result(result: Result[Ticket]) -> Result[None]:
-    if result.is_err:
-        return Result[None].fail(result.error)
-    return Result[None].ok(None)
-
-
 def _unwrap[T](result: Result[T]) -> T:
-    """`GetTicketDetailQueryHandler` carries pagination for `meta` alongside
-    `data` — a shape `match_result` doesn't fit — so this keeps the same
-    error translation without wrapping the success value."""
+    """Response shapes that carry pagination in `meta` alongside `data`
+    (`GetTicketDetailQueryHandler`, `ListAdminTicketsQueryHandler`) can't go
+    through `match_result` — this keeps the same error translation without
+    wrapping the success value."""
     if result.is_err:
         error = result.error
         raise ApiError(
@@ -87,8 +66,9 @@ def _page_meta(page_info: PageInfo) -> dict[str, object]:
 async def create_ticket(
     request: TicketCreateRequest, actor: RequiredActor, handler: CreateTicketDI
 ) -> ApiResponse[TicketDetailView]:
-    result = await handler.execute(request.to_command(actor=actor))
-    return match_created(_detail_result(result))
+    command = request.to_command(actor=actor)
+    result: Result[TicketDetailView] = await handler.execute(command)
+    return match_created(result)
 
 
 @router.get("", response_model=ApiResponse[list[TicketView]])
@@ -129,8 +109,8 @@ async def add_ticket_message(
     handler: AddTicketMessageDI,
 ) -> ApiResponse[TicketView]:
     command = request.to_command(ticket_id=ticket_id, actor=actor)
-    result = await handler.execute(command)
-    return match_created(_view_result(result))
+    result: Result[TicketView] = await handler.execute(command)
+    return match_created(result)
 
 
 @router.patch("/{ticket_id}/status", response_model=ApiResponse[TicketView])
@@ -141,8 +121,8 @@ async def change_ticket_status(
     handler: ChangeTicketStatusDI,
 ) -> ApiResponse[TicketView]:
     command = request.to_command(ticket_id=ticket_id, actor=actor)
-    result = await handler.execute(command)
-    return match_result(_view_result(result))
+    result: Result[TicketView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.patch(
@@ -158,8 +138,8 @@ async def edit_ticket_message(
     command = request.to_edit_command(
         ticket_id=ticket_id, message_id=message_id, actor=actor
     )
-    result = await handler.execute(command)
-    return match_result(_view_result(result))
+    result: Result[TicketView] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.delete("/{ticket_id}/messages/{message_id}", response_model=ApiResponse[None])
@@ -168,8 +148,9 @@ async def delete_ticket_message(
     actor: RequiredActor,
     handler: DeleteTicketMessageDI,
 ) -> ApiResponse[None]:
-    result = await handler.execute(request.to_command(actor=actor))
-    return match_result(_null_result(result))
+    command = request.to_command(actor=actor)
+    result: Result[None] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.get("/{ticket_id}", response_model=ApiResponse[TicketDetailView])

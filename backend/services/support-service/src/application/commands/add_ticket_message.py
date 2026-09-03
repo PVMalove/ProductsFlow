@@ -6,7 +6,8 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import TicketMutationPort
-from domain.ticket import Ticket, TicketClosedError
+from contracts.ticket import TicketView
+from domain.ticket import TicketClosedError
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,7 @@ class AddTicketMessageCommandHandler:
     def __init__(self, repository: TicketMutationPort) -> None:
         self._repository = repository
 
-    async def execute(self, command: AddTicketMessageCommand) -> Result[Ticket]:
+    async def execute(self, command: AddTicketMessageCommand) -> Result[TicketView]:
         try:
             ticket = await self._repository.add_message(
                 ticket_id=command.ticket_id,
@@ -32,7 +33,7 @@ class AddTicketMessageCommandHandler:
                 is_admin=command.is_admin,
             )
         except TicketClosedError:
-            return Result[Ticket].fail(
+            return Result[TicketView].fail(
                 Error(
                     code="TICKET_CLOSED",
                     description="Закрытый тикет нельзя изменять",
@@ -40,11 +41,11 @@ class AddTicketMessageCommandHandler:
                 )
             )
         if ticket is None:
-            return Result[Ticket].fail(
+            return Result[TicketView].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result[Ticket].ok(ticket)
+        return Result[TicketView].ok(TicketView.from_domain(ticket))

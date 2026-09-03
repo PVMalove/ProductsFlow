@@ -14,6 +14,7 @@ from application.queries import (
     ListTicketsQuery,
     ListTicketsQueryHandler,
 )
+from contracts.ticket import TicketDetailView
 from domain.repositories import MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket
 
@@ -88,7 +89,10 @@ async def test_create_ticket_command_uses_the_command_port() -> None:
 
     assert result.is_ok
     assert result.value.author_id == author_id
-    assert repository.created is result.value
+    assert repository.created is not None
+    assert result.value == TicketDetailView.from_domain(
+        repository.created, repository.created.messages
+    )
 
 
 @pytest.mark.asyncio

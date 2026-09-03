@@ -7,7 +7,6 @@ from kernel_domain.result import Result
 
 from application.ports import TicketMutationPort
 from domain.ticket import (
-    Ticket,
     TicketClosedError,
     TicketMessageAlreadyDeletedError,
     TicketMessageImmutableError,
@@ -27,7 +26,7 @@ class DeleteTicketMessageCommandHandler:
     def __init__(self, repository: TicketMutationPort) -> None:
         self._repository = repository
 
-    async def execute(self, command: DeleteTicketMessageCommand) -> Result[Ticket]:
+    async def execute(self, command: DeleteTicketMessageCommand) -> Result[None]:
         try:
             ticket = await self._repository.delete_message(
                 ticket_id=command.ticket_id,
@@ -36,7 +35,7 @@ class DeleteTicketMessageCommandHandler:
                 is_admin=command.is_admin,
             )
         except TicketMessageNotFoundError:
-            return Result[Ticket].fail(
+            return Result[None].fail(
                 Error(
                     code="TICKET_MESSAGE_NOT_FOUND",
                     description="Тикет не найден",
@@ -48,7 +47,7 @@ class DeleteTicketMessageCommandHandler:
             TicketMessageImmutableError,
             TicketMessageAlreadyDeletedError,
         ):
-            return Result[Ticket].fail(
+            return Result[None].fail(
                 Error(
                     code="TICKET_MESSAGE_IMMUTABLE",
                     description="Сообщение нельзя удалить",
@@ -56,11 +55,11 @@ class DeleteTicketMessageCommandHandler:
                 )
             )
         if ticket is None:
-            return Result[Ticket].fail(
+            return Result[None].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result[Ticket].ok(ticket)
+        return Result[None].ok(None)
