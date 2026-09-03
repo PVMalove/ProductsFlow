@@ -49,5 +49,5 @@ class ActivateProductCommandHandler:
         if result is None:
             raise ProductNotFoundError
         if result.is_err:
-            return Result.fail(result.error)
-        return Result.ok(ProductView.from_domain(result.value))
+            return Result[ProductView].fail(result.error)
+        return Result[ProductView].ok(ProductView.from_domain(result.value))

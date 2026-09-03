@@ -2,29 +2,32 @@ import uuid
 from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from kernel_platform.http.errors import ApiError
+from kernel_platform.security import Actor, ActorRole, require_admin
 
 from api.dependencies import UserQueryRepositoryDI
-from application.ports import UserReadModel
 from core.security.tokens import decode_access_token
-from domain.role import Role
 from domain.user_id import UserId
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-_INVALID_TOKEN = HTTPException(
-    status_code=status.HTTP_401_UNAUTHORIZED,
-    detail="Не удалось проверить токен",
-    headers={"WWW-Authenticate": "Bearer"},
+_INVALID_TOKEN = ApiError(
+    status_code=401, code="UNAUTHORIZED", message="Не удалось проверить токен"
+)
+_ACCOUNT_DISABLED = ApiError(
+    status_code=403, code="FORBIDDEN", message="Учётная запись отключена"
 )
 
 
-async def get_current_user(
+async def get_current_actor(
     token: Annotated[str, Depends(oauth2_scheme)],
     users: UserQueryRepositoryDI,
-) -> UserReadModel:
-    """Decode the token and reload the user to enforce current account state."""
+) -> Actor:
+    """Decode the token, then reload the user to build a transport-neutral
+    `Actor` off the caller's current state — never off JWT claims, which
+    carry no role and can be stale (ADR 0033)."""
     try:
         payload: dict[str, Any] = decode_access_token(token)
         user_id = UserId(uuid.UUID(str(payload["sub"])))
@@ -35,26 +38,18 @@ async def get_current_user(
     if user is None:
         raise _INVALID_TOKEN
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Учётная запись отключена",
-        )
-    return user
+        raise _ACCOUNT_DISABLED
+    return Actor(id=user.id.value, role=ActorRole(user.role.value))
 
 
-CurrentUser = Annotated[UserReadModel, Depends(get_current_user)]
+RequiredActor = Annotated[Actor, Depends(get_current_actor)]
 
 
-async def require_admin(current_user: CurrentUser) -> UserReadModel:
-    if current_user.role is not Role.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Доступ только для администраторов!",
-        )
-    return current_user
+async def require_admin_actor(actor: RequiredActor) -> Actor:
+    return require_admin(actor)
 
 
-AdminUser = Annotated[UserReadModel, Depends(require_admin)]
+AdminActor = Annotated[Actor, Depends(require_admin_actor)]
 
 
-__all__ = ["AdminUser", "CurrentUser", "get_current_user"]
+__all__ = ["AdminActor", "RequiredActor", "get_current_actor", "require_admin_actor"]

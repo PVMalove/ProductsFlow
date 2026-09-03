@@ -12,6 +12,7 @@ from application.commands import (
     EditTicketMessageCommand,
     EditTicketMessageCommandHandler,
 )
+from contracts.ticket import TicketView
 from domain.ticket import Ticket, TicketStatus
 
 
@@ -76,7 +77,8 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value == TicketView.from_domain(ticket)
     assert repository.message_calls == [(actor_id, True)]
 
 
@@ -93,11 +95,34 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
             ticket_id=ticket.id,
             actor_id=actor_id,
             status=TicketStatus.IN_PROGRESS,
+            is_admin=True,
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value == TicketView.from_domain(ticket)
     assert repository.status_calls == [(actor_id, TicketStatus.IN_PROGRESS)]
+
+
+@pytest.mark.asyncio
+async def test_change_status_command_forbids_a_non_admin_actor() -> None:
+    ticket = Ticket.create(
+        author_id=uuid.uuid4(), subject="Subject", first_message="First message"
+    )
+    repository = FakeMutationRepository(ticket)
+
+    result = await ChangeTicketStatusCommandHandler(repository).execute(
+        ChangeTicketStatusCommand(
+            ticket_id=ticket.id,
+            actor_id=uuid.uuid4(),
+            status=TicketStatus.IN_PROGRESS,
+            is_admin=False,
+        )
+    )
+
+    assert result.is_err
+    assert result.error.code == "FORBIDDEN"
+    assert repository.status_calls == []
 
 
 @pytest.mark.asyncio
@@ -119,7 +144,8 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value == TicketView.from_domain(ticket)
     assert repository.edit_calls == [(ticket.id, message_id, "Corrected", True)]
 
 
@@ -140,5 +166,6 @@ async def test_delete_message_command_passes_admin_moderation_context() -> None:
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value is None
     assert repository.delete_calls == [(ticket.id, message_id, True)]

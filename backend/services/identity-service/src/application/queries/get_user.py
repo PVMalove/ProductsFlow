@@ -53,11 +53,11 @@ class GetUserQueryHandler:
         """
         read_model = await self._users.get_by_id(query.user_id)
         if read_model is None:
-            return Result.fail(
+            return Result[UserReadModel].fail(
                 Error(
                     code="user_not_found",
                     description="Пользователь не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(read_model)
+        return Result[UserReadModel].ok(read_model)

@@ -10,9 +10,8 @@ from application.commands import (
     EditTicketMessageCommandHandler,
 )
 from application.queries import (
-    GetTicketQueryHandler,
+    GetTicketDetailQueryHandler,
     ListAdminTicketsQueryHandler,
-    ListTicketMessagesQueryHandler,
     ListTicketsQueryHandler,
 )
 from infrastructure.db.session import DbSessionDI
@@ -72,8 +71,13 @@ DeleteTicketMessageDI = Annotated[
 ]
 
 
-def get_ticket_handler(session: DbSessionDI) -> GetTicketQueryHandler:
-    return GetTicketQueryHandler(TicketRepository(session))
+def get_ticket_detail_handler(session: DbSessionDI) -> GetTicketDetailQueryHandler:
+    return GetTicketDetailQueryHandler(TicketRepository(session))
+
+
+GetTicketDetailDI = Annotated[
+    GetTicketDetailQueryHandler, Depends(get_ticket_detail_handler)
+]
 
 
 def get_list_tickets_handler(session: DbSessionDI) -> ListTicketsQueryHandler:
@@ -86,17 +90,7 @@ def get_list_admin_tickets_handler(
     return ListAdminTicketsQueryHandler(TicketRepository(session))
 
 
-def get_list_ticket_messages_handler(
-    session: DbSessionDI,
-) -> ListTicketMessagesQueryHandler:
-    return ListTicketMessagesQueryHandler(TicketRepository(session))
-
-
-GetTicketDI = Annotated[GetTicketQueryHandler, Depends(get_ticket_handler)]
 ListTicketsDI = Annotated[ListTicketsQueryHandler, Depends(get_list_tickets_handler)]
 ListAdminTicketsDI = Annotated[
     ListAdminTicketsQueryHandler, Depends(get_list_admin_tickets_handler)
-]
-ListTicketMessagesDI = Annotated[
-    ListTicketMessagesQueryHandler, Depends(get_list_ticket_messages_handler)
 ]

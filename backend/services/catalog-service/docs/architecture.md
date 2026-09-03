@@ -28,3 +28,26 @@ the catalog service image (ADR 0010). It declares the `catalog.user-events`
 topology through `kernel-platform`, consumes the four supported `user.*.v1`
 events (including the sparse payloads emitted by the current identity domain),
 and applies each owner snapshot with the inbox/version guards from ADR 0019.
+
+`api/product_images.py` (ADR 0033) follows the same shape as `products.py`:
+`api/schemas.py` request models (`ProductImageGetRequest`,
+`ProductImageUploadRequest`, `ProductImageDeleteRequest`) own all transport
+validation — including `ProductImageUploadRequest.to_command()`'s content-type
+and size checks, now `ProductImageUnsupportedMediaTypeError`/
+`ProductImageTooLargeError` (`application/errors.py`) instead of a raw
+`HTTPException` in the router — and the three image handlers return
+`Result[ProductImageView]`/`Result[ProductImageMutation]`/`Result[None]`,
+unwrapped by `match_result` exactly like `get_product`/`activate_product`.
+`GetProductImageQueryHandler` and the two mutation handlers keep the existing
+`raise ProductNotFoundError`/`ProductImageNotFoundError` shortcuts for the
+not-found/not-visible paths — the same hybrid raise-for-absence,
+`Result`-for-success shape `get_product.py` already uses. `DELETE` returns
+`200` with `data: null`. The upload endpoint still calls
+`UpsertProductImageCommandHandler` and then `GetProductImageQueryHandler` as
+two separate handler calls — not the router-orchestration ADR 0033 forbids
+elsewhere, since `ProductImageMutation` deliberately carries only
+`replaced: bool` and never a query-side View (command/query separation this
+codebase already tests for); the small `_unwrap()` helper in
+`product_images.py` exists only because the upload response needs the
+mutation's `replaced` flag to pick a status code before the second call, a
+shape `match_result` doesn't fit.

@@ -16,6 +16,7 @@ from application.ports import (
     UserQueryPort,
 )
 from application.queries import (
+    GetCurrentUserHandler,
     GetUserAuditQueryHandler,
     ListUsersQueryHandler,
 )
@@ -120,11 +121,21 @@ ListUsersDI = Annotated[ListUsersQueryHandler, Depends(get_list_users_handler)]
 
 def get_user_audit_handler(
     reader: UserAuditReaderDI,
+    users: UserQueryRepositoryDI,
 ) -> GetUserAuditQueryHandler:
-    return GetUserAuditQueryHandler(reader)
+    return GetUserAuditQueryHandler(reader, users)
 
 
 UserAuditDI = Annotated[GetUserAuditQueryHandler, Depends(get_user_audit_handler)]
+
+
+def get_current_user_handler(
+    users: UserQueryRepositoryDI,
+) -> GetCurrentUserHandler:
+    return GetCurrentUserHandler(users)
+
+
+GetCurrentUserDI = Annotated[GetCurrentUserHandler, Depends(get_current_user_handler)]
 
 
 __all__ = [
@@ -132,6 +143,7 @@ __all__ = [
     "ChangePasswordDI",
     "DeactivateUserDI",
     "DbSessionDI",
+    "GetCurrentUserDI",
     "ListUsersDI",
     "LoginDI",
     "PasswordHasherDI",

@@ -1,12 +1,48 @@
 import uuid
-from datetime import datetime
 from typing import Any
 
+from fastapi import Query
+from kernel_platform.security import Actor, ActorRole
 from pydantic import BaseModel, Field, field_validator
 
-from domain.message import TicketMessage
-from domain.repositories import PageInfo, TicketPage
-from domain.ticket import Ticket, TicketStatus
+from application.commands import (
+    AddTicketMessageCommand,
+    ChangeTicketStatusCommand,
+    CreateTicketCommand,
+    DeleteTicketMessageCommand,
+    EditTicketMessageCommand,
+)
+from application.errors import (
+    TicketListCursorConflictError,
+    TicketListInvalidCursorError,
+)
+from application.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    InvalidCursorError,
+    decode_cursor,
+)
+from application.queries import (
+    GetTicketDetailQuery,
+    ListAdminTicketsQuery,
+    ListTicketsQuery,
+)
+from domain.ticket import TicketStatus
+
+
+def _is_admin(actor: Actor) -> bool:
+    return actor.role is ActorRole.ADMIN
+
+
+def _decode_cursors(after: str | None, before: str | None) -> tuple[Any, Any]:
+    if after is not None and before is not None:
+        raise TicketListCursorConflictError
+    try:
+        after_cursor = decode_cursor(after) if after is not None else None
+        before_cursor = decode_cursor(before) if before is not None else None
+    except InvalidCursorError as exc:
+        raise TicketListInvalidCursorError from exc
+    return after_cursor, before_cursor
 
 
 class TicketCreateRequest(BaseModel):
@@ -18,6 +54,66 @@ class TicketCreateRequest(BaseModel):
     def trim_plaintext(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
 
+    def to_command(self, *, actor: Actor) -> CreateTicketCommand:
+        return CreateTicketCommand(
+            author_id=actor.id, subject=self.subject, first_message=self.first_message
+        )
+
+
+class TicketListRequest(BaseModel):
+    """Query-bound — the caller's own cursor-paginated tickets."""
+
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
+
+    def to_query(self, *, actor: Actor) -> ListTicketsQuery:
+        after_cursor, before_cursor = _decode_cursors(self.after, self.before)
+        return ListTicketsQuery(
+            author_id=actor.id,
+            limit=self.limit,
+            after=after_cursor,
+            before=before_cursor,
+        )
+
+
+class AdminTicketListRequest(BaseModel):
+    """Query-bound — every ticket, cursor-paginated."""
+
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
+
+    def to_query(self, *, actor: Actor) -> ListAdminTicketsQuery:
+        after_cursor, before_cursor = _decode_cursors(self.after, self.before)
+        return ListAdminTicketsQuery(
+            limit=self.limit,
+            is_admin=_is_admin(actor),
+            after=after_cursor,
+            before=before_cursor,
+        )
+
+
+class TicketDetailRequest(BaseModel):
+    """Path- and query-bound — `ticket_id` from the URL, pagination for its
+    first page of messages from the query string."""
+
+    ticket_id: uuid.UUID
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
+
+    def to_query(self, *, actor: Actor) -> GetTicketDetailQuery:
+        after_cursor, before_cursor = _decode_cursors(self.after, self.before)
+        return GetTicketDetailQuery(
+            ticket_id=self.ticket_id,
+            actor_id=actor.id,
+            is_admin=_is_admin(actor),
+            limit=self.limit,
+            after=after_cursor,
+            before=before_cursor,
+        )
+
 
 class TicketMessageCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=10_000)
@@ -27,79 +123,52 @@ class TicketMessageCreateRequest(BaseModel):
     def trim_plaintext(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
 
+    def to_command(
+        self, *, ticket_id: uuid.UUID, actor: Actor
+    ) -> AddTicketMessageCommand:
+        return AddTicketMessageCommand(
+            ticket_id=ticket_id,
+            actor_id=actor.id,
+            body=self.body,
+            is_admin=_is_admin(actor),
+        )
+
+    def to_edit_command(
+        self, *, ticket_id: uuid.UUID, message_id: uuid.UUID, actor: Actor
+    ) -> EditTicketMessageCommand:
+        return EditTicketMessageCommand(
+            ticket_id=ticket_id,
+            message_id=message_id,
+            actor_id=actor.id,
+            body=self.body,
+            is_admin=_is_admin(actor),
+        )
+
 
 class TicketStatusChangeRequest(BaseModel):
     status: TicketStatus
 
-
-class TicketMessageResponse(BaseModel):
-    id: uuid.UUID
-    author_id: uuid.UUID | None
-    body: str
-    created_at: datetime
-    is_system: bool
-    is_deleted: bool
-
-
-class TicketResponse(BaseModel):
-    id: uuid.UUID
-    author_id: uuid.UUID | None
-    subject: str
-    status: str
-    messages: list[TicketMessageResponse]
-    page_info: "PageInfoResponse | None" = None
-
-    @classmethod
-    def from_domain(
-        cls,
-        ticket: Ticket,
-        page_info: "PageInfoResponse | None" = None,
-        messages: list[TicketMessage] | None = None,
-    ) -> "TicketResponse":
-        source_messages = ticket.messages if messages is None else messages
-        return cls(
-            id=ticket.id,
-            author_id=ticket.author_id,
-            subject=ticket.subject,
-            status=ticket.status,
-            messages=[
-                TicketMessageResponse(
-                    id=message.id,
-                    author_id=message.author_id,
-                    body=message.body,
-                    created_at=message.created_at,
-                    is_system=message.is_system,
-                    is_deleted=message.is_deleted,
-                )
-                for message in source_messages
-            ],
-            page_info=page_info,
+    def to_command(
+        self, *, ticket_id: uuid.UUID, actor: Actor
+    ) -> ChangeTicketStatusCommand:
+        return ChangeTicketStatusCommand(
+            ticket_id=ticket_id,
+            actor_id=actor.id,
+            status=self.status,
+            is_admin=_is_admin(actor),
         )
 
 
-class PageInfoResponse(BaseModel):
-    next_cursor: str | None
-    prev_cursor: str | None
-    has_more: bool
-    has_prev: bool
+class TicketMessageDeleteRequest(BaseModel):
+    """Path-bound — without a JSON body, ids come from the URL."""
 
-    @classmethod
-    def from_domain(cls, page_info: PageInfo) -> "PageInfoResponse":
-        return cls(
-            next_cursor=page_info.next_cursor,
-            prev_cursor=page_info.prev_cursor,
-            has_more=page_info.has_more,
-            has_prev=page_info.has_prev,
-        )
+    ticket_id: uuid.UUID
+    message_id: uuid.UUID
 
-
-class TicketListResponse(BaseModel):
-    items: list[TicketResponse]
-    page_info: PageInfoResponse
-
-    @classmethod
-    def from_domain(cls, page: TicketPage) -> "TicketListResponse":
-        return cls(
-            items=[TicketResponse.from_domain(ticket) for ticket in page.items],
-            page_info=PageInfoResponse.from_domain(page.page_info),
+    def to_command(self, *, actor: Actor) -> DeleteTicketMessageCommand:
+        return DeleteTicketMessageCommand(
+            ticket_id=self.ticket_id,
+            message_id=self.message_id,
+            actor_id=actor.id,
+            is_admin=_is_admin(actor),
         )

@@ -1,38 +1,34 @@
-from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
-
-from application.ports import (
-    UserAuditAction,
-    UserAuditEntry,
-    UserAuditPage,
-    UserPage,
-    UserReadModel,
+from fastapi import Query
+from kernel_platform.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    InvalidCursorError,
+    decode_cursor,
 )
+from kernel_platform.security import Actor
+from pydantic import BaseModel
+
+from application.commands import (
+    ActivateUserCommand,
+    ChangePasswordCommand,
+    DeactivateUserCommand,
+    RegisterUserCommand,
+)
+from application.errors import UserListCursorConflictError, UserListInvalidCursorError
+from application.queries import GetUserAuditQuery, ListUsersQuery
 from domain.email import Email
-from domain.role import Role
-from domain.user import User
+from domain.user_id import UserId
 
 
 class UserCreate(BaseModel):
     email: str
     password: str
 
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value: str) -> str:
-        Email(value)
-        return value
-
-
-class UserResponse(BaseModel):
-    id: UUID
-    email: str
-    role: Role
-    is_active: bool
-
-    model_config = ConfigDict(from_attributes=True)
+    def to_command(self) -> RegisterUserCommand:
+        Email(self.email)
+        return RegisterUserCommand(email=self.email, password=self.password)
 
 
 class TokenResponse(BaseModel):
@@ -44,92 +40,83 @@ class PasswordChange(BaseModel):
     old_password: str
     new_password: str
 
-
-class PageInfoResponse(BaseModel):
-    next_cursor: str | None
-    prev_cursor: str | None
-    has_more: bool
-    has_prev: bool
-
-
-class UserListResponse(BaseModel):
-    items: list[UserResponse]
-    page_info: PageInfoResponse
+    def to_command(self, *, actor: Actor) -> ChangePasswordCommand:
+        return ChangePasswordCommand(
+            user_id=UserId(actor.id),
+            old_password=self.old_password,
+            new_password=self.new_password,
+        )
 
 
-class UserAuditLogResponse(BaseModel):
-    id: int
+class UserActivateRequest(BaseModel):
+    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+
     user_id: UUID
-    actor_user_id: UUID
-    action: UserAuditAction
-    description: str
-    created_at: datetime
+
+    def to_command(self) -> ActivateUserCommand:
+        return ActivateUserCommand(target_user_id=UserId(self.user_id))
 
 
-class UserAuditLogPageResponse(BaseModel):
-    items: list[UserAuditLogResponse]
-    page_index: int
-    page_size: int
-    total: int
-    total_pages: int
+class UserDeactivateRequest(BaseModel):
+    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+
+    user_id: UUID
+
+    def to_command(self, *, actor: Actor) -> DeactivateUserCommand:
+        return DeactivateUserCommand(
+            target_user_id=UserId(self.user_id), actor_user_id=UserId(actor.id)
+        )
 
 
-def user_response(user: User | UserReadModel) -> UserResponse:
-    return UserResponse(
-        id=user.id.value,
-        email=user.email.value,
-        role=user.role,
-        is_active=user.is_active,
-    )
+class UserTargetAuditRequest(BaseModel):
+    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+
+    user_id: UUID
+
+    def to_query(self) -> GetUserAuditQuery:
+        return GetUserAuditQuery(user_id=UserId(self.user_id))
 
 
-read_model_response = user_response
+class UserGlobalAuditRequest(BaseModel):
+    """Query-bound — offset pagination for the global admin audit feed."""
+
+    page_index: int = Query(default=1, ge=1)
+    page_size: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+
+    def to_query(self) -> GetUserAuditQuery:
+        return GetUserAuditQuery(page_index=self.page_index, page_size=self.page_size)
 
 
-def user_list_response(page: UserPage) -> UserListResponse:
-    return UserListResponse(
-        items=[read_model_response(item) for item in page.items],
-        page_info=PageInfoResponse(
-            next_cursor=page.page_info.next_cursor,
-            prev_cursor=page.page_info.prev_cursor,
-            has_more=page.page_info.has_more,
-            has_prev=page.page_info.has_prev,
-        ),
-    )
+class UserListRequest(BaseModel):
+    """Query-bound — `limit`/`after`/`before` come from the query string."""
 
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
 
-def audit_entry_response(entry: UserAuditEntry) -> UserAuditLogResponse:
-    return UserAuditLogResponse(
-        id=entry.id,
-        user_id=entry.user_id.value,
-        actor_user_id=entry.actor_user_id.value,
-        action=entry.action,
-        description=entry.description,
-        created_at=entry.created_at,
-    )
-
-
-def audit_page_response(page: UserAuditPage) -> UserAuditLogPageResponse:
-    return UserAuditLogPageResponse(
-        items=[audit_entry_response(item) for item in page.items],
-        page_index=page.page_index,
-        page_size=page.page_size,
-        total=page.total,
-        total_pages=page.total_pages,
-    )
+    def to_query(self) -> ListUsersQuery:
+        if self.after is not None and self.before is not None:
+            raise UserListCursorConflictError
+        try:
+            after_cursor = decode_cursor(self.after) if self.after is not None else None
+            before_cursor = (
+                decode_cursor(self.before) if self.before is not None else None
+            )
+        except InvalidCursorError as exc:
+            raise UserListInvalidCursorError from exc
+        return ListUsersQuery(
+            limit=self.limit, after=after_cursor, before=before_cursor
+        )
 
 
 __all__ = [
+    "MAX_PAGE_LIMIT",
     "PasswordChange",
     "TokenResponse",
-    "UserAuditLogPageResponse",
-    "UserAuditLogResponse",
+    "UserActivateRequest",
     "UserCreate",
-    "UserListResponse",
-    "UserResponse",
-    "audit_entry_response",
-    "audit_page_response",
-    "read_model_response",
-    "user_list_response",
-    "user_response",
+    "UserDeactivateRequest",
+    "UserGlobalAuditRequest",
+    "UserListRequest",
+    "UserTargetAuditRequest",
 ]

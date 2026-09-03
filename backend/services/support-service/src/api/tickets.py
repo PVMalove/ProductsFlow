@@ -1,6 +1,11 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, status
+from kernel_domain.result import Result
+from kernel_platform.http.envelope import ApiResponse
+from kernel_platform.http.errors import ApiError, status_code_for_error_type
+from kernel_platform.http.match import match_created, match_result
 
 from api.dependencies import (
     AddTicketMessageDI,
@@ -8,279 +13,151 @@ from api.dependencies import (
     CreateTicketDI,
     DeleteTicketMessageDI,
     EditTicketMessageDI,
-    GetTicketDI,
+    GetTicketDetailDI,
     ListAdminTicketsDI,
-    ListTicketMessagesDI,
     ListTicketsDI,
 )
 from api.schemas import (
+    AdminTicketListRequest,
     TicketCreateRequest,
-    TicketListResponse,
+    TicketDetailRequest,
+    TicketListRequest,
     TicketMessageCreateRequest,
-    TicketResponse,
+    TicketMessageDeleteRequest,
     TicketStatusChangeRequest,
 )
-from application.commands import (
-    AddTicketMessageCommand,
-    ChangeTicketStatusCommand,
-    CreateTicketCommand,
-    DeleteTicketMessageCommand,
-    EditTicketMessageCommand,
-)
-from application.errors import TicketNotFoundError
-from application.pagination import (
-    DEFAULT_PAGE_LIMIT,
-    MAX_PAGE_LIMIT,
-    InvalidCursorError,
-    decode_cursor,
-)
-from application.queries import (
-    GetTicketQuery,
-    ListAdminTicketsQuery,
-    ListTicketMessagesQuery,
-    ListTicketsQuery,
-)
-from domain.ticket import (
-    InvalidStatusTransitionError,
-    TicketClosedError,
-    TicketMessageAlreadyDeletedError,
-    TicketMessageImmutableError,
-    TicketMessageNotFoundError,
-)
-from infrastructure.security.auth import AdminAuth, OptionalAdmin, RequiredAuth
+from application.queries import TicketDetail
+from contracts.ticket import TicketDetailView, TicketView
+from domain.repositories import PageInfo
+from infrastructure.security.auth import RequiredActor
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
 
-def _cursor(raw: str | None):
-    if raw is None:
-        return None
-    try:
-        return decode_cursor(raw)
-    except InvalidCursorError as exc:
-        raise HTTPException(
-            status_code=400, detail="Некорректный курсор пагинации"
-        ) from exc
-
-
-def _ensure_one_cursor(after: str | None, before: str | None) -> None:
-    if after is not None and before is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя одновременно указать after и before",
+def _unwrap[T](result: Result[T]) -> T:
+    """Response shapes that carry pagination in `meta` alongside `data`
+    (`GetTicketDetailQueryHandler`, `ListAdminTicketsQueryHandler`) can't go
+    through `match_result` — this keeps the same error translation without
+    wrapping the success value."""
+    if result.is_err:
+        error = result.error
+        raise ApiError(
+            status_code=status_code_for_error_type(error.type),
+            code=error.code,
+            message=error.description,
         )
+    return result.value
 
 
-@router.post("", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
+def _page_meta(page_info: PageInfo) -> dict[str, object]:
+    return {
+        "next_cursor": page_info.next_cursor,
+        "prev_cursor": page_info.prev_cursor,
+        "has_more": page_info.has_more,
+        "has_prev": page_info.has_prev,
+    }
+
+
+@router.post(
+    "",
+    response_model=ApiResponse[TicketDetailView],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_ticket(
-    request: TicketCreateRequest,
-    author_id: RequiredAuth,
-    handler: CreateTicketDI,
-) -> TicketResponse:
-    ticket = await handler.execute(
-        CreateTicketCommand(
-            author_id=author_id,
-            subject=request.subject,
-            first_message=request.first_message,
-        )
-    )
-    return TicketResponse.from_domain(ticket)
+    request: TicketCreateRequest, actor: RequiredActor, handler: CreateTicketDI
+) -> ApiResponse[TicketDetailView]:
+    command = request.to_command(actor=actor)
+    result: Result[TicketDetailView] = await handler.execute(command)
+    return match_created(result)
 
 
-@router.get("", response_model=TicketListResponse)
+@router.get("", response_model=ApiResponse[list[TicketView]])
 async def list_tickets(
-    author_id: RequiredAuth,
+    request: Annotated[TicketListRequest, Depends()],
+    actor: RequiredActor,
     handler: ListTicketsDI,
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
-    after: str | None = Query(None),
-    before: str | None = Query(None),
-) -> TicketListResponse:
-    _ensure_one_cursor(after, before)
-    page = await handler.execute(
-        ListTicketsQuery(
-            author_id=author_id,
-            limit=limit,
-            after=_cursor(after),
-            before=_cursor(before),
-        )
+) -> ApiResponse[list[TicketView]]:
+    page = await handler.execute(request.to_query(actor=actor))
+    return ApiResponse(
+        data=[TicketView.from_domain(ticket) for ticket in page.items],
+        meta=_page_meta(page.page_info),
     )
-    return TicketListResponse.from_domain(page)
 
 
-@router.get("/admin", response_model=TicketListResponse)
+@router.get("/admin", response_model=ApiResponse[list[TicketView]])
 async def list_admin_tickets(
-    _admin_id: AdminAuth,
+    request: Annotated[AdminTicketListRequest, Depends()],
+    actor: RequiredActor,
     handler: ListAdminTicketsDI,
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
-    after: str | None = Query(None),
-    before: str | None = Query(None),
-) -> TicketListResponse:
-    _ensure_one_cursor(after, before)
-    page = await handler.execute(
-        ListAdminTicketsQuery(limit=limit, after=_cursor(after), before=_cursor(before))
+) -> ApiResponse[list[TicketView]]:
+    page = _unwrap(await handler.execute(request.to_query(actor=actor)))
+    return ApiResponse(
+        data=[TicketView.from_domain(ticket) for ticket in page.items],
+        meta=_page_meta(page.page_info),
     )
-    return TicketListResponse.from_domain(page)
 
 
 @router.post(
     "/{ticket_id}/messages",
-    response_model=TicketResponse,
+    response_model=ApiResponse[TicketView],
     status_code=status.HTTP_201_CREATED,
 )
 async def add_ticket_message(
     ticket_id: uuid.UUID,
     request: TicketMessageCreateRequest,
-    actor_id: RequiredAuth,
-    is_admin: OptionalAdmin,
+    actor: RequiredActor,
     handler: AddTicketMessageDI,
-) -> TicketResponse:
-    try:
-        ticket = await handler.execute(
-            AddTicketMessageCommand(
-                ticket_id=ticket_id,
-                actor_id=actor_id,
-                body=request.body,
-                is_admin=is_admin,
-            )
-        )
-    except TicketNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
-        ) from exc
-    except TicketClosedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Закрытый тикет нельзя изменять",
-        ) from exc
-    return TicketResponse.from_domain(ticket)
+) -> ApiResponse[TicketView]:
+    command = request.to_command(ticket_id=ticket_id, actor=actor)
+    result: Result[TicketView] = await handler.execute(command)
+    return match_created(result)
 
 
-@router.patch("/{ticket_id}/status", response_model=TicketResponse)
+@router.patch("/{ticket_id}/status", response_model=ApiResponse[TicketView])
 async def change_ticket_status(
     ticket_id: uuid.UUID,
     request: TicketStatusChangeRequest,
-    admin_id: AdminAuth,
+    actor: RequiredActor,
     handler: ChangeTicketStatusDI,
-) -> TicketResponse:
-    try:
-        ticket = await handler.execute(
-            ChangeTicketStatusCommand(
-                ticket_id=ticket_id,
-                actor_id=admin_id,
-                status=request.status,
-            )
-        )
-    except TicketNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
-        ) from exc
-    except (TicketClosedError, InvalidStatusTransitionError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Недопустимый переход статуса тикета",
-        ) from exc
-    return TicketResponse.from_domain(ticket)
+) -> ApiResponse[TicketView]:
+    command = request.to_command(ticket_id=ticket_id, actor=actor)
+    result: Result[TicketView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.patch("/{ticket_id}/messages/{message_id}", response_model=TicketResponse)
+@router.patch(
+    "/{ticket_id}/messages/{message_id}", response_model=ApiResponse[TicketView]
+)
 async def edit_ticket_message(
     ticket_id: uuid.UUID,
     message_id: uuid.UUID,
     request: TicketMessageCreateRequest,
-    actor_id: RequiredAuth,
-    is_admin: OptionalAdmin,
+    actor: RequiredActor,
     handler: EditTicketMessageDI,
-) -> TicketResponse:
-    try:
-        ticket = await handler.execute(
-            EditTicketMessageCommand(
-                ticket_id=ticket_id,
-                message_id=message_id,
-                actor_id=actor_id,
-                body=request.body,
-                is_admin=is_admin,
-            )
-        )
-    except (TicketNotFoundError, TicketMessageNotFoundError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
-        ) from exc
-    except (
-        TicketClosedError,
-        TicketMessageAlreadyDeletedError,
-        TicketMessageImmutableError,
-    ) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Сообщение нельзя изменить",
-        ) from exc
-    return TicketResponse.from_domain(ticket)
+) -> ApiResponse[TicketView]:
+    command = request.to_edit_command(
+        ticket_id=ticket_id, message_id=message_id, actor=actor
+    )
+    result: Result[TicketView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.delete("/{ticket_id}/messages/{message_id}", response_model=TicketResponse)
+@router.delete("/{ticket_id}/messages/{message_id}", response_model=ApiResponse[None])
 async def delete_ticket_message(
-    ticket_id: uuid.UUID,
-    message_id: uuid.UUID,
-    actor_id: RequiredAuth,
-    is_admin: OptionalAdmin,
+    request: Annotated[TicketMessageDeleteRequest, Depends()],
+    actor: RequiredActor,
     handler: DeleteTicketMessageDI,
-) -> TicketResponse:
-    try:
-        ticket = await handler.execute(
-            DeleteTicketMessageCommand(
-                ticket_id=ticket_id,
-                message_id=message_id,
-                actor_id=actor_id,
-                is_admin=is_admin,
-            )
-        )
-    except (TicketNotFoundError, TicketMessageNotFoundError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
-        ) from exc
-    except (
-        TicketClosedError,
-        TicketMessageAlreadyDeletedError,
-        TicketMessageImmutableError,
-    ) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Сообщение нельзя удалить",
-        ) from exc
-    return TicketResponse.from_domain(ticket)
+) -> ApiResponse[None]:
+    command = request.to_command(actor=actor)
+    result: Result[None] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.get("/{ticket_id}", response_model=TicketResponse)
+@router.get("/{ticket_id}", response_model=ApiResponse[TicketDetailView])
 async def get_ticket(
-    ticket_id: uuid.UUID,
-    author_id: RequiredAuth,
-    handler: GetTicketDI,
-    is_admin: OptionalAdmin,
-    messages_handler: ListTicketMessagesDI,
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
-    after: str | None = Query(None),
-    before: str | None = Query(None),
-) -> TicketResponse:
-    _ensure_one_cursor(after, before)
-    ticket = await handler.execute(
-        GetTicketQuery(ticket_id=ticket_id, author_id=author_id, is_admin=is_admin)
-    )
-    if ticket is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Тикет не найден"
-        )
-    page = await messages_handler.execute(
-        ListTicketMessagesQuery(
-            ticket_id=ticket_id,
-            limit=limit,
-            after=_cursor(after),
-            before=_cursor(before),
-        )
-    )
-    from api.schemas import PageInfoResponse
-
-    return TicketResponse.from_domain(
-        ticket,
-        page_info=PageInfoResponse.from_domain(page.page_info),
-        messages=page.items,
-    )
+    request: Annotated[TicketDetailRequest, Depends()],
+    actor: RequiredActor,
+    handler: GetTicketDetailDI,
+) -> ApiResponse[TicketDetailView]:
+    detail: TicketDetail = _unwrap(await handler.execute(request.to_query(actor=actor)))
+    return ApiResponse(data=detail.view, meta=_page_meta(detail.messages_page_info))

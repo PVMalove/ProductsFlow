@@ -1,157 +1,143 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
-from kernel_platform.pagination import (
-    DEFAULT_PAGE_LIMIT,
-    MAX_PAGE_LIMIT,
-    InvalidCursorError,
-    decode_cursor,
-)
+from fastapi import APIRouter, Depends
+from kernel_domain.result import Result
+from kernel_platform.http.envelope import ApiResponse
+from kernel_platform.http.errors import ApiError, status_code_for_error_type
+from kernel_platform.http.match import match_result
 
 from api.dependencies import (
     ActivateUserDI,
     ChangePasswordDI,
     DeactivateUserDI,
+    GetCurrentUserDI,
     ListUsersDI,
     UserAuditDI,
-    UserAuditReaderDI,
-    UserQueryRepositoryDI,
 )
-from api.errors import raise_command_error
 from api.schemas import (
     PasswordChange,
-    UserAuditLogPageResponse,
-    UserAuditLogResponse,
-    UserListResponse,
-    UserResponse,
-    audit_entry_response,
-    audit_page_response,
-    user_list_response,
-    user_response,
+    UserActivateRequest,
+    UserDeactivateRequest,
+    UserGlobalAuditRequest,
+    UserListRequest,
+    UserTargetAuditRequest,
 )
-from api.security import AdminUser, CurrentUser
-from application.commands import (
-    ActivateUserCommand,
-    ChangePasswordCommand,
-    DeactivateUserCommand,
-)
-from application.ports import UserAuditPage
-from application.queries import GetUserAuditQuery, ListUsersQuery
+from api.security import AdminActor, RequiredActor
+from application.ports import UserAuditEntry, UserAuditPage
+from application.queries import GetCurrentUserQuery, GetUserAuditQuery
+from contracts.user import UserView
 from domain.user_id import UserId
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserResponse)
-async def read_current_user(current_user: CurrentUser) -> UserResponse:
-    return user_response(current_user)
+def _unwrap[T](result: Result[T]) -> T:
+    """Response shapes that carry more than one `T` under `data`/`meta`
+    (a `User*`-vs-list union, custom offset pagination) can't go through
+    `match_result`/`match_page` — this keeps the same error translation."""
+    if result.is_err:
+        error = result.error
+        raise ApiError(
+            status_code=status_code_for_error_type(error.type),
+            code=error.code,
+            message=error.description,
+        )
+    return result.value
 
 
-@router.patch("/me/password", response_model=UserResponse)
+@router.get("/me", response_model=ApiResponse[UserView])
+async def read_current_user(
+    actor: RequiredActor, handler: GetCurrentUserDI
+) -> ApiResponse[UserView]:
+    result = await handler.execute(GetCurrentUserQuery(user_id=UserId(actor.id)))
+    return match_result(result)
+
+
+@router.patch("/me/password", response_model=ApiResponse[UserView])
 async def change_own_password(
-    request: PasswordChange,
-    current_user: CurrentUser,
-    handler: ChangePasswordDI,
-) -> UserResponse:
-    result = await handler.execute(
-        ChangePasswordCommand(
-            user_id=current_user.id,
-            old_password=request.old_password,
-            new_password=request.new_password,
-        )
-    )
-    if result.is_err:
-        raise_command_error(result)
-    return user_response(result.value)
+    request: PasswordChange, actor: RequiredActor, handler: ChangePasswordDI
+) -> ApiResponse[UserView]:
+    command = request.to_command(actor=actor)
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.get("/me/audit", response_model=list[UserAuditLogResponse])
+@router.get("/me/audit", response_model=ApiResponse[list[UserAuditEntry]])
 async def read_own_audit_logs(
-    current_user: CurrentUser, handler: UserAuditDI
-) -> list[UserAuditLogResponse]:
-    result = await handler.execute(GetUserAuditQuery(user_id=current_user.id))
-    if not isinstance(result, list):
-        raise RuntimeError("Персональный audit вернул глобальную страницу")
-    return [audit_entry_response(entry) for entry in result]
+    actor: RequiredActor, handler: UserAuditDI
+) -> ApiResponse[list[UserAuditEntry]]:
+    entries = _unwrap(
+        await handler.execute(GetUserAuditQuery(user_id=UserId(actor.id)))
+    )
+    assert isinstance(entries, list)
+    return ApiResponse(data=entries)
 
 
-@router.get("/audit", response_model=UserAuditLogPageResponse)
+@router.get("/audit", response_model=ApiResponse[list[UserAuditEntry]])
 async def list_all_audit_logs(
-    _admin: AdminUser,
+    request: Annotated[UserGlobalAuditRequest, Depends()],
+    _admin: AdminActor,
     handler: UserAuditDI,
-    page_index: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1)] = 10,
-) -> UserAuditLogPageResponse:
-    result = await handler.execute(
-        GetUserAuditQuery(page_index=page_index, page_size=page_size)
+) -> ApiResponse[list[UserAuditEntry]]:
+    page = _unwrap(await handler.execute(request.to_query()))
+    assert isinstance(page, UserAuditPage)
+    return ApiResponse(
+        data=page.items,
+        meta={
+            "page_index": page.page_index,
+            "page_size": page.page_size,
+            "total": page.total,
+            "total_pages": page.total_pages,
+        },
     )
-    if not isinstance(result, UserAuditPage):
-        raise RuntimeError("Глобальный audit вернул персональный список")
-    return audit_page_response(result)
 
 
-@router.get("/", response_model=UserListResponse)
+@router.get("/", response_model=ApiResponse[list[UserView]])
 async def list_users(
-    _admin: AdminUser,
+    request: Annotated[UserListRequest, Depends()],
+    _admin: AdminActor,
     handler: ListUsersDI,
-    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
-    after: str | None = None,
-    before: str | None = None,
-) -> UserListResponse:
-    if after is not None and before is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя одновременно указать after и before",
-        )
-    try:
-        after_cursor = decode_cursor(after) if after is not None else None
-        before_cursor = decode_cursor(before) if before is not None else None
-    except InvalidCursorError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Некорректный курсор пагинации",
-        ) from exc
-    result = await handler.execute(
-        ListUsersQuery(limit=limit, after=after_cursor, before=before_cursor)
+) -> ApiResponse[list[UserView]]:
+    page = await handler.execute(request.to_query())
+    return ApiResponse(
+        data=[UserView.from_user(item) for item in page.items],
+        meta={
+            "next_cursor": page.page_info.next_cursor,
+            "prev_cursor": page.page_info.prev_cursor,
+            "has_more": page.page_info.has_more,
+            "has_prev": page.page_info.has_prev,
+        },
     )
-    return user_list_response(result)
 
 
-@router.patch("/{user_id}/activate", response_model=UserResponse)
+@router.patch("/{user_id}/activate", response_model=ApiResponse[UserView])
 async def activate_user(
-    user_id: UUID, _admin: AdminUser, handler: ActivateUserDI
-) -> UserResponse:
-    result = await handler.execute(ActivateUserCommand(UserId(user_id)))
-    if result.is_err:
-        raise_command_error(result)
-    return user_response(result.value)
+    request: Annotated[UserActivateRequest, Depends()],
+    _admin: AdminActor,
+    handler: ActivateUserDI,
+) -> ApiResponse[UserView]:
+    command = request.to_command()
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/{user_id}/deactivate", response_model=ApiResponse[UserView])
 async def deactivate_user(
-    user_id: UUID, admin: AdminUser, handler: DeactivateUserDI
-) -> UserResponse:
-    result = await handler.execute(
-        DeactivateUserCommand(target_user_id=UserId(user_id), actor_user_id=admin.id)
-    )
-    if result.is_err:
-        raise_command_error(result)
-    return user_response(result.value)
+    request: Annotated[UserDeactivateRequest, Depends()],
+    admin: AdminActor,
+    handler: DeactivateUserDI,
+) -> ApiResponse[UserView]:
+    command = request.to_command(actor=admin)
+    result: Result[UserView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.get("/{user_id}/audit", response_model=list[UserAuditLogResponse])
+@router.get("/{user_id}/audit", response_model=ApiResponse[list[UserAuditEntry]])
 async def read_user_audit_logs(
-    user_id: UUID,
-    _admin: AdminUser,
-    user_query: UserQueryRepositoryDI,
-    audit_reader: UserAuditReaderDI,
-) -> list[UserAuditLogResponse]:
-    target_id = UserId(user_id)
-    if await user_query.get_by_id(target_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пользователь не найден",
-        )
-    entries = await audit_reader.get_by_user(target_id)
-    return [audit_entry_response(entry) for entry in entries]
+    request: Annotated[UserTargetAuditRequest, Depends()],
+    _admin: AdminActor,
+    handler: UserAuditDI,
+) -> ApiResponse[list[UserAuditEntry]]:
+    entries = _unwrap(await handler.execute(request.to_query()))
+    assert isinstance(entries, list)
+    return ApiResponse(data=entries)

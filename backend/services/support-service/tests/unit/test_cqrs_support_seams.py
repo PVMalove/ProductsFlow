@@ -14,6 +14,7 @@ from application.queries import (
     ListTicketsQuery,
     ListTicketsQueryHandler,
 )
+from contracts.ticket import TicketDetailView
 from domain.repositories import MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket
 
@@ -86,8 +87,12 @@ async def test_create_ticket_command_uses_the_command_port() -> None:
         )
     )
 
-    assert result.author_id == author_id
-    assert repository.created is result
+    assert result.is_ok
+    assert result.value.author_id == author_id
+    assert repository.created is not None
+    assert result.value == TicketDetailView.from_domain(
+        repository.created, repository.created.messages
+    )
 
 
 @pytest.mark.asyncio
@@ -110,16 +115,28 @@ async def test_ticket_queries_are_independent_handlers() -> None:
             ListTicketsQuery(author_id=author_id, limit=20)
         )
     ).items == [ticket]
-    assert (
-        await ListAdminTicketsQueryHandler(repository).execute(
-            ListAdminTicketsQuery(limit=20)
-        )
-    ).items == [ticket]
+    admin_result = await ListAdminTicketsQueryHandler(repository).execute(
+        ListAdminTicketsQuery(limit=20, is_admin=True)
+    )
+    assert admin_result.is_ok
+    assert admin_result.value.items == [ticket]
     assert (
         await ListTicketMessagesQueryHandler(repository).execute(
             ListTicketMessagesQuery(ticket_id=ticket.id, limit=20)
         )
     ) == repository.message_page
+
+
+@pytest.mark.asyncio
+async def test_list_admin_tickets_forbids_a_non_admin_actor() -> None:
+    repository = FakeTicketRepository()
+
+    result = await ListAdminTicketsQueryHandler(repository).execute(
+        ListAdminTicketsQuery(limit=20, is_admin=False)
+    )
+
+    assert result.is_err
+    assert result.error.code == "FORBIDDEN"
 
 
 def test_support_cqrs_handlers_expose_execute_only() -> None:

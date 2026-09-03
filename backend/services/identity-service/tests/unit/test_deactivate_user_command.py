@@ -6,17 +6,18 @@ from application.deactivate_user import (
 )
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.events import Deactivated
+from domain.user import User
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
 
 async def _register(
     repository: FakeUserRepository, hasher: FakePasswordHasher, email: str
-):
-    result = await RegisterUserCommandHandler(repository, hasher).execute(
+) -> User:
+    await RegisterUserCommandHandler(repository, hasher).execute(
         RegisterUserCommand(email, "password1")
     )
-    return result.value
+    return repository.users[email]
 
 
 async def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
@@ -49,6 +50,6 @@ async def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -
     persisted = await repository.get_by_id(target.id)
     assert persisted is not None
     assert persisted.is_active is False
-    events = result.value.pull_events()
+    events = target.pull_events()
     assert len(events) == 1
     assert isinstance(events[0], Deactivated)

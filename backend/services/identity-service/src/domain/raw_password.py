@@ -22,8 +22,8 @@ class RawPassword(ValueObject):
     def create(cls, value: str) -> Result["RawPassword"]:
         error = _validate(value)
         if error is not None:
-            return Result.fail(error)
-        return Result.ok(cls(value))
+            return Result[RawPassword].fail(error)
+        return Result[RawPassword].ok(cls(value))
 
     def _equality_components(self) -> tuple[Any, ...]:
         return (self.value,)

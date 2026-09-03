@@ -1,7 +1,6 @@
 import uuid
-from datetime import datetime
 
-from fastapi import Query
+from fastapi import Query, UploadFile
 from kernel_platform.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -15,15 +14,26 @@ from application.commands import (
     CreateProductCommand,
     DeactivateProductCommand,
     DeleteProductCommand,
+    DeleteProductImageCommand,
     UpdateProductCommand,
+    UpsertProductImageCommand,
 )
 from application.errors import (
+    ProductImageTooLargeError,
+    ProductImageUnsupportedMediaTypeError,
     ProductListCursorConflictError,
     ProductListInvalidCursorError,
 )
-from application.image_dto import ProductImageView
 from application.ports import Actor
-from application.queries import GetProductAuditQuery, GetProductQuery, ListProductsQuery
+from application.queries import (
+    GetProductAuditQuery,
+    GetProductImageQuery,
+    GetProductQuery,
+    ListProductsQuery,
+)
+
+_ALLOWED_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+_MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
 class ProductCreateRequest(BaseModel):
@@ -126,10 +136,50 @@ class ProductAuditRequest(BaseModel):
         return GetProductAuditQuery(product_id=self.product_id, actor=actor)
 
 
-class ProductImageResponse(BaseModel):
-    image_url: str
-    updated_at: datetime
+class ProductImageGetRequest(BaseModel):
+    """Path-bound — без JSON body, `product_id` приходит из URL."""
 
-    @classmethod
-    def from_view(cls, view: ProductImageView) -> "ProductImageResponse":
-        return cls(image_url=view.image_url, updated_at=view.updated_at)
+    product_id: uuid.UUID
+
+    def to_query(self, *, actor: Actor | None) -> GetProductImageQuery:
+        return GetProductImageQuery(product_id=self.product_id, actor=actor)
+
+
+class ProductImageDeleteRequest(BaseModel):
+    """Path-bound — без JSON body, `product_id` приходит из URL."""
+
+    product_id: uuid.UUID
+
+    def to_command(self, *, actor: Actor) -> DeleteProductImageCommand:
+        return DeleteProductImageCommand(product_id=self.product_id, actor=actor)
+
+
+class ProductImageUploadRequest(BaseModel):
+    """Path-bound — `product_id` приходит из URL; сам multipart-файл не
+    Pydantic-поле (FastAPI требует `UploadFile` отдельным параметром роута),
+    но вся его транспортная валидация (тип, размер) всё равно инкапсулирована
+    здесь, а не в роутере."""
+
+    product_id: uuid.UUID
+
+    async def to_command(
+        self, *, file: UploadFile, actor: Actor
+    ) -> UpsertProductImageCommand:
+        if file.content_type not in _ALLOWED_IMAGE_CONTENT_TYPES:
+            raise ProductImageUnsupportedMediaTypeError
+        body = await file.read(_MAX_IMAGE_SIZE + 1)
+        if len(body) > _MAX_IMAGE_SIZE:
+            raise ProductImageTooLargeError
+        return UpsertProductImageCommand(
+            product_id=self.product_id,
+            actor=actor,
+            body=body,
+            content_type=file.content_type,
+        )
+
+    def to_query(self, *, actor: Actor) -> GetProductImageQuery:
+        """Builds the follow-up read-side query for the same `product_id` —
+        the router re-reads the View through `GetProductImageQueryHandler`
+        after the upsert commits (command/query separation, see
+        `product_images.py`)."""
+        return GetProductImageQuery(product_id=self.product_id, actor=actor)

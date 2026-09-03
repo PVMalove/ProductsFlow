@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.authorization import ProductAuthorizer
 from application.commands.upsert_product_image import SEED_KEY_PREFIX
 from application.errors import ProductImageNotFoundError, ProductNotFoundError
@@ -45,7 +47,7 @@ class DeleteProductImageCommandHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def execute(self, command: DeleteProductImageCommand) -> None:
+    async def execute(self, command: DeleteProductImageCommand) -> Result[None]:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError
@@ -59,3 +61,4 @@ class DeleteProductImageCommandHandler:
         )
         if not image.s3_key.startswith(SEED_KEY_PREFIX):
             await self._storage.delete_object(self._bucket_name, image.s3_key)
+        return Result[None].ok(None)

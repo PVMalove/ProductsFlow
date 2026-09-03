@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.errors import ProductImageNotFoundError, ProductNotFoundError
 from application.image_dto import ProductImageView
 from application.ports import (
@@ -49,7 +51,7 @@ class GetProductImageQueryHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def execute(self, query: GetProductImageQuery) -> ProductImageView:
+    async def execute(self, query: GetProductImageQuery) -> Result[ProductImageView]:
         result = await self._product_reader.execute(
             GetProductQuery(product_id=query.product_id, actor=query.actor)
         )
@@ -59,9 +61,11 @@ class GetProductImageQueryHandler:
         image = await self._repository.get_product_image(ProductId(product.id))
         if image is None:
             raise ProductImageNotFoundError
-        return ProductImageView(
-            image_url=await self._storage.build_presigned_url(
-                self._bucket_name, image.s3_key
-            ),
-            updated_at=image.updated_at,
+        return Result[ProductImageView].ok(
+            ProductImageView(
+                image_url=await self._storage.build_presigned_url(
+                    self._bucket_name, image.s3_key
+                ),
+                updated_at=image.updated_at,
+            )
         )

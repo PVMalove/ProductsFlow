@@ -17,24 +17,40 @@ from application.commands import (
 )
 from core.settings import settings
 from infrastructure.db.ticket_repository import TicketRepository
+from infrastructure.db.user_projection import upsert_user_projection
 
 logger = logging.getLogger(__name__)
 
 USER_DELETED_EVENT = "user.deleted.v1"
-USER_EVENTS_QUEUE = "support-service.user-events"
-IGNORED_USER_EVENTS = frozenset(
+SUPPORTED_USER_EVENT_TYPES = frozenset(
     {
         "user.registered.v1",
         "user.activated.v1",
         "user.deactivated.v1",
         "user.role_changed.v1",
+        USER_DELETED_EVENT,
     }
 )
 
 
 @dataclass(frozen=True)
+class UserEventSnapshot:
+    user_id: uuid.UUID
+    role: str | None
+    is_active: bool | None
+    deleted: bool | None
+
+
+@dataclass(frozen=True)
 class DeletedUserEvent:
     user_id: uuid.UUID
+
+
+def _event_type(message: AbstractIncomingMessage) -> str:
+    event_type = message.type or message.routing_key
+    if event_type not in SUPPORTED_USER_EVENT_TYPES:
+        raise ValueError(f"Unsupported user event type: {event_type!r}")
+    return event_type
 
 
 def _message_id(message: AbstractIncomingMessage) -> int:
@@ -48,50 +64,116 @@ def _message_id(message: AbstractIncomingMessage) -> int:
     return message_id
 
 
-def _parse_deleted_user_event(message: AbstractIncomingMessage) -> DeletedUserEvent:
-    event_type = message.type or message.routing_key
-    # The shared retry ladder republishes through the default exchange and
-    # preserves the body but not the AMQP type, so a retry returns with the
-    # service queue as its routing key. This queue only handles deletion
-    # events, therefore that routing key remains an unambiguous signal here.
-    if event_type not in {USER_DELETED_EVENT, USER_EVENTS_QUEUE}:
-        raise ValueError(f"Unsupported user event type: {event_type!r}")
-    try:
-        payload: object = json.loads(message.body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("User deletion payload is not valid JSON") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("User deletion payload must be a JSON object")
-
+def _user_id_from_payload(payload: dict[str, object]) -> uuid.UUID:
     raw_user_id = payload.get("user_id", payload.get("id"))
     try:
-        user_id = uuid.UUID(str(raw_user_id))
+        return uuid.UUID(str(raw_user_id))
     except (AttributeError, ValueError) as exc:
         raise ValueError(f"Invalid user id: {raw_user_id!r}") from exc
-    return DeletedUserEvent(user_id)
+
+
+def _parse_deleted_user_event(message: AbstractIncomingMessage) -> DeletedUserEvent:
+    payload = _decode_payload(message.body)
+    return DeletedUserEvent(_user_id_from_payload(payload))
+
+
+def _decode_payload(body: bytes) -> dict[str, object]:
+    try:
+        payload: object = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("User event payload is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("User event payload must be a JSON object")
+    return payload
+
+
+def _parse_user_event_snapshot(event_type: str, body: bytes) -> UserEventSnapshot:
+    payload = _decode_payload(body)
+    user_id = _user_id_from_payload(payload)
+
+    role = payload.get("role", payload.get("new_role"))
+    if role is not None and (not isinstance(role, str) or not role):
+        raise ValueError("User event role must be a non-empty string")
+
+    is_active = payload.get("is_active")
+    if is_active is not None and not isinstance(is_active, bool):
+        raise ValueError("User event is_active must be boolean")
+
+    deleted: bool | None = None
+    if event_type == "user.registered.v1":
+        role = "user" if role is None else role
+        is_active = True if is_active is None else is_active
+        deleted = False
+    elif event_type == "user.activated.v1":
+        is_active = True
+    elif event_type == "user.deactivated.v1":
+        is_active = False
+    elif event_type == "user.role_changed.v1" and role is None:
+        raise ValueError("Role-changed event must contain role")
+    elif event_type == USER_DELETED_EVENT:
+        is_active = False
+        deleted = True
+
+    return UserEventSnapshot(user_id, role, is_active, deleted)
+
+
+async def _apply_projection(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    event_type: str,
+    message_id: int,
+    body: bytes,
+) -> UserEventSnapshot:
+    """Idempotent, ordered projection upsert (ADR 0033) — safe to retry on
+    its own merits via `last_applied_outbox_id`, independent of the
+    message-id inbox that guards ticket anonymization below."""
+    snapshot = _parse_user_event_snapshot(event_type, body)
+    async with session_factory() as session:
+        await upsert_user_projection(
+            session,
+            user_id=snapshot.user_id,
+            role=snapshot.role,
+            is_active=snapshot.is_active,
+            deleted=snapshot.deleted,
+            last_applied_outbox_id=message_id,
+            commit=True,
+        )
+    return snapshot
 
 
 async def handle_user_event(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    """Process one identity deletion delivery through the local inbox."""
-    event_type = message.type or message.routing_key
-    if event_type in IGNORED_USER_EVENTS:
-        logger.info("support-worker: ignoring %s", event_type)
-        return
+    """Apply one identity user event to the local projection and, for a
+    deletion, additionally anonymize the caller's tickets through the
+    existing message-id inbox (ADR 0033)."""
+    event_type = _event_type(message)
     message_id = _message_id(message)
-    event = _parse_deleted_user_event(message)
+
+    snapshot = await _apply_projection(
+        session_factory, event_type=event_type, message_id=message_id, body=message.body
+    )
+    logger.info(
+        "support-worker: applied %s for user %s at outbox version %s",
+        event_type,
+        snapshot.user_id,
+        message_id,
+    )
+
+    if event_type != USER_DELETED_EVENT:
+        return
+
     async with session_factory() as session:
         processed = await ProcessUserDeletionCommandHandler(
             TicketRepository(session)
         ).execute(
-            ProcessUserDeletionCommand(message_id=message_id, user_id=event.user_id)
+            ProcessUserDeletionCommand(message_id=message_id, user_id=snapshot.user_id)
         )
     logger.info(
-        "support-worker: %s user %s (message %s)",
+        "support-worker: %s ticket anonymization for user %s (message %s)",
         "applied" if processed else "skipped duplicate",
-        event.user_id,
+        snapshot.user_id,
         message_id,
     )
 
@@ -106,7 +188,7 @@ def build_user_event_handler(
 
 
 async def main() -> None:
-    """Run Support's user-deletion consumer."""
+    """Run Support's user-event projection and deletion consumer."""
     if not settings.support_database_url:
         raise RuntimeError("SUPPORT_DATABASE_URL must be configured")
     engine = create_async_engine(settings.support_database_url)
