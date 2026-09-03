@@ -55,7 +55,9 @@ def test_match_page_splits_items_into_data_and_page_info_into_meta() -> None:
     page_info = PageInfo(
         next_cursor="n", prev_cursor=None, has_more=True, has_prev=False
     )
-    result: Result[Page[int]] = Result[Page[int]].ok(Page(items=[1, 2], page_info=page_info))
+    result: Result[Page[int]] = Result[Page[int]].ok(
+        Page(items=[1, 2], page_info=page_info)
+    )
 
     response = match_page(result)
 
