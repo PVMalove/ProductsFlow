@@ -1,6 +1,13 @@
 import uuid
 from datetime import datetime
 
+from fastapi import Query
+from kernel_platform.pagination import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    InvalidCursorError,
+    decode_cursor,
+)
 from pydantic import BaseModel
 
 from application.commands import (
@@ -10,11 +17,13 @@ from application.commands import (
     DeleteProductCommand,
     UpdateProductCommand,
 )
+from application.errors import (
+    ProductListCursorConflictError,
+    ProductListInvalidCursorError,
+)
 from application.image_dto import ProductImageView
 from application.ports import Actor, ProductAuditAction, ProductAuditEntry
-from application.queries import GetProductQuery
-from domain.product import Product
-from domain.repositories import PageInfo, ProductPage
+from application.queries import GetProductQuery, ListProductsQuery
 
 
 class ProductCreateRequest(BaseModel):
@@ -85,53 +94,26 @@ class ProductGetRequest(BaseModel):
         return GetProductQuery(product_id=self.product_id, actor=actor)
 
 
-class ProductResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    description: str
-    price: float
-    category: str
-    user_id: uuid.UUID
-    is_active: bool
+class ProductListRequest(BaseModel):
+    """Query-bound — без path/body, `limit`/`after`/`before` приходят из
+    query-строки (issue #221)."""
 
-    @classmethod
-    def from_domain(cls, product: Product) -> "ProductResponse":
-        return cls(
-            id=product.id.value,
-            name=product.name,
-            description=product.description,
-            price=product.price,
-            category=product.category,
-            user_id=product.user_id,
-            is_active=product.is_active,
-        )
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
 
-
-class PageInfoResponse(BaseModel):
-    next_cursor: str | None
-    prev_cursor: str | None
-    has_more: bool
-    has_prev: bool
-
-    @classmethod
-    def from_domain(cls, page_info: PageInfo) -> "PageInfoResponse":
-        return cls(
-            next_cursor=page_info.next_cursor,
-            prev_cursor=page_info.prev_cursor,
-            has_more=page_info.has_more,
-            has_prev=page_info.has_prev,
-        )
-
-
-class ProductListResponse(BaseModel):
-    items: list[ProductResponse]
-    page_info: PageInfoResponse
-
-    @classmethod
-    def from_domain(cls, page: ProductPage) -> "ProductListResponse":
-        return cls(
-            items=[ProductResponse.from_domain(item) for item in page.items],
-            page_info=PageInfoResponse.from_domain(page.page_info),
+    def to_query(self) -> ListProductsQuery:
+        if self.after is not None and self.before is not None:
+            raise ProductListCursorConflictError
+        try:
+            after_cursor = decode_cursor(self.after) if self.after is not None else None
+            before_cursor = (
+                decode_cursor(self.before) if self.before is not None else None
+            )
+        except InvalidCursorError as exc:
+            raise ProductListInvalidCursorError from exc
+        return ListProductsQuery(
+            limit=self.limit, after=after_cursor, before=before_cursor
         )
 
 

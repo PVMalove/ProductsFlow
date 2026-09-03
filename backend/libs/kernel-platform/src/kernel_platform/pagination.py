@@ -41,6 +41,16 @@ class PageInfo:
     has_prev: bool
 
 
+@dataclass(frozen=True)
+class Page[T]:
+    """Транспортно-независимая страница: элементы плюс их `PageInfo` —
+    то, что list-хэндлеры возвращают через `Result`, а `match_page`
+    разворачивает в `data`/`meta` BFF-конверта (issue #221, ADR 0031)."""
+
+    items: list[T]
+    page_info: PageInfo
+
+
 def encode_cursor(created_at: datetime, entity_id: uuid.UUID) -> str:
     """Кодирует keyset-позицию в непрозрачный курсор.
 
