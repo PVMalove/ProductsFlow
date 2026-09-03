@@ -4,7 +4,7 @@
 import uuid
 from dataclasses import dataclass
 
-from application.errors import ProductImageNotFoundError
+from application.errors import ProductImageNotFoundError, ProductNotFoundError
 from application.image_dto import ProductImageView
 from application.ports import (
     Actor,
@@ -14,6 +14,7 @@ from application.ports import (
     ProductQueryPort,
 )
 from application.queries.get_product import GetProductQuery, GetProductQueryHandler
+from domain.product_id import ProductId
 
 
 @dataclass(frozen=True)
@@ -49,10 +50,13 @@ class GetProductImageQueryHandler:
         self._bucket_name = bucket_name
 
     async def execute(self, query: GetProductImageQuery) -> ProductImageView:
-        product = await self._product_reader.execute(
+        result = await self._product_reader.execute(
             GetProductQuery(product_id=query.product_id, actor=query.actor)
         )
-        image = await self._repository.get_product_image(product.id)
+        if result.is_err:
+            raise ProductNotFoundError
+        product = result.value
+        image = await self._repository.get_product_image(ProductId(product.id))
         if image is None:
             raise ProductImageNotFoundError
         return ProductImageView(

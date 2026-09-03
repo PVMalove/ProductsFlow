@@ -174,6 +174,9 @@ async def test_get_unknown_product_returns_404(
 ) -> None:
     response = await catalog_client.get(f"/api/v1/products/{_UNKNOWN_PRODUCT_ID}")
     assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "PRODUCT_NOT_FOUND", "message": "Товар не найден"}
+    }
 
 
 async def test_get_active_product_is_visible_to_anonymous_viewer(
@@ -185,7 +188,9 @@ async def test_get_active_product_is_visible_to_anonymous_viewer(
     response = await catalog_client.get(f"/api/v1/products/{product['id']}")
 
     assert response.status_code == 200
-    assert response.json()["id"] == product["id"]
+    envelope = response.json()
+    assert envelope["meta"] == {}
+    assert envelope["data"]["id"] == product["id"]
 
 
 async def test_get_deactivated_product_is_hidden_from_anonymous_viewer(
@@ -200,6 +205,9 @@ async def test_get_deactivated_product_is_hidden_from_anonymous_viewer(
     response = await catalog_client.get(f"/api/v1/products/{product['id']}")
 
     assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "PRODUCT_NOT_FOUND", "message": "Товар не найден"}
+    }
 
 
 async def test_get_deactivated_product_is_visible_to_its_owner(
@@ -216,7 +224,7 @@ async def test_get_deactivated_product_is_visible_to_its_owner(
     )
 
     assert response.status_code == 200
-    assert response.json()["is_active"] is False
+    assert response.json()["data"]["is_active"] is False
 
 
 async def test_get_deactivated_product_is_visible_to_an_admin(
@@ -234,6 +242,9 @@ async def test_get_deactivated_product_is_visible_to_an_admin(
     )
 
     assert response.status_code == 200
+    envelope = response.json()
+    assert envelope["meta"] == {}
+    assert envelope["data"]["is_active"] is False
 
 
 async def test_get_product_is_hidden_when_its_owner_is_deactivated(
@@ -261,6 +272,9 @@ async def test_get_product_is_hidden_when_its_owner_is_deactivated(
     )
 
     assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "PRODUCT_NOT_FOUND", "message": "Товар не найден"}
+    }
 
 
 # --- Списки (stories 9, 10) ------------------------------------------------

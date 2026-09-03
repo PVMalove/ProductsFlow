@@ -12,6 +12,7 @@ from application.commands import (
 )
 from application.image_dto import ProductImageView
 from application.ports import Actor, ProductAuditAction, ProductAuditEntry
+from application.queries import GetProductQuery
 from domain.product import Product
 from domain.repositories import PageInfo, ProductPage
 
@@ -73,6 +74,15 @@ class ProductDeleteRequest(BaseModel):
 
     def to_command(self, *, actor: Actor) -> DeleteProductCommand:
         return DeleteProductCommand(product_id=self.product_id, actor=actor)
+
+
+class ProductGetRequest(BaseModel):
+    """Path-bound — без JSON body, `product_id` приходит из URL."""
+
+    product_id: uuid.UUID
+
+    def to_query(self, *, actor: Actor | None) -> GetProductQuery:
+        return GetProductQuery(product_id=self.product_id, actor=actor)
 
 
 class ProductResponse(BaseModel):

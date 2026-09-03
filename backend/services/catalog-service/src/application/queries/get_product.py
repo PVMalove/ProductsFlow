@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.authorization import ProductAuthorizer
 from application.errors import ProductNotFoundError
 from application.ports import (
@@ -12,7 +14,7 @@ from application.ports import (
     OwnerQueryPort,
     ProductQueryPort,
 )
-from domain.product import Product
+from contracts.product import ProductView
 from domain.product_id import ProductId
 from domain.viewer import Viewer
 from domain.visibility import ProductVisibilityPolicy
@@ -61,12 +63,12 @@ class GetProductQueryHandler:
         self._authorizer = ProductAuthorizer(identity)
         self._visibility = ProductVisibilityPolicy()
 
-    async def execute(self, query: GetProductQuery) -> Product:
+    async def execute(self, query: GetProductQuery) -> Result[ProductView]:
         """
         Выполняет запрос на получение товара.
 
         @param query — DTO запроса (GetProductQuery), содержащий ID товара и информацию о пользователе.
-        @return — Найденная сущность товара (Product).
+        @return — Транспортно-независимый контракт товара (Result[ProductView]).
         @raises ProductNotFoundError — если товар не найден или недоступен для текущего пользователя.
         """
         product = await self._repository.get_by_id(ProductId(query.product_id))
@@ -74,7 +76,7 @@ class GetProductQueryHandler:
             raise ProductNotFoundError
 
         if query.actor is not None and query.actor.user_id == product.user_id:
-            return product
+            return Result.ok(ProductView.from_domain(product))
 
         owner = await self._owner_read_model.get(product.user_id)
         viewer = Viewer(
@@ -86,8 +88,8 @@ class GetProductQueryHandler:
             and owner.is_active
             and self._visibility.is_visible(viewer, product)
         ):
-            return product
+            return Result.ok(ProductView.from_domain(product))
 
         if query.actor is not None and await self._authorizer.is_admin(query.actor):
-            return product
+            return Result.ok(ProductView.from_domain(product))
         raise ProductNotFoundError
