@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.authorization import ProductAuthorizer
 from application.errors import ProductAccessDeniedError, ProductNotFoundError
 from application.ports import (
@@ -43,7 +45,9 @@ class GetProductAuditQueryHandler:
         self._audit_reader = audit_reader
         self._authorizer = ProductAuthorizer(identity)
 
-    async def execute(self, query: GetProductAuditQuery) -> list[ProductAuditEntry]:
+    async def execute(
+        self, query: GetProductAuditQuery
+    ) -> Result[list[ProductAuditEntry]]:
         product = await self._repository.get_by_id(ProductId(query.product_id))
         entries = await self._audit_reader.get_by_product(query.product_id)
 
@@ -53,4 +57,4 @@ class GetProductAuditQueryHandler:
             raise ProductAccessDeniedError
         elif not entries:
             raise ProductNotFoundError
-        return entries
+        return Result.ok(entries)

@@ -22,8 +22,8 @@ from application.errors import (
     ProductListInvalidCursorError,
 )
 from application.image_dto import ProductImageView
-from application.ports import Actor, ProductAuditAction, ProductAuditEntry
-from application.queries import GetProductQuery, ListProductsQuery
+from application.ports import Actor
+from application.queries import GetProductAuditQuery, GetProductQuery, ListProductsQuery
 
 
 class ProductCreateRequest(BaseModel):
@@ -117,24 +117,13 @@ class ProductListRequest(BaseModel):
         )
 
 
-class ProductAuditLogResponse(BaseModel):
-    id: int
-    product_id: uuid.UUID
-    actor_user_id: uuid.UUID | None
-    action: ProductAuditAction
-    description: str
-    created_at: datetime
+class ProductAuditRequest(BaseModel):
+    """Path-bound — без JSON body, `product_id` приходит из URL."""
 
-    @classmethod
-    def from_entry(cls, row: ProductAuditEntry) -> "ProductAuditLogResponse":
-        return cls(
-            id=row.id,
-            product_id=row.product_id,
-            actor_user_id=row.actor_user_id,
-            action=row.action,
-            description=row.description,
-            created_at=row.created_at,
-        )
+    product_id: uuid.UUID
+
+    def to_query(self, *, actor: Actor) -> GetProductAuditQuery:
+        return GetProductAuditQuery(product_id=self.product_id, actor=actor)
 
 
 class ProductImageResponse(BaseModel):

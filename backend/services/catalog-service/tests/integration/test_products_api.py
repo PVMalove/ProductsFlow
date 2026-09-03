@@ -550,7 +550,10 @@ async def test_audit_log_is_visible_to_the_owner(
     )
 
     assert response.status_code == 200
-    actions = [entry["action"] for entry in response.json()]
+    envelope = response.json()
+    assert set(envelope.keys()) == {"data", "meta"}
+    assert envelope["meta"] == {}
+    actions = [entry["action"] for entry in envelope["data"]]
     assert "created" in actions
     assert "deactivated" in actions
 
@@ -584,7 +587,9 @@ async def test_audit_log_survives_product_deletion_for_an_admin(
     )
 
     assert response.status_code == 200
-    actions = [entry["action"] for entry in response.json()]
+    envelope = response.json()
+    assert envelope["meta"] == {}
+    actions = [entry["action"] for entry in envelope["data"]]
     assert "deleted" in actions
 
 
