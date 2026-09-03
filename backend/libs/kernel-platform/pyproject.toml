@@ -25,7 +25,7 @@ dependencies = [
 # path-зависимость на соседний пакет монорепо (ADR 0020) — editable в
 # dev-окружении, --no-editable при сборке production-образа.
 [tool.uv.sources]
-kernel-domain = { path = "../kernel-domain", editable = true }
+kernel-domain = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

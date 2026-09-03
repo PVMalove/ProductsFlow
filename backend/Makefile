@@ -28,22 +28,22 @@ architecture-check: ## Проверить направление зависим�
 # libs/observability, этот флаг создаёт второе имя модуля
 # (libs.observability.src.*) наряду с именем editable-инсталляции.
 check: _require-pkg ## Прогнать все линтеры на пакете (make check pkg=<member>) — своё изолированное окружение
-	uv --project $(member_dir) sync
-	uv run --project $(member_dir) ruff check $(member_dir)
-	uv run --project $(member_dir) mypy --cache-dir $(member_dir)/.mypy_cache $(member_dir)
-	uv run --project $(member_dir) ruff format --check $(member_dir)
-	uv run --project $(member_dir) vulture whitelist.py $(member_dir)
+	cd $(member_dir) && uv sync --all-packages
+	cd $(member_dir) && uv run ruff check .
+	cd $(member_dir) && uv run mypy --cache-dir .mypy_cache .
+	cd $(member_dir) && uv run ruff format --check .
+	cd $(member_dir) && uv run vulture ../../whitelist.py .
 
 format: _require-pkg ## Автоформатирование кода пакета (ruff format + ruff check --fix)
-	uv --project $(member_dir) sync
-	uv run --project $(member_dir) ruff format $(member_dir)
-	uv run --project $(member_dir) ruff check --fix $(member_dir)
+	cd $(member_dir) && uv sync --all-packages
+	cd $(member_dir) && uv run ruff format .
+	cd $(member_dir) && uv run ruff check --fix .
 
 lint: format check ## Сначала отформатировать, затем проверить (format + check)
 
 test: _require-pkg ## Прогнать тесты пакета (make test pkg=<member>)
-	uv --project $(member_dir) sync
-	uv run --project $(member_dir) pytest $(member_dir)
+	cd $(member_dir) && uv sync --all-packages
+	cd $(member_dir) && uv run pytest .
 
 build: ## Пересобрать образы docker compose (make build service=identity-api)
 	docker compose build $(service)

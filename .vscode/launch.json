@@ -6,10 +6,38 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["api.main:app", "--reload", "--port", "8000"],
+      "args": ["api.main:app", "--reload", "--port", "9011"],
       "cwd": "${workspaceFolder}/backend/services/catalog-service",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/backend/services/catalog-service/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "subProcess": true
+    },
+    {
+      "name": "Identity service: uvicorn reload",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["api.main:app", "--reload", "--port", "9010"],
+      "cwd": "${workspaceFolder}/backend/services/identity-service",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/backend/services/identity-service/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "subProcess": true
+    },
+    {
+      "name": "Support service: uvicorn reload",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["api.main:app", "--reload", "--port", "9012"],
+      "cwd": "${workspaceFolder}/backend/services/support-service",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/backend/services/support-service/src"
       },
       "console": "integratedTerminal",
       "justMyCode": false,

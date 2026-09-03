@@ -1,9 +1,13 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "ProductsFlow backend — общий [tool.ruff]/[tool.mypy]-конфиг для пакетов с изолированными окружениями (ADR 0020); каждый пакет в libs/*, services/* синхронизируется и запускается отдельным `uv sync`/`uv run` в своей директории, без общего uv-workspace."
+description = "ProductsFlow backend workspace"
 requires-python = ">=3.14"
 dependencies = []
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
 
 [tool.ruff]
 line-length = 88
