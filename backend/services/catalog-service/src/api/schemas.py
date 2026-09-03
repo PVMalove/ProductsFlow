@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from fastapi import Query
 from kernel_platform.pagination import (
@@ -21,7 +20,6 @@ from application.errors import (
     ProductListCursorConflictError,
     ProductListInvalidCursorError,
 )
-from application.image_dto import ProductImageView
 from application.ports import Actor
 from application.queries import GetProductAuditQuery, GetProductQuery, ListProductsQuery
 
@@ -124,12 +122,3 @@ class ProductAuditRequest(BaseModel):
 
     def to_query(self, *, actor: Actor) -> GetProductAuditQuery:
         return GetProductAuditQuery(product_id=self.product_id, actor=actor)
-
-
-class ProductImageResponse(BaseModel):
-    image_url: str
-    updated_at: datetime
-
-    @classmethod
-    def from_view(cls, view: ProductImageView) -> "ProductImageResponse":
-        return cls(image_url=view.image_url, updated_at=view.updated_at)

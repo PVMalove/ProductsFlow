@@ -39,7 +39,9 @@ def _detail_result(result: Result[Ticket]) -> Result[TicketDetailView]:
     if result.is_err:
         return Result[TicketDetailView].fail(result.error)
     ticket = result.value
-    return Result[TicketDetailView].ok(TicketDetailView.from_domain(ticket, ticket.messages))
+    return Result[TicketDetailView].ok(
+        TicketDetailView.from_domain(ticket, ticket.messages)
+    )
 
 
 def _view_result(result: Result[Ticket]) -> Result[TicketView]:

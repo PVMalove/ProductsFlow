@@ -28,3 +28,12 @@ the catalog service image (ADR 0010). It declares the `catalog.user-events`
 topology through `kernel-platform`, consumes the four supported `user.*.v1`
 events (including the sparse payloads emitted by the current identity domain),
 and applies each owner snapshot with the inbox/version guards from ADR 0019.
+
+`api/product_images.py` (ADR 0033) wraps `ProductImageView` in the shared
+`ApiResponse` envelope and returns `200` with `data: null` for its `DELETE`,
+matching the rest of the catalog `products` API since ADR 0031. The upload
+endpoint still calls `UpsertProductImageCommandHandler` and then
+`GetProductImageQueryHandler` as two separate handler calls — not the
+router-orchestration ADR 0033 forbids elsewhere, since `ProductImageMutation`
+deliberately carries only `replaced: bool` and never a query-side View
+(command/query separation this codebase already tests for).

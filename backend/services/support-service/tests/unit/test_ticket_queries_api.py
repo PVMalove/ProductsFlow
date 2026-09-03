@@ -119,7 +119,9 @@ def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
     class FakeHandler:
         async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
             assert query.is_admin is True
-            return Result[TicketPage].ok(TicketPage([], PageInfo(None, None, False, False)))
+            return Result[TicketPage].ok(
+                TicketPage([], PageInfo(None, None, False, False))
+            )
 
     app.dependency_overrides[get_current_actor] = lambda: _actor(
         uuid.uuid4(), admin=True
