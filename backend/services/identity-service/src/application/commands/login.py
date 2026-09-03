@@ -36,7 +36,7 @@ class LoginCommandHandler:
         try:
             email = Email(command.email)
         except ValueError:
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="invalid_credentials",
                     description="Неверный email или пароль",
@@ -47,7 +47,7 @@ class LoginCommandHandler:
         if user is None or not self._password_hasher.verify(
             command.password, user.password_hash
         ):
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="invalid_credentials",
                     description="Неверный email или пароль",
@@ -55,11 +55,11 @@ class LoginCommandHandler:
                 )
             )
         if not user.is_active:
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="user_deactivated",
                     description="Пользователь деактивирован",
                     type=ErrorType.FORBIDDEN,
                 )
             )
-        return Result.ok(user)
+        return Result[User].ok(user)

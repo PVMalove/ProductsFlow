@@ -26,7 +26,7 @@ class DeactivateUserCommandHandler:
 
     async def execute(self, command: DeactivateUserCommand) -> Result[User]:
         if command.target_user_id == command.actor_user_id:
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="cannot_deactivate_self",
                     description="Пользователь не может деактивировать самого себя",
@@ -35,7 +35,7 @@ class DeactivateUserCommandHandler:
             )
         user = await self._users.get_by_id(command.target_user_id)
         if user is None:
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="user_not_found",
                     description="Пользователь не найден",
@@ -44,9 +44,9 @@ class DeactivateUserCommandHandler:
             )
         result = user.deactivate()
         if result.is_err:
-            return Result.fail(result.error)
+            return Result[User].fail(result.error)
         await self._users.save(user)
-        return Result.ok(user)
+        return Result[User].ok(user)
 
 
 __all__ = [

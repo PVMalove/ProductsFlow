@@ -30,4 +30,4 @@ class CreateTicketCommandHandler:
             first_message=command.first_message,
         )
         created = await self._repository.create(ticket)
-        return Result.ok(created)
+        return Result[Ticket].ok(created)

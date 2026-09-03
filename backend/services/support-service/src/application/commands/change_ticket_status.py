@@ -30,7 +30,7 @@ class ChangeTicketStatusCommandHandler:
 
     async def execute(self, command: ChangeTicketStatusCommand) -> Result[Ticket]:
         if not command.is_admin:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="FORBIDDEN",
                     description="Доступ только для администраторов!",
@@ -44,7 +44,7 @@ class ChangeTicketStatusCommandHandler:
                 status=command.status,
             )
         except TicketClosedError:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_CLOSED",
                     description="Закрытый тикет нельзя изменять",
@@ -52,7 +52,7 @@ class ChangeTicketStatusCommandHandler:
                 )
             )
         except InvalidStatusTransitionError:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="INVALID_STATUS_TRANSITION",
                     description="Недопустимый переход статуса тикета",
@@ -60,11 +60,11 @@ class ChangeTicketStatusCommandHandler:
                 )
             )
         if ticket is None:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(ticket)
+        return Result[Ticket].ok(ticket)

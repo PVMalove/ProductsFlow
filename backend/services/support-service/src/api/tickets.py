@@ -37,21 +37,21 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
 def _detail_result(result: Result[Ticket]) -> Result[TicketDetailView]:
     if result.is_err:
-        return Result.fail(result.error)
+        return Result[TicketDetailView].fail(result.error)
     ticket = result.value
-    return Result.ok(TicketDetailView.from_domain(ticket, ticket.messages))
+    return Result[TicketDetailView].ok(TicketDetailView.from_domain(ticket, ticket.messages))
 
 
 def _view_result(result: Result[Ticket]) -> Result[TicketView]:
     if result.is_err:
-        return Result.fail(result.error)
-    return Result.ok(TicketView.from_domain(result.value))
+        return Result[TicketView].fail(result.error)
+    return Result[TicketView].ok(TicketView.from_domain(result.value))
 
 
 def _null_result(result: Result[Ticket]) -> Result[None]:
     if result.is_err:
-        return Result.fail(result.error)
-    return Result.ok(None)
+        return Result[None].fail(result.error)
+    return Result[None].ok(None)
 
 
 def _unwrap[T](result: Result[T]) -> T:

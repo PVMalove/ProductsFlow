@@ -43,9 +43,9 @@ class GetUserAuditQueryHandler:
             page = await self._audit.list_all(
                 page_index=query.page_index, page_size=query.page_size
             )
-            return Result.ok(page)
+            return Result[UserAuditPage | list[UserAuditEntry]].ok(page)
         if await self._users.get_by_id(query.user_id) is None:
-            return Result.fail(
+            return Result[UserAuditPage | list[UserAuditEntry]].fail(
                 Error(
                     code="user_not_found",
                     description="Пользователь не найден",
@@ -53,4 +53,4 @@ class GetUserAuditQueryHandler:
                 )
             )
         entries = await self._audit.get_by_user(query.user_id)
-        return Result.ok(entries)
+        return Result[UserAuditPage | list[UserAuditEntry]].ok(entries)

@@ -32,7 +32,7 @@ class AddTicketMessageCommandHandler:
                 is_admin=command.is_admin,
             )
         except TicketClosedError:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_CLOSED",
                     description="Закрытый тикет нельзя изменять",
@@ -40,11 +40,11 @@ class AddTicketMessageCommandHandler:
                 )
             )
         if ticket is None:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(ticket)
+        return Result[Ticket].ok(ticket)

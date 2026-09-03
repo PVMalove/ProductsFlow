@@ -57,4 +57,4 @@ class GetProductAuditQueryHandler:
             raise ProductAccessDeniedError
         elif not entries:
             raise ProductNotFoundError
-        return Result.ok(entries)
+        return Result[list[ProductAuditEntry]].ok(entries)

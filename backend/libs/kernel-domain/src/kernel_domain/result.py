@@ -5,7 +5,8 @@ from kernel_domain.errors import Error
 class Result[T]:
     """Явный успех/неудача без исключений на ожидаемых сбоях бизнес-логики
     . `Result` без параметра — то же самое с T как Any; отдельного
-    беззначенческого класса не заводим, `Result.ok(None)` покрывает void-кейс."""
+    беззначенческого класса не заводим, `Result[None].ok(None)` покрывает
+    void-кейс."""
 
     def __init__(self, *, value: T | None, error: Error | None, is_ok: bool) -> None:
         """Приватный конструктор объекта Result.

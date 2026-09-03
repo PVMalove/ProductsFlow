@@ -34,7 +34,7 @@ class ListAdminTicketsQueryHandler:
 
     async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
         if not query.is_admin:
-            return Result.fail(
+            return Result[TicketPage].fail(
                 Error(
                     code="FORBIDDEN",
                     description="Доступ только для администраторов!",
@@ -46,4 +46,4 @@ class ListAdminTicketsQueryHandler:
             after=query.after,
             before=query.before,
         )
-        return Result.ok(page)
+        return Result[TicketPage].ok(page)

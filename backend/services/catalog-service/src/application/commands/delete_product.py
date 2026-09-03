@@ -47,4 +47,4 @@ class DeleteProductCommandHandler:
         deleted = await self._repository.delete(product.id)
         if deleted is None:
             raise ProductNotFoundError
-        return Result.ok(None)
+        return Result[None].ok(None)

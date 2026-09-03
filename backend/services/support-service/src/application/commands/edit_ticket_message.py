@@ -38,7 +38,7 @@ class EditTicketMessageCommandHandler:
                 is_admin=command.is_admin,
             )
         except TicketMessageNotFoundError:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_MESSAGE_NOT_FOUND",
                     description="Тикет не найден",
@@ -50,7 +50,7 @@ class EditTicketMessageCommandHandler:
             TicketMessageImmutableError,
             TicketMessageAlreadyDeletedError,
         ):
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_MESSAGE_IMMUTABLE",
                     description="Сообщение нельзя изменить",
@@ -58,11 +58,11 @@ class EditTicketMessageCommandHandler:
                 )
             )
         if ticket is None:
-            return Result.fail(
+            return Result[Ticket].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(ticket)
+        return Result[Ticket].ok(ticket)

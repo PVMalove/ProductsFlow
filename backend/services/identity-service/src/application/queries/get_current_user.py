@@ -27,11 +27,11 @@ class GetCurrentUserHandler:
     async def execute(self, query: GetCurrentUserQuery) -> Result[UserView]:
         user = await self._users.get_by_id(query.user_id)
         if user is None:
-            return Result.fail(
+            return Result[UserView].fail(
                 Error(
                     code="user_not_found",
                     description="Пользователь не найден",
                     type=ErrorType.NOT_FOUND,
                 )
             )
-        return Result.ok(UserView.from_user(user))
+        return Result[UserView].ok(UserView.from_user(user))

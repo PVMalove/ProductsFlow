@@ -26,7 +26,7 @@ class ActivateUserCommandHandler:
     async def execute(self, command: ActivateUserCommand) -> Result[User]:
         user = await self._users.get_by_id(command.target_user_id)
         if user is None:
-            return Result.fail(
+            return Result[User].fail(
                 Error(
                     code="user_not_found",
                     description="Пользователь не найден",
@@ -35,6 +35,6 @@ class ActivateUserCommandHandler:
             )
         result = user.activate()
         if result.is_err:
-            return Result.fail(result.error)
+            return Result[User].fail(result.error)
         await self._users.save(user)
-        return Result.ok(user)
+        return Result[User].ok(user)

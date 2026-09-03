@@ -84,7 +84,7 @@ class Product(Entity[ProductId]):
     ) -> Result["Product"]:
         error = _validate(name=name, category=category, price=price)
         if error is not None:
-            return Result.fail(error)
+            return Result[Product].fail(error)
 
         product = cls(
             id,
@@ -104,7 +104,7 @@ class Product(Entity[ProductId]):
                 price=price,
             )
         )
-        return Result.ok(product)
+        return Result[Product].ok(product)
 
     def update(
         self,
@@ -123,7 +123,7 @@ class Product(Entity[ProductId]):
             price=price if price is not None else self.price,
         )
         if error is not None:
-            return Result.fail(error)
+            return Result[None].fail(error)
 
         if name is not None:
             self.name = name
@@ -135,11 +135,11 @@ class Product(Entity[ProductId]):
             self.category = category
 
         self.add_domain_event(ProductUpdated(product_id=self.id))
-        return Result.ok(None)
+        return Result[None].ok(None)
 
     def activate(self) -> Result[None]:
         if self.is_active:
-            return Result.fail(
+            return Result[None].fail(
                 Error(
                     code="already_active",
                     description="Товар уже активен",
@@ -149,11 +149,11 @@ class Product(Entity[ProductId]):
 
         self.is_active = True
         self.add_domain_event(ProductActivated(product_id=self.id))
-        return Result.ok(None)
+        return Result[None].ok(None)
 
     def deactivate(self) -> Result[None]:
         if not self.is_active:
-            return Result.fail(
+            return Result[None].fail(
                 Error(
                     code="already_deactivated",
                     description="Товар уже деактивирован",
@@ -163,7 +163,7 @@ class Product(Entity[ProductId]):
 
         self.is_active = False
         self.add_domain_event(ProductDeactivated(product_id=self.id))
-        return Result.ok(None)
+        return Result[None].ok(None)
 
     def mark_deleted(self) -> None:
         """Удаление — не переход состояния агрегата (строка просто исчезает

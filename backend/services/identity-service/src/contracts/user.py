@@ -33,5 +33,5 @@ def user_view_result(result: Result[User]) -> Result[UserView]:
     `Result[UserView]` — shared by `api/auth.py` and `api/users.py` so the
     conversion isn't duplicated per router."""
     if result.is_err:
-        return Result.fail(result.error)
-    return Result.ok(UserView.from_user(result.value))
+        return Result[UserView].fail(result.error)
+    return Result[UserView].ok(UserView.from_user(result.value))

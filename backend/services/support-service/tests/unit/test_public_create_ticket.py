@@ -38,7 +38,7 @@ def test_create_ticket_returns_created_resource() -> None:
 
     class FakeHandler:
         async def execute(self, command: CreateTicketCommand) -> Result[Ticket]:
-            return Result.ok(
+            return Result[Ticket].ok(
                 Ticket.create(
                     author_id=command.author_id,
                     subject=command.subject,

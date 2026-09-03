@@ -45,7 +45,7 @@ class GetTicketDetailQueryHandler:
             else await self._tickets.get_for_author(query.ticket_id, query.actor_id)
         )
         if ticket is None:
-            return Result.fail(
+            return Result[TicketDetail].fail(
                 Error(
                     code="TICKET_NOT_FOUND",
                     description="Тикет не найден",
@@ -58,7 +58,7 @@ class GetTicketDetailQueryHandler:
             after=query.after,
             before=query.before,
         )
-        return Result.ok(
+        return Result[TicketDetail].ok(
             TicketDetail(
                 view=TicketDetailView.from_domain(ticket, page.items),
                 messages_page_info=page.page_info,
