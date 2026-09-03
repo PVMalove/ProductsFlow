@@ -2,6 +2,7 @@
 """Application ports for the support command and query sides."""
 
 import uuid
+from dataclasses import dataclass
 from typing import Protocol
 
 from domain.repositories import Cursor, MessagePage, TicketPage
@@ -20,6 +21,25 @@ class UserDeletionPort(Protocol):
     async def process_user_deleted(
         self, *, message_id: int, user_id: uuid.UUID
     ) -> bool: ...
+
+
+@dataclass(frozen=True)
+class UserProjectionSnapshot:
+    """Local, event-driven copy of an identity User (ADR 0033) — support's
+    only source of `Actor` role/status, so BFF authentication never calls
+    identity synchronously per request."""
+
+    user_id: uuid.UUID
+    role: str
+    is_active: bool
+    deleted: bool
+    last_applied_outbox_id: int
+
+
+class UserProjectionPort(Protocol):
+    async def get(self, user_id: uuid.UUID) -> UserProjectionSnapshot | None: ...
+
+    async def upsert(self, snapshot: UserProjectionSnapshot) -> None: ...
 
 
 class TicketMutationPort(Protocol):
@@ -99,4 +119,6 @@ __all__ = [
     "TicketMutationPort",
     "TicketQueryPort",
     "UserDeletionPort",
+    "UserProjectionPort",
+    "UserProjectionSnapshot",
 ]

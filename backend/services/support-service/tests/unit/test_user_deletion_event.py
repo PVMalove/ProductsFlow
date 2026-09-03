@@ -4,7 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.worker import _message_id, _parse_deleted_user_event, handle_user_event
+from api.worker import (
+    _message_id,
+    _parse_deleted_user_event,
+    _parse_user_event_snapshot,
+)
 from application.commands import (
     ProcessUserDeletionCommand,
     ProcessUserDeletionCommandHandler,
@@ -74,12 +78,33 @@ async def test_user_deletion_handler_delegates_to_transactional_port() -> None:
     assert port.call == (7, user_id)
 
 
-@pytest.mark.asyncio
-async def test_worker_acks_other_valid_user_events_without_support_mutation() -> None:
-    await handle_user_event(
-        _message(  # type: ignore[arg-type]
-            body=json.dumps({"user_id": str(uuid.uuid4())}).encode(),
-            event_type="user.registered.v1",
-        ),
-        None,  # type: ignore[arg-type]
+def test_parse_user_event_snapshot_defaults_registered_role_and_active() -> None:
+    user_id = uuid.uuid4()
+
+    snapshot = _parse_user_event_snapshot(
+        "user.registered.v1", json.dumps({"user_id": str(user_id)}).encode()
     )
+
+    assert snapshot.user_id == user_id
+    assert snapshot.role == "user"
+    assert snapshot.is_active is True
+    assert snapshot.deleted is False
+
+
+def test_parse_user_event_snapshot_tombstones_a_deleted_user() -> None:
+    user_id = uuid.uuid4()
+
+    snapshot = _parse_user_event_snapshot(
+        "user.deleted.v1", json.dumps({"user_id": str(user_id)}).encode()
+    )
+
+    assert snapshot.is_active is False
+    assert snapshot.deleted is True
+
+
+def test_parse_user_event_snapshot_requires_role_on_role_changed() -> None:
+    with pytest.raises(ValueError):
+        _parse_user_event_snapshot(
+            "user.role_changed.v1",
+            json.dumps({"user_id": str(uuid.uuid4())}).encode(),
+        )

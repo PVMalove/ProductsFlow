@@ -10,6 +10,7 @@ from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from infrastructure.db import models as _models  # noqa: F401 — registers ORM tables
+from infrastructure.db import user_projection as _user_projection  # noqa: F401
 
 asyncio_session_loop = pytest.mark.asyncio(loop_scope="session")
 
@@ -19,10 +20,17 @@ _REVISION_FILES = [
     "0002_ticket_status_constraint.py",
     "0003_message_moderation.py",
     "0004_user_deletion_inbox.py",
+    "0005_user_projection.py",
 ]
 _REVISIONS = [run_path(str(_VERSIONS_DIR / name)) for name in _REVISION_FILES]
 
-_TABLES = ("processed_messages", "ticket_messages", "tickets", "outbox_messages")
+_TABLES = (
+    "processed_messages",
+    "ticket_messages",
+    "tickets",
+    "outbox_messages",
+    "user_projection",
+)
 
 
 def _run_revision(
