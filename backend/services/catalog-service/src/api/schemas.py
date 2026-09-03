@@ -176,3 +176,10 @@ class ProductImageUploadRequest(BaseModel):
             body=body,
             content_type=file.content_type,
         )
+
+    def to_query(self, *, actor: Actor) -> GetProductImageQuery:
+        """Builds the follow-up read-side query for the same `product_id` —
+        the router re-reads the View through `GetProductImageQueryHandler`
+        after the upsert commits (command/query separation, see
+        `product_images.py`)."""
+        return GetProductImageQuery(product_id=self.product_id, actor=actor)

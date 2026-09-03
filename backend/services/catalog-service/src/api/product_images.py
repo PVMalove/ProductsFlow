@@ -20,7 +20,6 @@ from api.schemas import (
     ProductImageUploadRequest,
 )
 from application.image_dto import ProductImageMutation, ProductImageView
-from application.queries import GetProductImageQuery
 
 router = APIRouter(prefix="/api/v1/products", tags=["product-images"])
 
@@ -72,7 +71,7 @@ async def upload_product_image(
     # response View comes from a second, read-side handler call, not from
     # collapsing the two into one.
     view_result: Result[ProductImageView] = await read_handler.execute(
-        GetProductImageQuery(product_id=request.product_id, actor=actor)
+        request.to_query(actor=actor)
     )
     return match_result(view_result)
 
