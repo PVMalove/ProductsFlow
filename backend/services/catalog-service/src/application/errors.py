@@ -63,3 +63,19 @@ class ProductListInvalidCursorError(ApplicationError):
     code = "PRODUCT_LIST_INVALID_CURSOR"
     message = "Некорректный курсор пагинации"
     status_code = HTTPStatus.BAD_REQUEST
+
+
+class ProductImageUnsupportedMediaTypeError(ApplicationError):
+    """An uploaded image's content type isn't one of the allowed formats."""
+
+    code = "PRODUCT_IMAGE_UNSUPPORTED_MEDIA_TYPE"
+    message = "Допустимы только JPEG, PNG, WEBP форматы"
+    status_code = HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+
+
+class ProductImageTooLargeError(ApplicationError):
+    """An uploaded image exceeds the maximum allowed size."""
+
+    code = "PRODUCT_IMAGE_TOO_LARGE"
+    message = "Файл больше 5 МБ"
+    status_code = HTTPStatus.REQUEST_ENTITY_TOO_LARGE

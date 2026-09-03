@@ -4,6 +4,8 @@
 import uuid
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
+
 from application.authorization import ProductAuthorizer
 from application.errors import ProductNotFoundError
 from application.image_dto import ProductImageMutation
@@ -50,7 +52,9 @@ class UpsertProductImageCommandHandler:
         self._storage = storage
         self._bucket_name = bucket_name
 
-    async def execute(self, command: UpsertProductImageCommand) -> ProductImageMutation:
+    async def execute(
+        self, command: UpsertProductImageCommand
+    ) -> Result[ProductImageMutation]:
         product = await self._repository.get_by_id(ProductId(command.product_id))
         if product is None:
             raise ProductNotFoundError
@@ -75,6 +79,6 @@ class UpsertProductImageCommandHandler:
         ):
             await self._storage.delete_object(self._bucket_name, existing.s3_key)
 
-        return ProductImageMutation(
-            replaced=existing is not None,
+        return Result[ProductImageMutation].ok(
+            ProductImageMutation(replaced=existing is not None)
         )
