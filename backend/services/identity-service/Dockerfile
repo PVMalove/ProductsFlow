@@ -1,25 +1,31 @@
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 WORKDIR /srv
 
-COPY libs/kernel-domain/pyproject.toml libs/kernel-domain/pyproject.toml
-COPY libs/kernel-platform/pyproject.toml libs/kernel-platform/pyproject.toml
-COPY libs/observability/pyproject.toml libs/observability/pyproject.toml
-COPY services/identity-service/pyproject.toml services/identity-service/uv.lock services/identity-service/
-WORKDIR /srv/services/identity-service
-RUN uv sync --locked --no-dev --no-install-project
+COPY pyproject.toml uv.lock ./
+COPY libs/kernel-domain/pyproject.toml libs/kernel-domain/
+COPY libs/kernel-platform/pyproject.toml libs/kernel-platform/
+COPY libs/observability/pyproject.toml libs/observability/
+COPY libs/test-support/pyproject.toml libs/test-support/
+COPY services/identity-service/pyproject.toml services/identity-service/
+COPY services/catalog-service/pyproject.toml services/catalog-service/
+COPY services/support-service/pyproject.toml services/support-service/
 
-COPY libs/kernel-platform/src /srv/libs/kernel-platform/src
-COPY libs/kernel-domain/src /srv/libs/kernel-domain/src
-COPY libs/observability/src /srv/libs/observability/src
-COPY services/identity-service/src /srv/services/identity-service/src
-RUN uv sync --locked --no-dev --no-editable
+RUN uv sync --package identity-service --locked --no-dev --no-install-project
+
+COPY libs/kernel-domain/src libs/kernel-domain/src
+COPY libs/kernel-platform/src libs/kernel-platform/src
+COPY libs/observability/src libs/observability/src
+COPY services/identity-service/src services/identity-service/src
+RUN uv sync --package identity-service --locked --no-dev
 
 FROM python:3.14-slim
 WORKDIR /srv
 
-COPY --from=builder /srv/services/identity-service/.venv /srv/services/identity-service/.venv
+COPY --from=builder /srv/.venv /srv/.venv
 COPY --from=builder /srv/services/identity-service/src/infrastructure/db /srv/infrastructure/db
-ENV PATH="/srv/services/identity-service/.venv/bin:$PATH"
+COPY --from=builder /srv/services/identity-service/src /srv/services/identity-service/src
+ENV PATH="/srv/.venv/bin:$PATH"
+ENV PYTHONPATH="/srv/services/identity-service/src"
 
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

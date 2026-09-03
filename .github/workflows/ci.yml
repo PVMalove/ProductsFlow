@@ -91,7 +91,7 @@ jobs:
       matrix:
         member: ${{ fromJSON(needs.changes.outputs.members) }}
     env:
-      PYTEST_ADDOPTS: --junitxml=test-results.xml
+      PYTEST_ADDOPTS: --junitxml=${{ github.workspace }}/backend/test-results.xml
     steps:
       - uses: actions/checkout@v7
 
