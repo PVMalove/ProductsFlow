@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
 from kernel_platform.http.match import match_created, match_result
@@ -25,18 +26,15 @@ from api.dependencies import (
     UpdateProductDI,
     to_actor,
 )
-from api.errors import to_http_exception
 from api.schemas import (
+    ProductActivateRequest,
     ProductAuditLogResponse,
     ProductCreateRequest,
+    ProductDeactivateRequest,
+    ProductDeleteRequest,
     ProductListResponse,
     ProductResponse,
     ProductUpdateRequest,
-)
-from application.commands import (
-    ActivateProductCommand,
-    DeactivateProductCommand,
-    DeleteProductCommand,
 )
 from application.queries import (
     GetProductAuditQuery,
@@ -112,43 +110,37 @@ async def update_product(
     return match_result(result)
 
 
-@router.patch("/{product_id}/activate", response_model=ProductResponse)
+@router.patch("/{product_id}/activate", response_model=ApiResponse[ProductView])
 async def activate_product(
-    product_id: uuid.UUID,
+    request: Annotated[ProductActivateRequest, Depends()],
     auth: RequiredAuth,
     handler: ActivateProductDI,
-) -> ProductResponse:
-    result = await handler.execute(
-        ActivateProductCommand(product_id=product_id, actor=to_actor(auth))
-    )
-    if result.is_err:
-        raise to_http_exception(result.error)
-    return ProductResponse.from_domain(result.value)
+) -> ApiResponse[ProductView]:
+    command = request.to_command(actor=to_actor(auth))
+    result: Result[ProductView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.patch("/{product_id}/deactivate", response_model=ProductResponse)
+@router.patch("/{product_id}/deactivate", response_model=ApiResponse[ProductView])
 async def deactivate_product(
-    product_id: uuid.UUID,
+    request: Annotated[ProductDeactivateRequest, Depends()],
     auth: RequiredAuth,
     handler: DeactivateProductDI,
-) -> ProductResponse:
-    result = await handler.execute(
-        DeactivateProductCommand(product_id=product_id, actor=to_actor(auth))
-    )
-    if result.is_err:
-        raise to_http_exception(result.error)
-    return ProductResponse.from_domain(result.value)
+) -> ApiResponse[ProductView]:
+    command = request.to_command(actor=to_actor(auth))
+    result: Result[ProductView] = await handler.execute(command)
+    return match_result(result)
 
 
-@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{product_id}", response_model=ApiResponse[None])
 async def delete_product(
-    product_id: uuid.UUID,
+    request: Annotated[ProductDeleteRequest, Depends()],
     auth: RequiredAuth,
     handler: DeleteProductDI,
-) -> None:
-    await handler.execute(
-        DeleteProductCommand(product_id=product_id, actor=to_actor(auth))
-    )
+) -> ApiResponse[None]:
+    command = request.to_command(actor=to_actor(auth))
+    result: Result[None] = await handler.execute(command)
+    return match_result(result)
 
 
 @router.get("/{product_id}/audit", response_model=list[ProductAuditLogResponse])

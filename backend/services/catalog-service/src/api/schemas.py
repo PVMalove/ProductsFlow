@@ -3,7 +3,13 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from application.commands import CreateProductCommand, UpdateProductCommand
+from application.commands import (
+    ActivateProductCommand,
+    CreateProductCommand,
+    DeactivateProductCommand,
+    DeleteProductCommand,
+    UpdateProductCommand,
+)
 from application.image_dto import ProductImageView
 from application.ports import Actor, ProductAuditAction, ProductAuditEntry
 from domain.product import Product
@@ -44,6 +50,29 @@ class ProductUpdateRequest(BaseModel):
             actor=actor,
             **self.model_dump(exclude_unset=True),
         )
+
+
+class ProductActivateRequest(BaseModel):
+    """Path-bound — без JSON body, `product_id` приходит из URL."""
+
+    product_id: uuid.UUID
+
+    def to_command(self, *, actor: Actor) -> ActivateProductCommand:
+        return ActivateProductCommand(product_id=self.product_id, actor=actor)
+
+
+class ProductDeactivateRequest(BaseModel):
+    product_id: uuid.UUID
+
+    def to_command(self, *, actor: Actor) -> DeactivateProductCommand:
+        return DeactivateProductCommand(product_id=self.product_id, actor=actor)
+
+
+class ProductDeleteRequest(BaseModel):
+    product_id: uuid.UUID
+
+    def to_command(self, *, actor: Actor) -> DeleteProductCommand:
+        return DeleteProductCommand(product_id=self.product_id, actor=actor)
 
 
 class ProductResponse(BaseModel):

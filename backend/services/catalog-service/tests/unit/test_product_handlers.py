@@ -253,6 +253,22 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     assert owners.upserts == []
 
 
+async def test_delete_product_by_owner_returns_ok_result_with_none_value() -> None:
+    product = _product()
+    repo, _owners, identity = _dependencies(
+        product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
+    )
+    handler = DeleteProductCommandHandler(repo, identity)
+
+    result = await handler.execute(
+        DeleteProductCommand(product_id=product.id.value, actor=_actor())
+    )
+
+    assert result.is_ok
+    assert result.value is None
+    assert repo.deleted is True
+
+
 async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> None:
     product = _product()
     repo, _owners, identity = _dependencies(
@@ -260,16 +276,18 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     )
     actor = _actor()
 
-    assert (
-        await ActivateProductCommandHandler(repo, identity).execute(
-            ActivateProductCommand(product_id=product.id.value, actor=actor)
-        )
-    ).is_ok
-    assert (
-        await DeactivateProductCommandHandler(repo, identity).execute(
-            DeactivateProductCommand(product_id=product.id.value, actor=actor)
-        )
-    ).is_ok
+    activate_result = await ActivateProductCommandHandler(repo, identity).execute(
+        ActivateProductCommand(product_id=product.id.value, actor=actor)
+    )
+    assert activate_result.is_ok
+    assert activate_result.value == ProductView.from_domain(product)
+
+    deactivate_result = await DeactivateProductCommandHandler(repo, identity).execute(
+        DeactivateProductCommand(product_id=product.id.value, actor=actor)
+    )
+    assert deactivate_result.is_ok
+    assert deactivate_result.value == ProductView.from_domain(product)
+
     page = await ListProductsQueryHandler(repo).execute(
         ListProductsQuery(limit=20, after=None, before=None)
     )

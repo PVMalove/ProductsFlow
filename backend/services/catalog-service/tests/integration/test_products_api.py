@@ -368,13 +368,15 @@ async def test_deactivate_then_activate_product_round_trips(
         f"/api/v1/products/{product['id']}/deactivate", headers=_auth(token)
     )
     assert deactivated.status_code == 200
-    assert deactivated.json()["is_active"] is False
+    assert deactivated.json()["meta"] == {}
+    assert deactivated.json()["data"]["is_active"] is False
 
     activated = await catalog_client.patch(
         f"/api/v1/products/{product['id']}/activate", headers=_auth(token)
     )
     assert activated.status_code == 200
-    assert activated.json()["is_active"] is True
+    assert activated.json()["meta"] == {}
+    assert activated.json()["data"]["is_active"] is True
 
 
 async def test_deactivate_an_already_deactivated_product_is_a_conflict(
@@ -391,6 +393,12 @@ async def test_deactivate_an_already_deactivated_product_is_a_conflict(
     )
 
     assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "already_deactivated",
+            "message": "Товар уже деактивирован",
+        }
+    }
 
 
 # --- Удаление (story 5) -----------------------------------------------------
@@ -405,7 +413,8 @@ async def test_delete_product_by_owner_removes_it(
     response = await catalog_client.delete(
         f"/api/v1/products/{product['id']}", headers=_auth(token)
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
+    assert response.json() == {"data": None, "meta": {}}
 
     fetched = await catalog_client.get(
         f"/api/v1/products/{product['id']}", headers=_auth(token)
