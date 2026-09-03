@@ -47,3 +47,19 @@ class IdentityUnavailableError(ApplicationError):
     code = "IDENTITY_UNAVAILABLE"
     message = "identity-service недоступен"
     status_code = HTTPStatus.SERVICE_UNAVAILABLE
+
+
+class ProductListCursorConflictError(ApplicationError):
+    """Both `after` and `before` pagination cursors were supplied together."""
+
+    code = "PRODUCT_LIST_CURSOR_CONFLICT"
+    message = "Нельзя одновременно указать after и before"
+    status_code = HTTPStatus.BAD_REQUEST
+
+
+class ProductListInvalidCursorError(ApplicationError):
+    """A pagination cursor could not be decoded."""
+
+    code = "PRODUCT_LIST_INVALID_CURSOR"
+    message = "Некорректный курсор пагинации"
+    status_code = HTTPStatus.BAD_REQUEST

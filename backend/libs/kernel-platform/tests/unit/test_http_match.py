@@ -6,7 +6,8 @@ from kernel_domain.result import Result
 
 from kernel_platform.http.envelope import ApiResponse
 from kernel_platform.http.errors import ApiError
-from kernel_platform.http.match import match_created, match_result
+from kernel_platform.http.match import match_created, match_page, match_result
+from kernel_platform.pagination import Page, PageInfo
 
 
 def test_api_response_defaults_meta_to_an_empty_object() -> None:
@@ -48,3 +49,37 @@ def test_match_created_behaves_exactly_like_match_result() -> None:
     with pytest.raises(ApiError) as exc_info:
         match_created(Result.fail(error))
     assert exc_info.value.status_code == 409
+
+
+def test_match_page_splits_items_into_data_and_page_info_into_meta() -> None:
+    page_info = PageInfo(
+        next_cursor="n", prev_cursor=None, has_more=True, has_prev=False
+    )
+    result: Result[Page[int]] = Result.ok(Page(items=[1, 2], page_info=page_info))
+
+    response = match_page(result)
+
+    assert response == ApiResponse[list[int]](
+        data=[1, 2],
+        meta={
+            "next_cursor": "n",
+            "prev_cursor": None,
+            "has_more": True,
+            "has_prev": False,
+        },
+    )
+
+
+def test_match_page_raises_api_error_with_the_mapped_status_and_domain_code() -> None:
+    error = Error(
+        code="invalid_cursor",
+        description="Некорректный курсор",
+        type=ErrorType.VALIDATION,
+    )
+    result: Result[Page[int]] = Result.fail(error)
+
+    with pytest.raises(ApiError) as exc_info:
+        match_page(result)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "invalid_cursor"

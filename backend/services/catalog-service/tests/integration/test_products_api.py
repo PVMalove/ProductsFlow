@@ -293,9 +293,92 @@ async def test_list_hides_deactivated_products_from_anonymous_viewer(
     response = await catalog_client.get("/api/v1/products")
 
     assert response.status_code == 200
-    ids = [item["id"] for item in response.json()["items"]]
+    ids = [item["id"] for item in response.json()["data"]]
     assert visible["id"] in ids
     assert hidden["id"] not in ids
+
+
+async def test_list_products_returns_the_bff_success_envelope_with_page_info(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    """ADR 0031/issue #221: товары в `data`, полный cursor page-info в `meta`."""
+    token, _ = _register_owner(identity_gateway)
+    await _create_product(catalog_client, token)
+
+    response = await catalog_client.get("/api/v1/products")
+
+    assert response.status_code == 200
+    envelope = response.json()
+    assert set(envelope.keys()) == {"data", "meta"}
+    assert isinstance(envelope["data"], list)
+    assert set(envelope["meta"].keys()) == {
+        "next_cursor",
+        "prev_cursor",
+        "has_more",
+        "has_prev",
+    }
+
+
+async def test_list_products_paginates_forward_with_the_after_cursor(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    token, _ = _register_owner(identity_gateway)
+    first = await _create_product(catalog_client, token, name="Первый")
+    second = await _create_product(catalog_client, token, name="Второй")
+    third = await _create_product(catalog_client, token, name="Третий")
+
+    page_one = await catalog_client.get("/api/v1/products", params={"limit": 2})
+    assert page_one.status_code == 200
+    page_one_body = page_one.json()
+    page_one_ids = [item["id"] for item in page_one_body["data"]]
+    assert len(page_one_ids) == 2
+    assert page_one_body["meta"]["has_more"] is True
+    assert page_one_body["meta"]["next_cursor"] is not None
+
+    page_two = await catalog_client.get(
+        "/api/v1/products",
+        params={"limit": 2, "after": page_one_body["meta"]["next_cursor"]},
+    )
+    assert page_two.status_code == 200
+    page_two_body = page_two.json()
+    page_two_ids = [item["id"] for item in page_two_body["data"]]
+    assert page_two_body["meta"]["has_more"] is False
+
+    all_ids = set(page_one_ids) | set(page_two_ids)
+    assert all_ids == {third["id"], second["id"], first["id"]}
+    assert set(page_one_ids).isdisjoint(page_two_ids)
+
+
+async def test_list_products_rejects_conflicting_cursor_parameters(
+    catalog_client: httpx.AsyncClient,
+) -> None:
+    response = await catalog_client.get(
+        "/api/v1/products", params={"after": "a", "before": "b"}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "PRODUCT_LIST_CURSOR_CONFLICT",
+            "message": "Нельзя одновременно указать after и before",
+        }
+    }
+
+
+async def test_list_products_rejects_an_invalid_cursor(
+    catalog_client: httpx.AsyncClient,
+) -> None:
+    response = await catalog_client.get(
+        "/api/v1/products", params={"after": "not-a-valid-cursor"}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "PRODUCT_LIST_INVALID_CURSOR",
+            "message": "Некорректный курсор пагинации",
+        }
+    }
 
 
 # --- Обновление (story 2) ---------------------------------------------------

@@ -303,12 +303,13 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     assert deactivate_result.is_ok
     assert deactivate_result.value == ProductView.from_domain(product)
 
-    page = await ListProductsQueryHandler(repo).execute(
+    list_result = await ListProductsQueryHandler(repo).execute(
         ListProductsQuery(limit=20, after=None, before=None)
     )
     audit = await GetProductAuditQueryHandler(
         repo, FakeAuditReader(), identity
     ).execute(GetProductAuditQuery(product_id=product.id.value, actor=actor))
 
-    assert page.items == [product]
+    assert list_result.is_ok
+    assert list_result.value.items == [ProductView.from_domain(product)]
     assert audit[0].action == "created"
