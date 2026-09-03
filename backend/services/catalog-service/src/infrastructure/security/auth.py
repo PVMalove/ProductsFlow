@@ -5,6 +5,7 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from kernel_platform.security import ActorRole
 
 from infrastructure.identity_gateway import IdentityGateway
 
@@ -101,7 +102,7 @@ async def is_admin(auth: AuthContext | None, identity: IdentityGateway) -> bool:
         info = await identity.fetch_current_user(auth.token)
     except httpx.HTTPError as exc:
         raise _IDENTITY_UNAVAILABLE from exc
-    return info.role == "admin" and info.is_active
+    return info.role == ActorRole.ADMIN and info.is_active
 
 
 async def ensure_owner_or_admin(
