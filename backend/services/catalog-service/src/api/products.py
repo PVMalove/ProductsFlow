@@ -32,13 +32,12 @@ from api.schemas import (
     ProductCreateRequest,
     ProductDeactivateRequest,
     ProductDeleteRequest,
+    ProductGetRequest,
     ProductListResponse,
-    ProductResponse,
     ProductUpdateRequest,
 )
 from application.queries import (
     GetProductAuditQuery,
-    GetProductQuery,
     ListProductsQuery,
 )
 from contracts.product import ProductView
@@ -83,19 +82,15 @@ async def list_products(
     return ProductListResponse.from_domain(page)
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
+@router.get("/{product_id}", response_model=ApiResponse[ProductView])
 async def get_product(
-    product_id: uuid.UUID,
+    request: Annotated[ProductGetRequest, Depends()],
     auth: OptionalAuth,
     handler: GetProductDI,
-) -> ProductResponse:
-    product = await handler.execute(
-        GetProductQuery(
-            product_id=product_id,
-            actor=to_actor(auth) if auth is not None else None,
-        )
-    )
-    return ProductResponse.from_domain(product)
+) -> ApiResponse[ProductView]:
+    query = request.to_query(actor=to_actor(auth) if auth is not None else None)
+    result: Result[ProductView] = await handler.execute(query)
+    return match_result(result)
 
 
 @router.patch("/{product_id}", response_model=ApiResponse[ProductView])

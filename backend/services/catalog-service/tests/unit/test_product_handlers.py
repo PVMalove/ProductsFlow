@@ -209,6 +209,21 @@ async def test_get_product_denies_inactive_owner_to_other_viewer() -> None:
         )
 
 
+async def test_get_product_returns_ok_result_for_owner() -> None:
+    product = _product()
+    repo, owners, identity = _dependencies(
+        product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
+    )
+    handler = GetProductQueryHandler(repo, owners, identity)
+
+    result = await handler.execute(
+        GetProductQuery(product_id=product.id.value, actor=_actor(OWNER_ID))
+    )
+
+    assert result.is_ok
+    assert result.value == ProductView.from_domain(product)
+
+
 async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     product = _product()
     repo, _owners, identity = _dependencies(
