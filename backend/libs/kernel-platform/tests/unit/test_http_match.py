@@ -18,7 +18,7 @@ def test_api_response_defaults_meta_to_an_empty_object() -> None:
 
 
 def test_match_result_wraps_an_ok_result_in_the_envelope() -> None:
-    result: Result[int] = Result.ok(42)
+    result: Result[int] = Result[int].ok(42)
 
     response = match_result(result)
 
@@ -29,7 +29,7 @@ def test_match_result_raises_api_error_with_the_mapped_status_and_domain_code() 
     error = Error(
         code="invalid_name", description="Плохое имя", type=ErrorType.VALIDATION
     )
-    result: Result[int] = Result.fail(error)
+    result: Result[int] = Result[int].fail(error)
 
     with pytest.raises(ApiError) as exc_info:
         match_result(result)
@@ -40,14 +40,14 @@ def test_match_result_raises_api_error_with_the_mapped_status_and_domain_code() 
 
 
 def test_match_created_behaves_exactly_like_match_result() -> None:
-    ok: Result[str] = Result.ok("created")
-    assert match_created(ok) == match_result(Result.ok("created"))
+    ok: Result[str] = Result[str].ok("created")
+    assert match_created(ok) == match_result(Result[str].ok("created"))
 
     error = Error(
         code="already_active", description="Конфликт", type=ErrorType.CONFLICT
     )
     with pytest.raises(ApiError) as exc_info:
-        match_created(Result.fail(error))
+        match_created(Result[str].fail(error))
     assert exc_info.value.status_code == 409
 
 
@@ -55,7 +55,9 @@ def test_match_page_splits_items_into_data_and_page_info_into_meta() -> None:
     page_info = PageInfo(
         next_cursor="n", prev_cursor=None, has_more=True, has_prev=False
     )
-    result: Result[Page[int]] = Result.ok(Page(items=[1, 2], page_info=page_info))
+    result: Result[Page[int]] = Result[Page[int]].ok(
+        Page(items=[1, 2], page_info=page_info)
+    )
 
     response = match_page(result)
 
@@ -76,7 +78,7 @@ def test_match_page_raises_api_error_with_the_mapped_status_and_domain_code() ->
         description="Некорректный курсор",
         type=ErrorType.VALIDATION,
     )
-    result: Result[Page[int]] = Result.fail(error)
+    result: Result[Page[int]] = Result[Page[int]].fail(error)
 
     with pytest.raises(ApiError) as exc_info:
         match_page(result)

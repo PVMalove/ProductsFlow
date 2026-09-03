@@ -32,11 +32,11 @@ async def test_get_user_query_reads_through_a_read_handler() -> None:
     ).execute(RegisterUserCommand("user@example.com", "password1"))
 
     result = await GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
-        GetUserQuery(registered.value.id)
+        GetUserQuery(UserId(registered.value.id))
     )
 
     assert result.is_ok
-    assert result.value.id == registered.value.id
+    assert result.value.id.value == registered.value.id
     assert result.value.is_active is True
 
 
@@ -56,11 +56,10 @@ async def test_get_user_query_returns_not_found_without_mutating_the_repository(
 
 async def test_activate_user_command_persists_the_aggregate_and_domain_event() -> None:
     repository = FakeUserRepository()
-    user = (
-        await RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
-            RegisterUserCommand("user@example.com", "password1")
-        )
-    ).value
+    await RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
+        RegisterUserCommand("user@example.com", "password1")
+    )
+    user = repository.users["user@example.com"]
     user.pull_events()
     user.is_active = False
 
@@ -69,6 +68,7 @@ async def test_activate_user_command_persists_the_aggregate_and_domain_event() -
     )
 
     assert result.is_ok
+    assert result.value.is_active is True
     assert await repository.get_by_id(user.id) is user
     assert user.is_active is True
     assert user.pull_events()[0].__class__.__name__ == "Activated"

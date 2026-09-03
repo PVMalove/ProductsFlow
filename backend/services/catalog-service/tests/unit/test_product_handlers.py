@@ -69,7 +69,7 @@ class FakeRepository:
     async def create(self, **kwargs: object) -> Result[Product]:
         self.created = kwargs
         assert self.product is not None
-        return Result.ok(self.product)
+        return Result[Product].ok(self.product)
 
     async def get_by_id(self, product_id: ProductId) -> Product | None:
         return self.product if self.product and self.product.id == product_id else None
@@ -77,15 +77,15 @@ class FakeRepository:
     async def update(self, product_id: ProductId, **kwargs: object) -> Result[Product]:
         self.updated = kwargs
         assert self.product is not None
-        return Result.ok(self.product)
+        return Result[Product].ok(self.product)
 
     async def activate(self, product_id: ProductId) -> Result[Product]:
         assert self.product is not None
-        return Result.ok(self.product)
+        return Result[Product].ok(self.product)
 
     async def deactivate(self, product_id: ProductId) -> Result[Product]:
         assert self.product is not None
-        return Result.ok(self.product)
+        return Result[Product].ok(self.product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
         self.deleted = True

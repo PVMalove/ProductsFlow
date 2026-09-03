@@ -15,7 +15,7 @@ async def _register(repository: FakeUserRepository, email: str) -> UserId:
     result = await RegisterUserCommandHandler(repository, FakePasswordHasher()).execute(
         RegisterUserCommand(email, "password1")
     )
-    return result.value.id
+    return UserId(result.value.id)
 
 
 async def test_change_role_happy_path_delegates_to_the_aggregate_and_persists() -> None:

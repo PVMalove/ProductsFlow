@@ -76,7 +76,7 @@ class GetProductQueryHandler:
             raise ProductNotFoundError
 
         if query.actor is not None and query.actor.user_id == product.user_id:
-            return Result.ok(ProductView.from_domain(product))
+            return Result[ProductView].ok(ProductView.from_domain(product))
 
         owner = await self._owner_read_model.get(product.user_id)
         viewer = Viewer(
@@ -88,8 +88,8 @@ class GetProductQueryHandler:
             and owner.is_active
             and self._visibility.is_visible(viewer, product)
         ):
-            return Result.ok(ProductView.from_domain(product))
+            return Result[ProductView].ok(ProductView.from_domain(product))
 
         if query.actor is not None and await self._authorizer.is_admin(query.actor):
-            return Result.ok(ProductView.from_domain(product))
+            return Result[ProductView].ok(ProductView.from_domain(product))
         raise ProductNotFoundError

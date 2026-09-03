@@ -87,7 +87,7 @@ async def test_owner_can_upload_and_read_product_image(
     )
 
     assert response.status_code == 201, response.text
-    body = response.json()
+    body = response.json()["data"]
     assert "/products/" in body["image_url"]
     assert "X-Amz-Signature=" in body["image_url"]
     assert any(
@@ -98,7 +98,7 @@ async def test_owner_can_upload_and_read_product_image(
     read_response = await catalog_client.get(f"/api/v1/products/{product['id']}/image")
     assert read_response.status_code == 200
     assert (
-        read_response.json()["image_url"].split("?")[0]
+        read_response.json()["data"]["image_url"].split("?")[0]
         == body["image_url"].split("?")[0]
     )
 
@@ -219,14 +219,15 @@ async def test_replace_delete_and_admin_access_are_supported(
     assert first.status_code == 201
     assert second.status_code == 200
     assert (
-        first.json()["image_url"].split("?")[0]
-        == second.json()["image_url"].split("?")[0]
+        first.json()["data"]["image_url"].split("?")[0]
+        == second.json()["data"]["image_url"].split("?")[0]
     )
 
     deleted = await catalog_client.delete(
         f"/api/v1/products/{product['id']}/image", headers=_auth(admin_token)
     )
-    assert deleted.status_code == 204
+    assert deleted.status_code == 200
+    assert deleted.json() == {"data": None, "meta": {}}
     after_delete = await catalog_client.get(f"/api/v1/products/{product['id']}/image")
     assert after_delete.status_code == 404
     assert any(
@@ -268,5 +269,6 @@ async def test_seed_object_is_not_deleted(
         f"/api/v1/products/{product_id}/image", headers=_auth(owner_token)
     )
 
-    assert response.status_code == 204
+    assert response.status_code == 200
+    assert response.json() == {"data": None, "meta": {}}
     assert image_storage.deleted == []

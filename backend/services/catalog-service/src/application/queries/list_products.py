@@ -38,4 +38,4 @@ class ListProductsQueryHandler:
             limit=query.limit, after=query.after, before=query.before
         )
         items = [ProductView.from_domain(item) for item in page.items]
-        return Result.ok(Page(items=items, page_info=page.page_info))
+        return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

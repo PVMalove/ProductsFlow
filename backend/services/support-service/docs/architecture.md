@@ -56,3 +56,49 @@ Normal status commands can only move one step forward through the lifecycle.
 User message access is owner-scoped, while an admin may append to any
 non-closed Ticket and advance its status. The repository uses a `FOR UPDATE`
 ticket-row lock so concurrent mutations observe one serialized state.
+
+## BFF migration (ADR 0033)
+
+`api.worker` now maintains a full local user projection
+(`infrastructure/db/user_projection.py`), not just the deletion inbox: it
+consumes all five `user.*.v1` events and applies each one with the same
+`last_applied_outbox_id` version guard as catalog's `owner_read_model`
+(ADR 0019), independent of the separate `processed_messages` inbox that
+still guards ticket anonymization on `user.deleted.v1` specifically —
+sharing one inbox row across both concerns would make the anonymization
+insert see its own already-inserted row and skip. Deletion sets `deleted`
+(tombstone) and `is_active=False`; the version guard means a stale or
+replayed event can never revive it.
+
+`infrastructure/security/auth.py` builds `kernel_platform.security.Actor`
+from that projection instead of trusting JWT claims: `_verify_token` decodes
+and validates the JWT with no DB access (so a missing/invalid token never
+opens a database session), then `get_current_actor` looks up the caller by
+id — a missing row is `401`, an inactive or tombstoned one is `403`.
+`RequiredActor` replaces the old `RequiredAuth`/`AdminAuth` UUID-only
+dependencies. There is no `AdminActor`: admin-only access is business
+authorization, not authentication, so `ListAdminTicketsQueryHandler` and
+`ChangeTicketStatusCommandHandler` own that check themselves and return
+`Result.fail(Error(code="FORBIDDEN", ...))` (ADR 0033) rather than a route
+dependency rejecting the request before a handler ever runs.
+
+`api/tickets.py` is thin: `api/schemas.py` request/dependency models build
+commands and queries via `to_command()`/`to_query()`, and
+`kernel_platform.http.match.match_result`/`match_created` wrap application
+`Result`s into the shared `ApiResponse` envelope directly — the router
+never converts one `Result` type into another. The four mutation command
+handlers (`add_ticket_message`, `change_ticket_status`,
+`edit_ticket_message`, `delete_ticket_message`) catch the `Ticket`
+aggregate's domain exceptions and the `None`-for-not-found/not-owned
+repository result themselves and build `contracts.ticket.TicketView`
+(`delete_ticket_message` returns `Result[None]` directly, matching
+catalog's `DeleteProductCommandHandler`) before returning `Result` — routers
+no longer translate errors or reshape a handler's success value.
+`CreateTicketCommandHandler` builds the richer `contracts.ticket.TicketDetailView`
+(ticket plus its messages) the same way, so `POST` also needs no router-side
+mapping. `application/queries/get_ticket_detail.py` is the single
+combined query the endpoint calls for `GET /{ticket_id}`: it loads the
+ticket and its first page of messages together, so the endpoint never
+orchestrates two handler calls. Every `DELETE` returns `200` with
+`data: null`; list and detail pagination live only in the root `meta`, not
+nested under `data`.

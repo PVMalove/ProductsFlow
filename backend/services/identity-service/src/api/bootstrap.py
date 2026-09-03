@@ -12,6 +12,7 @@ from application.commands import (
 from core.settings import settings
 from domain.email import Email
 from domain.role import Role
+from domain.user_id import UserId
 from infrastructure.db.user_repository import UserRepository
 from infrastructure.security.password_hasher import BcryptPasswordHasher
 
@@ -47,7 +48,7 @@ async def seed_admin_user(
                     f"identity-bootstrap: failed to register admin user: "
                     f"{register_result.error.description}"
                 )
-            target_user_id = register_result.value.id
+            target_user_id = UserId(register_result.value.id)
         else:
             target_user_id = existing.id
 

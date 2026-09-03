@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 import httpx
+from kernel_platform.security import ActorRole
 from kernel_platform.security.identity_client import IdentityClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
@@ -36,7 +37,7 @@ from infrastructure.storage import ensure_minio_buckets, get_storage
 
 logger = logging.getLogger(__name__)
 
-ADMIN_ROLE = "admin"
+ADMIN_ROLE = ActorRole.ADMIN.value
 PRODUCT_COUNT = 360
 ADMIN_DISCOVERY_TIMEOUT_SECONDS = 120.0
 ADMIN_DISCOVERY_POLL_INTERVAL_SECONDS = 2.0

@@ -127,14 +127,14 @@ class ProductRepository:
             name=name, description=description, price=price, category=category
         )
         if result.is_err:
-            return Result.fail(result.error)
+            return Result[Product].fail(result.error)
 
         row.name = product.name
         row.description = product.description
         row.price = product.price
         row.category = product.category
         await self._commit(product)
-        return Result.ok(product)
+        return Result[Product].ok(product)
 
     async def activate(self, product_id: ProductId) -> Result[Product] | None:
         return await self._toggle_active(product_id, activate=True)
@@ -152,11 +152,11 @@ class ProductRepository:
 
         result = product.activate() if activate else product.deactivate()
         if result.is_err:
-            return Result.fail(result.error)
+            return Result[Product].fail(result.error)
 
         row.is_active = product.is_active
         await self._commit(product)
-        return Result.ok(product)
+        return Result[Product].ok(product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
         loaded = await self._load(product_id)

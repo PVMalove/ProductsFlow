@@ -14,11 +14,12 @@ async def test_register_persists_the_user_and_returns_ok() -> None:
     result = await handler.execute(RegisterUserCommand("user@example.com", "password1"))
 
     assert result.is_ok
-    user = result.value
-    assert user.role == Role.USER
-    assert user.is_active is True
-    assert user.password_hash == hasher.hash("password1")
-    assert repository.users["user@example.com"] is user
+    view = result.value
+    assert view.role == Role.USER
+    assert view.is_active is True
+    stored = repository.users["user@example.com"]
+    assert stored.id.value == view.id
+    assert stored.password_hash == hasher.hash("password1")
 
 
 async def test_register_fails_with_conflict_when_email_already_exists() -> None:
