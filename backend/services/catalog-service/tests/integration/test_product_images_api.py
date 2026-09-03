@@ -237,11 +237,12 @@ async def test_replace_delete_and_admin_access_are_supported(
     audit = await catalog_client.get(
         f"/api/v1/products/{product['id']}/audit", headers=_auth(owner_token)
     )
-    assert [entry["action"] for entry in audit.json()][:2] == [
+    audit_entries = audit.json()["data"]
+    assert [entry["action"] for entry in audit_entries][:2] == [
         "image_deleted",
         "image_updated",
     ]
-    assert audit.json()[0]["actor_user_id"] == str(admin_id)
+    assert audit_entries[0]["actor_user_id"] == str(admin_id)
 
 
 async def test_seed_object_is_not_deleted(

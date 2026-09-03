@@ -312,4 +312,5 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
 
     assert list_result.is_ok
     assert list_result.value.items == [ProductView.from_domain(product)]
-    assert audit[0].action == "created"
+    assert audit.is_ok
+    assert audit.value[0].action == "created"

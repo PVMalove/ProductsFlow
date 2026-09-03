@@ -21,7 +21,7 @@ from api.dependencies import (
 )
 from api.schemas import (
     ProductActivateRequest,
-    ProductAuditLogResponse,
+    ProductAuditRequest,
     ProductCreateRequest,
     ProductDeactivateRequest,
     ProductDeleteRequest,
@@ -29,7 +29,7 @@ from api.schemas import (
     ProductListRequest,
     ProductUpdateRequest,
 )
-from application.queries import GetProductAuditQuery
+from application.ports import ProductAuditEntry
 from contracts.product import ProductView
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
@@ -116,13 +116,12 @@ async def delete_product(
     return match_result(result)
 
 
-@router.get("/{product_id}/audit", response_model=list[ProductAuditLogResponse])
+@router.get("/{product_id}/audit", response_model=ApiResponse[list[ProductAuditEntry]])
 async def get_product_audit(
-    product_id: uuid.UUID,
+    request: Annotated[ProductAuditRequest, Depends()],
     auth: RequiredAuth,
     handler: GetProductAuditDI,
-) -> list[ProductAuditLogResponse]:
-    entries = await handler.execute(
-        GetProductAuditQuery(product_id=product_id, actor=to_actor(auth))
-    )
-    return [ProductAuditLogResponse.from_entry(entry) for entry in entries]
+) -> ApiResponse[list[ProductAuditEntry]]:
+    query = request.to_query(actor=to_actor(auth))
+    result: Result[list[ProductAuditEntry]] = await handler.execute(query)
+    return match_result(result)

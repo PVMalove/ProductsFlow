@@ -44,8 +44,8 @@ Unknown failures are logged server-side and return HTTP 500 with
 
 ## Rollout
 
-The first rollout applies the success envelope to catalog product commands only.
-Catalog query and image success responses remain flat until their own migrations,
-while error responses use the structured shape across the service from the first
-rollout. New service migrations should follow the same staged approach and cite
-ADR 0031.
+The rollout applies the success envelope to catalog product commands and to
+catalog product GET-queries (read, list, and audit). Catalog product-image
+success responses remain flat until their own migration, while error responses
+use the structured shape across the service from the first rollout. New service
+migrations should follow the same staged approach and cite ADR 0031.
