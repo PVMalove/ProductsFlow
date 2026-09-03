@@ -86,8 +86,9 @@ async def test_create_ticket_command_uses_the_command_port() -> None:
         )
     )
 
-    assert result.author_id == author_id
-    assert repository.created is result
+    assert result.is_ok
+    assert result.value.author_id == author_id
+    assert repository.created is result.value
 
 
 @pytest.mark.asyncio

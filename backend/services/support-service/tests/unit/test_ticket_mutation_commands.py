@@ -76,7 +76,8 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value is ticket
     assert repository.message_calls == [(actor_id, True)]
 
 
@@ -96,7 +97,8 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value is ticket
     assert repository.status_calls == [(actor_id, TicketStatus.IN_PROGRESS)]
 
 
@@ -119,7 +121,8 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value is ticket
     assert repository.edit_calls == [(ticket.id, message_id, "Corrected", True)]
 
 
@@ -140,5 +143,6 @@ async def test_delete_message_command_passes_admin_moderation_context() -> None:
         )
     )
 
-    assert result is ticket
+    assert result.is_ok
+    assert result.value is ticket
     assert repository.delete_calls == [(ticket.id, message_id, True)]
