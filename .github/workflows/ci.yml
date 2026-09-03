@@ -3,14 +3,41 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [feature/microservices]
 
 permissions:
-  contents: read # нужно для checkout
+  contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    name: Detect affected backend packages
+    runs-on: ubuntu-latest
+    outputs:
+      members: ${{ steps.matrix.outputs.members }}
+      services: ${{ steps.matrix.outputs.services }}
+      has_backend_changes: ${{ steps.matrix.outputs.has_backend_changes }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          list-files: json
+          filters: |
+            changed:
+              - '**'
+
+      - id: matrix
+        name: Expand dependency graph
+        env:
+          CHANGED_FILES: ${{ steps.filter.outputs.changed_files }}
+        run: python backend/scripts/ci_matrix.py --github-output "$GITHUB_OUTPUT"
+
   backend-architecture:
     name: Architecture boundaries
+    needs: changes
+    if: needs.changes.outputs.has_backend_changes == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,10 +54,11 @@ jobs:
           enable-cache: true
 
       - run: python scripts/check_architecture.py --strict
-      - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py -q
+      - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py tests/unit/test_ci_matrix.py -q
 
   backend-lint:
     name: Lint (${{ matrix.member }})
+    needs: changes
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,13 +66,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        member:
-          - kernel-domain
-          - kernel-platform
-          - test-support
-          - identity-service
-          - catalog-service
-          - support-service
+        member: ${{ fromJSON(needs.changes.outputs.members) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -56,6 +78,7 @@ jobs:
 
   backend-test:
     name: Test (${{ matrix.member }})
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,13 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        member:
-          - identity-service
-          - kernel-platform
-          - kernel-domain
-          - test-support
-          - catalog-service
-          - support-service
+        member: ${{ fromJSON(needs.changes.outputs.members) }}
     env:
       PYTEST_ADDOPTS: --junitxml=test-results.xml
     steps:
@@ -86,11 +103,11 @@ jobs:
 
       - name: Publish Test Report
         uses: dorny/test-reporter@v3
-        if: always() # выполняется всегда, чтобы отчёт был виден и при падении тестов
+        if: always()
         with:
           name: Test Results (${{ matrix.member }})
           path: backend/test-results.xml
-          reporter: python-xunit # формат отчёта, который генерирует pytest --junitxml
+          reporter: python-xunit
           fail-on-error: 'true'
 
       - name: Upload test results artifact
@@ -101,12 +118,17 @@ jobs:
           path: backend/test-results.xml
 
   backend-build:
-    name: Build API images
+    name: Build (${{ matrix.service }})
+    needs: changes
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
     steps:
       - uses: actions/checkout@v7
 
-      - run: docker compose build
+      - run: docker build --file services/${{ matrix.service }}/Dockerfile --tag productsflow/${{ matrix.service }}:ci .
