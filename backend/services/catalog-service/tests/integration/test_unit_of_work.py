@@ -11,7 +11,10 @@ from application.commands import CreateProductCommand, CreateProductCommandHandl
 from application.ports import Actor, IdentityUser
 from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
-from infrastructure.db.models import ProductImageModel, ProductModel
+from infrastructure.db.entity_configurations.models import (
+    ProductImageModel,
+    ProductModel,
+)
 from infrastructure.db.owner_read_model import OwnerReadModelRow, SqlOwnerReadModel
 from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 

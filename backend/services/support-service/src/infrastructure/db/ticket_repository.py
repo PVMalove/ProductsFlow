@@ -15,7 +15,11 @@ from domain.events import (
 from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket, TicketStatus
-from infrastructure.db.models import ProcessedMessage, TicketMessageModel, TicketModel
+from infrastructure.db.entity_configurations.models import (
+    ProcessedMessage,
+    TicketMessageModel,
+    TicketModel,
+)
 
 
 class TicketRepository:
@@ -378,7 +382,7 @@ class TicketRepository:
 
 
 def _to_outbox(event: DomainEvent) -> OutboxMessage:
-    from domain.events.ticket_created import TicketCreated
+    from domain.events.ticket_domain_event import TicketCreated
 
     if isinstance(event, TicketCreated):
         payload = {

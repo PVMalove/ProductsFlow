@@ -14,7 +14,7 @@ from application.ports import (
     ProductAuditEntry,
     ProductAuditReader,
 )
-from infrastructure.db.models import ProductModel
+from infrastructure.db.entity_configurations.models import ProductModel
 
 
 class ProductAuditLog(Base):

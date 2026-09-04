@@ -16,7 +16,6 @@ from core.settings import settings
 from domain.role import Role
 from domain.user_id import UserId
 from infrastructure.db import audit as _audit  # noqa: F401
-from infrastructure.db import models as _models  # noqa: F401
 from infrastructure.db.session import get_db_session
 from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 from infrastructure.db.user_repository import UserRepository

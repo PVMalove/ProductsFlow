@@ -5,9 +5,11 @@ from enum import StrEnum
 
 from kernel_domain.entity import Entity
 
-from domain.events.ticket_created import TicketCreated
-from domain.events.ticket_message_added import TicketMessageAdded
-from domain.events.ticket_status_changed import TicketStatusChanged
+from domain.events.ticket_domain_event import (
+    TicketCreated,
+    TicketMessageAdded,
+    TicketStatusChanged,
+)
 from domain.message import DELETED_MESSAGE_MARKER, TicketMessage, validate_plaintext
 
 USER_DELETED_MESSAGE = "[Пользователь удалён]"
@@ -213,7 +215,7 @@ class Ticket(Entity[uuid.UUID]):
             "body",
             validate_plaintext(body, field_name="body", maximum=10_000),
         )
-        from domain.events.ticket_message_edited import TicketMessageEdited
+        from domain.events.ticket_domain_event import TicketMessageEdited
 
         self.add_domain_event(
             TicketMessageEdited(
@@ -243,7 +245,7 @@ class Ticket(Entity[uuid.UUID]):
 
         object.__setattr__(message, "body", DELETED_MESSAGE_MARKER)
         object.__setattr__(message, "is_deleted", True)
-        from domain.events.ticket_message_deleted import TicketMessageDeleted
+        from domain.events.ticket_domain_event import TicketMessageDeleted
 
         self.add_domain_event(
             TicketMessageDeleted(

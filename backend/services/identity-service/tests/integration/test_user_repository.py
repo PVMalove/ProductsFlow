@@ -13,9 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from domain.email import Email
 from domain.user import User
 from infrastructure.db import audit as _audit  # noqa: F401
-from infrastructure.db import models as _models  # noqa: F401
 from infrastructure.db.audit import UserAuditAction, UserAuditLog
-from infrastructure.db.models import UserModel
+from infrastructure.db.entity_configurations.models import UserModel
 from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

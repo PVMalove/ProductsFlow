@@ -5,7 +5,10 @@ import pytest
 from kernel_platform.outbox.models import OutboxMessage
 
 from domain.ticket import Ticket, TicketStatus
-from infrastructure.db.models import TicketMessageModel, TicketModel
+from infrastructure.db.entity_configurations.models import (
+    TicketMessageModel,
+    TicketModel,
+)
 from infrastructure.db.ticket_repository import SqlTicketRepository
 
 

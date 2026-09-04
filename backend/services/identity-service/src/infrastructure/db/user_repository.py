@@ -13,7 +13,7 @@ from domain.user_id import UserId
 # Importing the listener module is intentional: it registers User ORM events
 # whenever the repository is used, including from application code.
 from infrastructure.db import audit as _audit  # noqa: F401
-from infrastructure.db.models import UserModel
+from infrastructure.db.entity_configurations.models import UserModel
 
 _UserRows = list[UserModel]
 

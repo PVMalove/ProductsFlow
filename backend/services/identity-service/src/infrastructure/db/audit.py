@@ -28,7 +28,7 @@ from application.ports import (
     UserAuditQueryPort,
 )
 from domain.user_id import UserId
-from infrastructure.db.models import UserModel
+from infrastructure.db.entity_configurations.models import UserModel
 
 
 class UserAuditLog(Base):

@@ -24,7 +24,10 @@ from domain.repositories import (
     ProductRepository as ProductRepositoryPort,
 )
 from infrastructure.db.audit import ProductAuditLog
-from infrastructure.db.models import ProductImageModel, ProductModel
+from infrastructure.db.entity_configurations.models import (
+    ProductImageModel,
+    ProductModel,
+)
 from infrastructure.db.owner_read_model import OwnerReadModelRow
 
 # Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:

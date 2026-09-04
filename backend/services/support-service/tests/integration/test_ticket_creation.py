@@ -15,7 +15,10 @@ from domain.ticket import (
     TicketMessageImmutableError,
     TicketStatus,
 )
-from infrastructure.db.models import TicketMessageModel, TicketModel
+from infrastructure.db.entity_configurations.models import (
+    TicketMessageModel,
+    TicketModel,
+)
 from infrastructure.db.ticket_repository import SqlTicketRepository
 from infrastructure.db.unit_of_work import SqlSupportUnitOfWork
 
