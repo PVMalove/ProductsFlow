@@ -5,6 +5,13 @@ description = "ProductsFlow backend workspace"
 requires-python = ">=3.14"
 dependencies = []
 
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+]
+
 [tool.uv.workspace]
 members = ["libs/*", "services/*"]
 

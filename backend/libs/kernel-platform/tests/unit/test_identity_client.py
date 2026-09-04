@@ -23,6 +23,26 @@ async def test_fetch_current_user_returns_the_three_contract_fields() -> None:
 
         assert info.id == user_id
         assert info.role == "admin"
+    assert info.is_active is True
+
+
+async def test_fetch_current_user_unwraps_the_bff_success_envelope() -> None:
+    user_id = uuid.uuid4()
+    app = FakeUsersMeApp(
+        response={
+            "data": {"id": str(user_id), "role": "user", "is_active": True},
+            "meta": {},
+        }
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://identity"
+    ) as http_client:
+        client = IdentityClient(http_client)
+
+        info = await client.fetch_current_user("some-token")
+
+        assert info.id == user_id
+        assert info.role == "user"
         assert info.is_active is True
 
 
