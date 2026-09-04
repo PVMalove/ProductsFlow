@@ -25,9 +25,9 @@ async def get_current_actor(
     token: Annotated[str, Depends(oauth2_scheme)],
     users: UserQueryRepositoryDI,
 ) -> Actor:
-    """Decode the token, then reload the user to build a transport-neutral
-    `Actor` off the caller's current state — never off JWT claims, which
-    carry no role and can be stale (ADR 0033)."""
+    """Декодирует токен, затем перечитывает пользователя, чтобы построить
+    transport-neutral `Actor` из актуального состояния вызывающего — никогда
+    из claims токена, которые не несут роли и могут быть устаревшими (ADR 0005)."""
     try:
         payload: dict[str, Any] = decode_access_token(token)
         user_id = UserId.create(uuid.UUID(str(payload["sub"])))

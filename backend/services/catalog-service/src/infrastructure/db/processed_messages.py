@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class ProcessedMessage(Base):
-    """Inbox table used by the catalog worker for at-least-once delivery."""
+    """Inbox-таблица, используемая воркером catalog для at-least-once доставки."""
 
     __tablename__ = "processed_messages"
 

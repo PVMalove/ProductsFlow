@@ -54,7 +54,7 @@ def upgrade() -> None:
         "product_audit_log",
         sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
         # Без ForeignKey — audit-строка переживает удаление Товара
-        # (CONTEXT.md «Существование продукта», как и в монолите, ADR 0004).
+        # (CONTEXT.md «Существование продукта», как и в монолите, ADR 0008).
         sa.Column("product_id", sa.BigInteger(), nullable=False),
         sa.Column("actor_user_id", sa.BigInteger(), nullable=True),
         sa.Column("action", sa.Text(), nullable=False),

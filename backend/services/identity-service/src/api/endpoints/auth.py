@@ -33,9 +33,9 @@ async def register_user(
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], handler: LoginDI
 ) -> TokenResponse:
-    """OAuth2 password-grant login stays a flat protocol endpoint for
-    `OAuth2PasswordBearer`/Swagger UI (ADR 0033) — not migrated to the BFF
-    envelope."""
+    """Логин через OAuth2 password-grant остаётся плоским протокольным
+    эндпоинтом для `OAuth2PasswordBearer`/Swagger UI (ADR 0002) — не
+    мигрирован на BFF-конверт."""
     result = await handler.execute(
         LoginCommand(email=form_data.username, password=form_data.password)
     )

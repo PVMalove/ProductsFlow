@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.community.rabbitmq import RabbitMqContainer
 
-# Заглушка вместо libs/test-support (ADR 0018, issue #99) — этой библиотеки
+# Заглушка вместо libs/test-support (ADR 0013, issue #99) — этой библиотеки
 # ещё нет в дереве. Postgres-часть повторяет паттерн tests/conftest.py
 # монолита; RabbitMQ-часть — первая в этом репозитории.
 

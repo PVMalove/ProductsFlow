@@ -1,1 +1,1 @@
-"""Use cases and application-facing data for catalog-service."""
+"""Use case'ы и application-facing данные для catalog-service."""

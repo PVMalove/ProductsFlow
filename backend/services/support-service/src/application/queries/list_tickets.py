@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""List-owned-tickets query and handler."""
+"""Query и handler list-owned-tickets."""
 
 import uuid
 from dataclasses import dataclass

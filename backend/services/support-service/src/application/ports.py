@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Application ports for the support command and query sides."""
+"""Application-порты для command- и query-сторон support."""
 
 import uuid
 from dataclasses import dataclass
@@ -12,9 +12,9 @@ from domain.value_objects.ticket_id import TicketId
 
 @dataclass(frozen=True)
 class UserProjectionSnapshot:
-    """Local, event-driven copy of an identity User (ADR 0033) — support's
-    only source of `Actor` role/status, so BFF authentication never calls
-    identity synchronously per request."""
+    """Локальная event-driven копия identity User (ADR 0012) — единственный
+    источник роли/статуса `Actor` у support, поэтому BFF-аутентификация
+    никогда не вызывает identity синхронно на каждый запрос."""
 
     user_id: uuid.UUID
     role: str
@@ -28,7 +28,7 @@ class UserProjectionPort(Protocol):
 
 
 class TicketQueryPort(Protocol):
-    """Read-only persistence operations used by query handlers."""
+    """Операции персистентности только для чтения, используемые query handler'ами."""
 
     async def get_for_author(
         self, ticket_id: TicketId, author_id: uuid.UUID

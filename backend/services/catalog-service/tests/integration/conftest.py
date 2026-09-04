@@ -69,7 +69,7 @@ async def catalog_client(
     identity_gateway: FakeIdentityGateway,
     image_storage: FakeImageStorage,
 ) -> AsyncIterator[httpx.AsyncClient]:
-    """ASGI-тестклиент (ADR 0018, Seam A) поверх настоящего Postgres
+    """ASGI-тестклиент (ADR 0013, Seam A) поверх настоящего Postgres
     (`db_session`, savepoint на тест) и фейкового `IdentityGateway` —
     HTTP-слой прогоняется целиком, identity-service — нет."""
     from api.main import app

@@ -62,7 +62,7 @@ def test_compute_kid_differs_for_different_keys(
 def test_load_private_key_reuses_the_same_in_memory_key_for_the_same_path(
     configured_key_path: Path,
 ) -> None:
-    """Второй вызов не должен снова читать файл с диска (ADR 0011: "по ключу
+    """Второй вызов не должен снова читать файл с диска (ADR 0005: "по ключу
     в памяти") — объект, а не только значение, должен быть тем же самым."""
     first = load_private_key(str(configured_key_path))
     second = load_private_key(str(configured_key_path))

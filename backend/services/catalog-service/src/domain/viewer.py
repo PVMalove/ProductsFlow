@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Viewer:
     """Наблюдатель HTTP-запроса (issue #149): `user_id` — `sub` токена
-    identity, локален и не протухает (ADR 0012); `is_admin` — синхронно
+    identity, локален и не протухает (ADR 0011); `is_admin` — синхронно
     сверенный факт, вычисляется только на ветке, где доступ действительно
     даётся ролью (см. `infrastructure.security.auth`), не кэшируется
     между запросами."""

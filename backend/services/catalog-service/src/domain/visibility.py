@@ -3,7 +3,7 @@ from domain.viewer import Viewer
 
 
 class ProductVisibilityPolicy:
-    """`VisibilityPolicy[Viewer, Product]` (ADR 0003, `kernel_domain.VisibilityPolicy`
+    """`VisibilityPolicy[Viewer, Product]` (ADR 0008, `kernel_domain.VisibilityPolicy`
     Protocol, issue #149): предикат на уровне самого Товара — активен, или
     видим его Владельцу. Деактивация Владельца (`owner_read_model.is_active`)
     — отдельное, более широкое условие, не свойство `Product`, поэтому здесь

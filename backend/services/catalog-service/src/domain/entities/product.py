@@ -52,7 +52,7 @@ def _validate(*, name: str, category: str, price: float) -> Error | None:
 
 
 class Product(Entity[ProductId]):
-    """Агрегат Товара (issue #148, ADR 0021). `user_id` — идентификатор
+    """Агрегат Товара (issue #148, ADR 0011). `user_id` — идентификатор
     Владельца из identity-service (`UserId`, GUID); больше не FK в БД catalog
     (Владелец резолвится через `OwnerReadModel`, TD §4.2).
 

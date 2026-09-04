@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""List-ticket-messages query and handler."""
+"""Query и handler list-ticket-messages."""
 
 from dataclasses import dataclass
 

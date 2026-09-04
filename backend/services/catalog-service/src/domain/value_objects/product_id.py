@@ -11,7 +11,7 @@ _MISSING = object()
 
 @dataclass(frozen=True, eq=False)
 class ProductId(ValueObject):
-    """GUID-обёртка первичного ключа агрегата `Product` (ADR 0024)."""
+    """GUID-обёртка первичного ключа агрегата `Product` (ADR 0006)."""
 
     value: uuid.UUID
 

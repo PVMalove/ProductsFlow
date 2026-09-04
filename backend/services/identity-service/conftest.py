@@ -1,11 +1,13 @@
-"""Root conftest for identity-service — sets up sys.path for src-based imports."""
+"""Корневой conftest для identity-service — настраивает sys.path для
+импортов на базе src."""
 
 import sys
 from pathlib import Path
 
-# Add src/ to sys.path so that top-level imports like "from core.settings" work.
-# This is needed because pyproject.toml lists packages as ["src/application", ...],
-# which makes hatchling create a namespace where these are top-level modules.
+# Добавляет src/ в sys.path, чтобы работали top-level импорты вроде
+# "from core.settings". Это нужно, потому что pyproject.toml перечисляет
+# пакеты как ["src/application", ...], из-за чего hatchling создаёт
+# пространство имён, где они становятся top-level модулями.
 src_path = Path(__file__).parent / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))

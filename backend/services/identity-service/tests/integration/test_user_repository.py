@@ -32,7 +32,7 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
 
 
 class _CreateTwoUsersHandler:
-    """Integration seam for the command-side transaction boundary."""
+    """Интеграционный шов для command-side транзакционной границы."""
 
     def __init__(self, uow: SqlIdentityUnitOfWork) -> None:
         self._uow = uow

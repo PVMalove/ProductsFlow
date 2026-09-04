@@ -1,4 +1,4 @@
-"""Compatibility import for the identity command port."""
+"""Импорт совместимости для command-порта identity."""
 
 from application.ports import PasswordHasher
 

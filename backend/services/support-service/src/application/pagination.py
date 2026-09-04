@@ -11,7 +11,7 @@ MAX_PAGE_LIMIT = 100
 
 
 class InvalidCursorError(ValueError):
-    """The pagination cursor is malformed."""
+    """Курсор пагинации имеет некорректный формат."""
 
 
 def encode_cursor(created_at: datetime, item_id: uuid.UUID) -> str:

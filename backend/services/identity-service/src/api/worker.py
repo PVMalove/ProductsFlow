@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     """identity-worker (ADR 0010): вторая точка входа identity-service, не
     HTTP-процесс — гоняет `OutboxPublisher` на гибридном пробуждении (ADR
-    0014): `NOTIFY` через `OutboxListener` даёт почти мгновенную реакцию
+    0010): `NOTIFY` через `OutboxListener` даёт почти мгновенную реакцию
     (issue #102), 5-секундный poll (issue #100, happy path) остаётся
     страховкой на случай потерянного `NOTIFY`.
     """

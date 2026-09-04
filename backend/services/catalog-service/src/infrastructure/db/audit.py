@@ -18,7 +18,7 @@ from infrastructure.db.entity_configurations.models import ProductModel
 
 
 class ProductAuditLog(Base):
-    """Audit-лог мутаций Товара (ADR 0004, issue #148). `product_id` —
+    """Audit-лог мутаций Товара (ADR 0008, issue #148). `product_id` —
     намеренно без FK: audit-строка должна пережить удаление Товара
     (CONTEXT.md «Существование продукта»), как и в монолите."""
 
@@ -125,7 +125,7 @@ async def get_audit_logs_by_product(
 
 
 class SqlProductAuditReader:
-    """SQL adapter for the application audit-reader port."""
+    """SQL-адаптер для application-порта чтения audit-лога."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -159,6 +159,6 @@ def _parse_actor_user_id(value: str | None) -> uuid.UUID | None:
     try:
         return uuid.UUID(value)
     except ValueError:
-        # Legacy integer actor IDs remain available in SQL, but cannot be
-        # represented by the UUID-based application port.
+        # Устаревшие целочисленные actor ID остаются доступны в SQL, но не
+        # могут быть представлены UUID-based application-портом.
         return None

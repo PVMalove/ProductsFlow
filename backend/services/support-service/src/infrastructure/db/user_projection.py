@@ -8,19 +8,21 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from application.ports import UserProjectionPort, UserProjectionSnapshot
 
-# Cold-start sentinel (mirrors catalog's `owner_read_model`, ADR 0019): real
-# events carry `outbox_messages.id >= 1` (bigserial), so a row seeded at
-# version 0 always loses to the first genuine event.
+# Cold-start сентинел (зеркалит catalog's `owner_read_model`, ADR 0011):
+# реальные события несут `outbox_messages.id >= 1` (bigserial), поэтому
+# строка, засеянная версией 0, всегда проигрывает первому же настоящему
+# событию.
 COLD_START_SENTINEL_VERSION = 0
 
 
 class UserProjectionRow(Base):
-    """Support's local, event-driven copy of an identity User (ADR 0033).
+    """Локальная event-driven копия identity User в support (ADR 0012).
 
-    Deny-by-default: a missing row means `401 UNAUTHENTICATED`, while
-    `deleted`/`is_active` drive `403 FORBIDDEN`. `deleted` is a tombstone, not
-    a delete — combined with the `last_applied_outbox_id` version guard, a
-    stale or replayed identity event can never revive a deleted user."""
+    Deny-by-default: отсутствующая строка означает `401 UNAUTHENTICATED`,
+    а `deleted`/`is_active` определяют `403 FORBIDDEN`. `deleted` — это
+    tombstone, не удаление — в сочетании с guard'ом версии
+    `last_applied_outbox_id` устаревшее или повторно доставленное событие
+    identity никогда не может воскресить удалённого пользователя."""
 
     __tablename__ = "user_projection"
 
@@ -47,11 +49,11 @@ async def upsert_user_projection(
     last_applied_outbox_id: int,
     commit: bool = True,
 ) -> None:
-    """One atomic, `last_applied_outbox_id`-versioned upsert (ADR 0019/0033) —
-    not read-then-write: the event consumer and any future cold-fetch cannot
-    race each other. Identity's activation/deactivation events carry only the
-    changed field, so a `None` here preserves the existing row's value on
-    conflict."""
+    """Один атомарный upsert, версионированный по `last_applied_outbox_id`
+    (ADR 0012) — не read-then-write: событийный консьюмер и любой будущий
+    cold-fetch не создают гонку между собой. События активации/деактивации
+    identity несут только изменённое поле, поэтому `None` здесь сохраняет
+    значение существующей строки при конфликте."""
     insert_role = role if role is not None else "user"
     insert_is_active = is_active if is_active is not None else True
     insert_deleted = deleted if deleted is not None else False
@@ -91,7 +93,7 @@ async def upsert_user_projection(
 
 
 class SqlUserProjection:
-    """SQL adapter for the application `UserProjectionPort`."""
+    """SQL-адаптер для application-порта `UserProjectionPort`."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

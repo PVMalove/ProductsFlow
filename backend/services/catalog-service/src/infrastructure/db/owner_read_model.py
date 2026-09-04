@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from application.ports import OwnerReadModel, OwnerSnapshot
 
-# Сентинел синхронного добора (ADR 0012/0019): реальные события несут
+# Сентинел синхронного добора (ADR 0011): реальные события несут
 # `outbox_messages.id >= 1` (bigserial), поэтому строка с версией 0 всегда
 # проигрывает первому же настоящему событию.
 COLD_START_SENTINEL_VERSION = 0
@@ -18,7 +18,7 @@ class OwnerReadModelRow(Base):
     """Локальная read-модель Владельца в catalog (issue #148 миграция,
     issue #149 — первый писатель/читатель): наполняется событиями
     `user.*.v1` консьюмером (issue #151) и синхронным
-    добором на холодном промахе (ADR 0012/0019)."""
+    добором на холодном промахе (ADR 0011)."""
 
     __tablename__ = "owner_read_model"
 
@@ -52,11 +52,11 @@ async def upsert_owner_read_model(
     commit: bool = True,
 ) -> None:
     """Один атомарный upsert, версионированный по `last_applied_outbox_id`
-    (ADR 0019) — не read-then-write: конкурентные писатели (событийный
+    (ADR 0011) — не read-then-write: конкурентные писатели (событийный
     консьюмер и синхронный добор) не открывают окно гонки между ними."""
-    # Identity's activation/deactivation events carry only the changed field.
-    # Defaults make a cold insert valid; the conflict expressions preserve the
-    # other field when an existing owner row receives a partial event.
+    # События активации/деактивации identity несут только изменённое поле.
+    # Дефолты делают холодную вставку валидной; conflict-выражения сохраняют
+    # другое поле, когда существующая строка владельца получает частичное событие.
     insert_role = role if role is not None else "user"
     insert_is_active = is_active if is_active is not None else True
     stmt = insert(OwnerReadModelRow).values(
@@ -89,7 +89,7 @@ async def upsert_owner_read_model(
 
 
 class SqlOwnerReadModel:
-    """SQL adapter for the application owner read-model port."""
+    """SQL-адаптер для application-порта read-модели владельца."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

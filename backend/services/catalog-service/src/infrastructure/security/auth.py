@@ -9,7 +9,7 @@ from kernel_platform.security import ActorRole
 
 from infrastructure.identity_gateway import IdentityGateway
 
-# `auto_error=False`: без заголовка — `None`, а не 401 — ADR 0002 требует
+# `auto_error=False`: без заголовка — `None`, а не 401 — ADR 0008 требует
 # анонимного просмотра там, где токен не обязателен; невалидный (но
 # предъявленный) токен — всё равно ошибка, не тихий откат к анонимному виду.
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -29,7 +29,7 @@ _IDENTITY_UNAVAILABLE = HTTPException(
 @dataclass(frozen=True)
 class AuthContext:
     """Проверенный вызывающий (issue #149): `user_id` — из `sub` токена,
-    локален и не протухает (ADR 0012). `token` хранится рядом — единственный
+    локален и не протухает (ADR 0011). `token` хранится рядом — единственный
     способ добрать `role`/`is_active` через `IdentityClient.fetch_current_user()`
     относится только к предъявителю именно этого токена."""
 
@@ -91,7 +91,7 @@ RequiredAuth = Annotated[AuthContext, Depends(get_required_auth)]
 
 
 async def is_admin(auth: AuthContext | None, identity: IdentityGateway) -> bool:
-    """ADR 0012 «Админская ветка»: синхронная сверка, вызывается только там,
+    """ADR 0011 «Админская ветка»: синхронная сверка, вызывается только там,
     где доступ действительно решается ролью — не на каждый аутентифицированный
     запрос. Недоступность identity здесь — fail closed (503), а не «считать
     не-админом»: тихий откат замаскировал бы отказ инфраструктуры под
@@ -108,7 +108,7 @@ async def is_admin(auth: AuthContext | None, identity: IdentityGateway) -> bool:
 async def ensure_owner_or_admin(
     auth: AuthContext, product_user_id: uuid.UUID, identity: IdentityGateway
 ) -> None:
-    """Владение проверяется локально и первым — не протухает (ADR 0012),
+    """Владение проверяется локально и первым — не протухает (ADR 0011),
     синхронный вызов к identity не нужен вовсе. Только если владение не
     совпало, доступ может дать ещё и роль — и только тогда выполняется
     синхронная сверка."""

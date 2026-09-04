@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Get-product-image query and handler."""
+"""Query и handler get-product-image."""
 
 import uuid
 from dataclasses import dataclass

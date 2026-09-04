@@ -7,7 +7,7 @@ from domain.value_objects.user_id import UserId
 
 @runtime_checkable
 class UserRepository(Protocol):
-    """Persistence contract for the identity domain's User aggregate."""
+    """Контракт персистентности агрегата User доменной модели identity."""
 
     async def exists_by_email(self, email: Email) -> bool: ...
 

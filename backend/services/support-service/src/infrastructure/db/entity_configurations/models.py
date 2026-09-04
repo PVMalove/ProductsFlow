@@ -74,7 +74,7 @@ class TicketMessageModel(Base):
 
 
 class ProcessedMessage(Base):
-    """Inbox receipt for an identity event identified by its outbox id."""
+    """Inbox-квитанция для события identity, идентифицированного его outbox id."""
 
     __tablename__ = "processed_messages"
 

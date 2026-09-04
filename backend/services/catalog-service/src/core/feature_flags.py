@@ -1,1 +1,1 @@
-"""Service-local feature flags belong here when catalog introduces one."""
+"""Здесь место для сервис-локальных feature flags, когда catalog их заведёт."""

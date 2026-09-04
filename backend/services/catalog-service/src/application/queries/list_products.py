@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""List-products query and handler."""
+"""Query и handler для списка товаров."""
 
 from dataclasses import dataclass
 
@@ -27,7 +27,7 @@ class ListProductsQueryHandler:
     Context & Purpose: Получение списка товаров (ленты) с поддержкой курсорной пагинации.
     Validations: Специфичных нет.
     Data Sourcing: ProductQueryPort, фильтрация по курсорам (after/before); элементы
-    маппятся в transport-neutral ProductView, страница — в Page (ADR 0031, issue #221).
+    маппятся в transport-neutral ProductView, страница — в Page (ADR 0002, issue #221).
     """
 
     def __init__(self, repository: ProductQueryPort) -> None:

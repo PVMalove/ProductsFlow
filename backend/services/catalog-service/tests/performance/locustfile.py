@@ -1,1 +1,1 @@
-"""Performance entrypoint reserved for catalog-service scenarios."""
+"""Точка входа нагрузочных тестов, зарезервированная под сценарии catalog-service."""

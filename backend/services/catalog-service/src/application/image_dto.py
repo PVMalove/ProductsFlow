@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Transport-neutral image DTOs for image command and query handlers."""
+"""Transport-neutral DTO картинки для command и query handler'ов картинки."""
 
 from dataclasses import dataclass
 from datetime import datetime

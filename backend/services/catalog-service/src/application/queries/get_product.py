@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Get-product query and visibility handler."""
+"""Query и visibility handler get-product."""
 
 import uuid
 from dataclasses import dataclass

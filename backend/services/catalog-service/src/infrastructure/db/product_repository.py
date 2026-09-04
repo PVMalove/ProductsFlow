@@ -66,7 +66,7 @@ class ProductRepository:
 
     Мутирующие методы добавляют ORM-изменения и дренируют доменные события в
     outbox в точке мутации. Фиксация транзакции принадлежит CatalogUnitOfWork
-    (ADR 0034), поэтому этот адаптер никогда не коммитит самостоятельно.
+    (ADR 0006), поэтому этот адаптер никогда не коммитит самостоятельно.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -242,7 +242,7 @@ class ProductRepository:
         after: Cursor | None = None,
         before: Cursor | None = None,
     ) -> ProductPage:
-        # Списки не персонализированы и не имеют admin-обхода (ADR 0002/0003)
+        # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
         # — деактивированный Товар и Товар деактивированного (или ещё не
         # добранного, issue #149) Владельца одинаково скрыты из выдачи для
         # всех, включая самого Владельца. INNER JOIN: Товар, чей Владелец ещё
@@ -314,8 +314,9 @@ class ProductRepository:
         return rows[:limit], len(rows) > limit
 
 
-# Static structural check: mypy verifies that the concrete implementation
-# satisfies every operation required by the domain repository contract.
+# Статическая структурная проверка: mypy убеждается, что конкретная
+# реализация удовлетворяет каждую операцию, требуемую доменным контрактом
+# репозитория.
 _product_repository_implementation: type[ProductRepositoryPort] = ProductRepository
 _product_command_port_implementation: type[ProductCommandPort] = ProductRepository
 _product_query_port_implementation: type[ProductQueryPort] = ProductRepository

@@ -13,7 +13,7 @@ class DomainEvent:
 
     `event_type`/`aggregate_type` и методы `aggregate_id()`/`to_payload()`
     — общий контракт, которым управляется generic drain-в-outbox из
-    `kernel_platform.outbox.drain` (ADR 0029): любой потребитель, знающий
+    `kernel_platform.outbox.drain` (ADR 0006/0010): любой потребитель, знающий
     только базовый `DomainEvent`, может собрать строку Outbox без импорта
     конкретного подкласса события. `event_type`/`aggregate_type` — обычные
     (не `ClassVar`) поля с дефолтом: `support-service`'s `TicketCreated` и

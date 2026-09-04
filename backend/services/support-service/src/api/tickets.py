@@ -36,10 +36,10 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
 
 def _unwrap[T](result: Result[T]) -> T:
-    """Response shapes that carry pagination in `meta` alongside `data`
-    (`GetTicketDetailQueryHandler`, `ListAdminTicketsQueryHandler`) can't go
-    through `match_result` — this keeps the same error translation without
-    wrapping the success value."""
+    """Формы ответа, несущие пагинацию в `meta` рядом с `data`
+    (`GetTicketDetailQueryHandler`, `ListAdminTicketsQueryHandler`) не
+    проходят через `match_result` — здесь сохраняется та же трансляция
+    ошибок без обёртывания успешного значения."""
     if result.is_err:
         error = result.error
         raise ApiError(

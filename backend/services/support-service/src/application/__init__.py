@@ -1,1 +1,1 @@
-"""Use cases and application ports for support-service."""
+"""Use case'ы и application-порты для support-service."""

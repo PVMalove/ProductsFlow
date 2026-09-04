@@ -1,4 +1,4 @@
-"""Генерация локальной RS256-пары для identity-service (dev, `make keys`, ADR 0011)."""
+"""Генерация локальной RS256-пары для identity-service (dev, `make keys`, ADR 0005)."""
 
 from pathlib import Path
 

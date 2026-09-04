@@ -3,11 +3,11 @@ from http import HTTPStatus
 
 
 class ApplicationError(Exception):
-    """Base class for expected failures at the application boundary.
+    """Базовый класс ожидаемых отказов на границе application-слоя.
 
-    Exposes `code`, `message`, and `status_code` structurally (ADR 0031) so
-    kernel_platform's exception handler can translate it into the BFF error
-    shape without importing this service's exception classes."""
+    Структурно экспонирует `code`, `message` и `status_code` (ADR 0003), чтобы
+    exception handler `kernel_platform` мог транслировать её в форму BFF-ошибки,
+    не импортируя классы исключений этого сервиса."""
 
     code: str
     message: str
@@ -18,7 +18,7 @@ class ApplicationError(Exception):
 
 
 class ProductNotFoundError(ApplicationError):
-    """The requested product does not exist or is not visible."""
+    """Запрошенный товар не существует или не виден."""
 
     code = "PRODUCT_NOT_FOUND"
     message = "Товар не найден"
@@ -26,7 +26,7 @@ class ProductNotFoundError(ApplicationError):
 
 
 class ProductAccessDeniedError(ApplicationError):
-    """The actor is not allowed to perform the requested product operation."""
+    """Actor не имеет права выполнить запрошенную операцию над товаром."""
 
     code = "PRODUCT_ACCESS_DENIED"
     message = "Нет прав на этот товар"
@@ -34,7 +34,7 @@ class ProductAccessDeniedError(ApplicationError):
 
 
 class ProductImageNotFoundError(ApplicationError):
-    """The product is visible, but has no image record."""
+    """Товар виден, но у него нет записи картинки."""
 
     code = "PRODUCT_IMAGE_NOT_FOUND"
     message = "У товара нет картинки!"
@@ -42,7 +42,7 @@ class ProductImageNotFoundError(ApplicationError):
 
 
 class IdentityUnavailableError(ApplicationError):
-    """The identity service could not answer an authorization query."""
+    """identity-service не смог ответить на запрос авторизации."""
 
     code = "IDENTITY_UNAVAILABLE"
     message = "identity-service недоступен"
@@ -50,7 +50,7 @@ class IdentityUnavailableError(ApplicationError):
 
 
 class ProductListCursorConflictError(ApplicationError):
-    """Both `after` and `before` pagination cursors were supplied together."""
+    """Курсоры пагинации `after` и `before` переданы одновременно."""
 
     code = "PRODUCT_LIST_CURSOR_CONFLICT"
     message = "Нельзя одновременно указать after и before"
@@ -58,7 +58,7 @@ class ProductListCursorConflictError(ApplicationError):
 
 
 class ProductListInvalidCursorError(ApplicationError):
-    """A pagination cursor could not be decoded."""
+    """Курсор пагинации не удалось декодировать."""
 
     code = "PRODUCT_LIST_INVALID_CURSOR"
     message = "Некорректный курсор пагинации"
@@ -66,7 +66,7 @@ class ProductListInvalidCursorError(ApplicationError):
 
 
 class ProductImageUnsupportedMediaTypeError(ApplicationError):
-    """An uploaded image's content type isn't one of the allowed formats."""
+    """Тип содержимого загруженной картинки не входит в число допустимых форматов."""
 
     code = "PRODUCT_IMAGE_UNSUPPORTED_MEDIA_TYPE"
     message = "Допустимы только JPEG, PNG, WEBP форматы"
@@ -74,7 +74,7 @@ class ProductImageUnsupportedMediaTypeError(ApplicationError):
 
 
 class ProductImageTooLargeError(ApplicationError):
-    """An uploaded image exceeds the maximum allowed size."""
+    """Загруженная картинка превышает максимально допустимый размер."""
 
     code = "PRODUCT_IMAGE_TOO_LARGE"
     message = "Файл больше 5 МБ"

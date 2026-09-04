@@ -1,1 +1,1 @@
-"""Cross-cutting policy and configuration for catalog-service."""
+"""Кросс-срезная политика и конфигурация для catalog-service."""

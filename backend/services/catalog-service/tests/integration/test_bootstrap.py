@@ -27,10 +27,11 @@ BUCKET_NAME = "product-chunks"
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def _clean_catalog_tables(db_engine: AsyncEngine) -> AsyncIterator[None]:
-    """`seed_catalog_demo_data` commits through its own engine-bound session
-    (not the savepoint-rollback `db_session` fixture), so this test's writes
-    must be cleaned up explicitly to avoid leaking 360 products into the
-    shared session-scoped schema other integration tests run against."""
+    """`seed_catalog_demo_data` коммитит через свою собственную привязанную
+    к engine сессию (не через savepoint-rollback фикстуру `db_session`),
+    поэтому записи этого теста нужно явно очищать, чтобы не утекли 360
+    товаров в общую session-scoped схему, против которой идут другие
+    интеграционные тесты."""
     try:
         yield
     finally:
@@ -57,9 +58,9 @@ async def _seed_admin_owner_row(db_engine: AsyncEngine) -> None:
 async def test_seed_catalog_demo_data_creates_360_owned_imaged_products(
     db_engine: AsyncEngine, _clean_catalog_tables: None
 ) -> None:
-    """Issue #208 AC: a full seed run, against a database where the admin's
-    events have already been projected into OwnerReadModel, produces 360
-    correctly-owned, imaged products."""
+    """Issue #208 AC: полный прогон сида на БД, где события admin уже
+    спроецированы в OwnerReadModel, даёт 360 корректно-владеемых товаров
+    с картинками."""
     await _seed_admin_owner_row(db_engine)
     image_storage = FakeImageStorage()
 

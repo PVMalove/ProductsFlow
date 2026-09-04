@@ -43,12 +43,12 @@ async def test_postgres_container_is_reachable(db_engine: AsyncEngine) -> None:
 async def test_db_session_rollback_isolates_writes_between_tests(
     _smoke_probe_table: None, db_engine: AsyncEngine
 ) -> None:
-    # Reproduces the db_session fixture's begin+SAVEPOINT+rollback dance
-    # directly against db_engine (rather than using the db_session fixture
-    # itself), so this test can trigger the rollback mid-test and check its
-    # effect on a second, independent connection — proving the isolation
-    # mechanism actually discards writes, not just that another transaction
-    # can't see uncommitted ones.
+    # Воспроизводит танец begin+SAVEPOINT+rollback фикстуры db_session
+    # напрямую против db_engine (а не через саму фикстуру db_session), чтобы
+    # этот тест мог вызвать rollback посреди теста и проверить его эффект на
+    # втором, независимом соединении — доказывая, что механизм изоляции
+    # действительно отбрасывает записи, а не просто то, что другая
+    # транзакция не видит незакоммиченное.
     def _count(connection: Connection) -> int | None:
         return connection.execute(text(f"SELECT count(*) FROM {SMOKE_TABLE}")).scalar()
 
@@ -69,11 +69,12 @@ async def test_db_session_rollback_isolates_writes_between_tests(
         assert await connection.run_sync(_count) == 0
 
 
-# Order-dependent by design: proves the db_session fixture's own teardown
-# (session.close() + connection.rollback()) actually isolates state between
-# tests — not just that the reproduction above does. Relies on pytest's
-# default top-to-bottom execution order within a module (no xdist/randomly
-# plugin runs against this suite), same idiom as the rabbitmq purge tests in
+# Специально зависит от порядка: доказывает, что собственный teardown
+# фикстуры db_session (session.close() + connection.rollback()) реально
+# изолирует состояние между тестами — а не только то, что это делает
+# воспроизведение выше. Полагается на дефолтный порядок выполнения pytest
+# сверху вниз внутри модуля (плагины xdist/randomly к этому сьюту не
+# применяются) — тот же приём, что и у rabbitmq purge-тестов в
 # identity-service/tests/integration/test_smoke.py.
 @asyncio_session_loop
 async def test_db_session_fixture_leaves_a_row_for_this_test_only(

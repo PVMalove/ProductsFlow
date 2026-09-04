@@ -1,1 +1,2 @@
-"""Service-local rate-limiting policy belongs here when identity needs one."""
+"""Здесь место для сервис-локальной политики rate-limiting, когда identity
+её заведёт."""

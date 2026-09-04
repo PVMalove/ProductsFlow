@@ -1,1 +1,1 @@
-"""Small helpers local to support-service."""
+"""Небольшие вспомогательные утилиты, локальные для support-service."""

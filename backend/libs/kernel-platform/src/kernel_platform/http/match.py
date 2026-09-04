@@ -1,4 +1,4 @@
-"""Generic domain-`Result`-в-HTTP unwrapping (ADR 0031)."""
+"""Общее разворачивание доменного `Result` в HTTP-ответ (ADR 0002/0003)."""
 
 from kernel_domain.result import Result
 

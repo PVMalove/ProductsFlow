@@ -1,4 +1,4 @@
-"""Identity fake UoW for command-handler unit tests (ADR 0034)."""
+"""Фейковый UoW identity для юнит-тестов command handler'ов (ADR 0006)."""
 
 from typing import Any
 

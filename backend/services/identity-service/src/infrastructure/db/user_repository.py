@@ -10,8 +10,8 @@ from domain.role import Role
 from domain.value_objects.email import Email
 from domain.value_objects.user_id import UserId
 
-# Importing the listener module is intentional: it registers User ORM events
-# whenever the repository is used, including from application code.
+# Импорт модуля-слушателя намеренный: он регистрирует ORM-события User при
+# каждом использовании репозитория, в том числе из application-кода.
 from infrastructure.db import audit as _audit  # noqa: F401
 from infrastructure.db.entity_configurations.models import UserModel
 
@@ -19,8 +19,8 @@ _UserRows = list[UserModel]
 
 
 def _hydrate_email(value: str) -> Email:
-    """A stored email was already validated by `Email.create()` on write —
-    a failure here means the row itself is corrupt, not a business error."""
+    """Сохранённый email уже был провалидирован `Email.create()` при записи —
+    отказ здесь означает, что сама строка повреждена, а не бизнес-ошибку."""
     result = Email.create(value)
     assert result.is_ok, f"invalid email in users row: {value!r}"
     return result.value
@@ -38,7 +38,7 @@ def _to_domain(row: UserModel) -> User:
 
 
 class UserRepository:
-    """Async adapter that is the only boundary seeing both User and the DB."""
+    """Async-адаптер — единственная граница, видящая и User, и БД."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -100,7 +100,7 @@ def _to_read_model(row: UserModel) -> UserReadModel:
 
 
 class SqlUserQueryRepository:
-    """Read-only SQL adapter for the identity application's query port."""
+    """SQL-адаптер только для чтения для query-порта identity application."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session

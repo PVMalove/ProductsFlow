@@ -1,4 +1,4 @@
-"""Login command and handler."""
+"""Команда и handler логина."""
 
 from dataclasses import dataclass
 

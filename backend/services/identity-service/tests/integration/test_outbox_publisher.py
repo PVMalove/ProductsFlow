@@ -14,9 +14,9 @@ from kernel_platform.outbox.publisher import OutboxPublisher
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
-# db_engine/rabbitmq_amqp_url bind to the session-scoped testcontainers, so
-# tests exercising both must run on that same event loop — same reasoning as
-# tests/integration/test_smoke.py.
+# db_engine/rabbitmq_amqp_url привязаны к session-scoped testcontainers,
+# поэтому тесты, использующие оба, должны выполняться на том же event loop —
+# та же логика, что и у tests/integration/test_smoke.py.
 asyncio_session_loop = pytest.mark.asyncio(loop_scope="session")
 
 TEST_EXCHANGE_NAME = "productsflow.events.outbox-publisher-test"
@@ -179,7 +179,7 @@ async def test_a_row_claimed_but_never_committed_is_still_delivered_after_restar
     events_exchange: AbstractExchange,
     _clear_outbox_after_test: None,
 ) -> None:
-    """Симулирует kill-restart (ADR 0014, issue #101, тест (а) из DoD Фазы
+    """Симулирует kill-restart (ADR 0010, issue #101, тест (а) из DoD Фазы
     2b TD): соединение обрывается после `SELECT ... FOR UPDATE`, но до
     коммита. `async with session_factory()` без `commit()` откатывает
     транзакцию на выходе — так же, как обрыв соединения к Postgres снял бы

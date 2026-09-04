@@ -1,1 +1,1 @@
-"""Service-local feature flags belong here when identity introduces one."""
+"""Здесь место для сервис-локальных feature flags, когда identity их заведёт."""

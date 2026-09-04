@@ -3,11 +3,11 @@ from http import HTTPStatus
 
 
 class ApplicationError(Exception):
-    """Base class for expected failures at the application boundary.
+    """Базовый класс ожидаемых отказов на границе application-слоя.
 
-    Exposes `code`, `message`, and `status_code` structurally (ADR 0031) so
-    kernel_platform's exception handler can translate it into the BFF error
-    shape without importing this service's exception classes."""
+    Структурно экспонирует `code`, `message` и `status_code` (ADR 0003), чтобы
+    exception handler `kernel_platform` мог транслировать её в форму BFF-ошибки,
+    не импортируя классы исключений этого сервиса."""
 
     code: str
     message: str
@@ -18,7 +18,7 @@ class ApplicationError(Exception):
 
 
 class TicketListCursorConflictError(ApplicationError):
-    """Both `after` and `before` pagination cursors were supplied together."""
+    """Курсоры пагинации `after` и `before` переданы одновременно."""
 
     code = "TICKET_LIST_CURSOR_CONFLICT"
     message = "Нельзя одновременно указать after и before"
@@ -26,7 +26,7 @@ class TicketListCursorConflictError(ApplicationError):
 
 
 class TicketListInvalidCursorError(ApplicationError):
-    """A pagination cursor could not be decoded."""
+    """Курсор пагинации не удалось декодировать."""
 
     code = "TICKET_LIST_INVALID_CURSOR"
     message = "Некорректный курсор пагинации"

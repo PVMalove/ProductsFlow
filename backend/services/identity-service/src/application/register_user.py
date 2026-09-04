@@ -1,4 +1,4 @@
-"""Compatibility adapter for the pre-CQRS register-user import path."""
+"""Adapter совместимости для до-CQRS пути импорта register-user."""
 
 from application.commands.register_user import (
     RegisterUserCommand,

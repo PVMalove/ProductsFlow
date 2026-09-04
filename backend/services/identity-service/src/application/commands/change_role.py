@@ -1,4 +1,4 @@
-"""Change-user-role command and handler."""
+"""Команда и handler change-user-role."""
 
 from dataclasses import dataclass
 

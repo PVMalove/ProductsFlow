@@ -18,7 +18,7 @@ class ProductPage:
 
 @runtime_checkable
 class ProductRepository(Protocol):
-    """Контракт персистентности агрегата Product (ADR 0023)."""
+    """Контракт персистентности агрегата Product (ADR 0006)."""
 
     async def create(
         self,

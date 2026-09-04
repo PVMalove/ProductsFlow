@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""List-all-tickets query and handler."""
+"""Query и handler list-all-tickets."""
 
 from dataclasses import dataclass
 
@@ -25,7 +25,7 @@ class ListAdminTicketsQueryHandler:
     Business Logic Summary
 
     Context & Purpose: Получение полного списка тикетов в системе для администраторов.
-    Validations: Владеет решением об авторизации сама (ADR 0033) — не контроллер.
+    Validations: Владеет решением об авторизации сама (ADR 0006) — не контроллер.
     Data Sourcing: TicketRepository, с поддержкой курсорной пагинации.
     """
 

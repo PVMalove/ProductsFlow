@@ -1,1 +1,1 @@
-"""Small helpers local to identity-service."""
+"""Небольшие вспомогательные утилиты, локальные для identity-service."""

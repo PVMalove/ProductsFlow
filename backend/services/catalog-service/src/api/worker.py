@@ -92,7 +92,7 @@ async def handle_user_event(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    """Apply one user snapshot and record its message id atomically."""
+    """Атомарно применяет один снапшот пользователя и фиксирует id его сообщения."""
     event_type = _event_type(message)
     message_id = _message_id(message)
 
@@ -139,7 +139,7 @@ def build_user_event_handler(
 
 
 async def main() -> None:
-    """Run catalog's user-event projection worker (ADR 0010/0019)."""
+    """Запускает воркер проекции user-событий catalog (ADR 0010/0011)."""
     engine = create_async_engine(settings.catalog_database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     connection = await aio_pika.connect_robust(settings.catalog_amqp_url)

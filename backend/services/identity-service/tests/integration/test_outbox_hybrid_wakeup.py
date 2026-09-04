@@ -18,9 +18,10 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
-# db_engine/rabbitmq_amqp_url/postgres_container bind to the session-scoped
-# testcontainers, so tests exercising them must run on that same event loop —
-# same reasoning as tests/integration/test_smoke.py and test_outbox_publisher.py.
+# db_engine/rabbitmq_amqp_url/postgres_container привязаны к session-scoped
+# testcontainers, поэтому использующие их тесты должны выполняться на том же
+# event loop — та же логика, что и у tests/integration/test_smoke.py и
+# test_outbox_publisher.py.
 asyncio_session_loop = pytest.mark.asyncio(loop_scope="session")
 
 TEST_EXCHANGE_NAME = "productsflow.events.outbox-hybrid-wakeup-test"
@@ -170,7 +171,7 @@ async def test_a_row_inserted_before_subscribing_is_still_delivered_by_the_next_
     events_exchange: AbstractExchange,
     _clear_outbox_after_test: None,
 ) -> None:
-    """Регресс-тест потерянного `NOTIFY` (ADR 0014, issue #102): триггер
+    """Регресс-тест потерянного `NOTIFY` (ADR 0010, issue #102): триггер
     стреляет `pg_notify` в момент вставки, но воркер ещё не подписан на
     канал — Postgres не ставит уведомление в очередь для будущего
     подписчика, оно теряется безвозвратно, ровно как при рестарте воркера.

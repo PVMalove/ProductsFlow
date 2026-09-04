@@ -135,10 +135,11 @@ class User(Entity[UserId]):
         return Result[None].ok(None)
 
     def delete(self) -> Result[None]:
-        """Replace this account with an anonymized, terminal tombstone
-        (ADR 0035). The old email frees up for a fresh registration —
-        deletion is a legal identity-domain outcome, not a masked
-        deactivation — while `is_deleted` blocks reactivation forever."""
+        """Заменяет эту учётную запись анонимизированным терминальным
+        tombstone (ADR 0007). Старый email освобождается для новой
+        регистрации — удаление легитимный исход identity-домена, не
+        замаскированная деактивация — а `is_deleted` навсегда блокирует
+        реактивацию."""
         if self.is_deleted:
             return Result[None].fail(
                 Error(

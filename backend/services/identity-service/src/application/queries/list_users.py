@@ -1,4 +1,4 @@
-"""List-users query and handler."""
+"""Query и handler list-users."""
 
 from dataclasses import dataclass
 
@@ -9,7 +9,7 @@ from application.ports import UserListQueryPort, UserPage
 
 @dataclass(frozen=True)
 class ListUsersQuery:
-    """DTO for the administrator's cursor-paginated user list."""
+    """DTO для курсорно-пагинированного списка пользователей администратора."""
 
     limit: int
     after: Cursor | None = None
@@ -17,7 +17,7 @@ class ListUsersQuery:
 
 
 class ListUsersQueryHandler:
-    """Read users through the query-side port."""
+    """Читает пользователей через query-side порт."""
 
     def __init__(self, users: UserListQueryPort) -> None:
         self._users = users

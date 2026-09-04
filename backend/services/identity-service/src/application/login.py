@@ -1,4 +1,4 @@
-"""Compatibility adapter for the pre-CQRS login import path."""
+"""Adapter совместимости для до-CQRS пути импорта логина."""
 
 from application.commands.login import LoginCommand, LoginCommandHandler
 

@@ -1,4 +1,4 @@
-"""Change-password command and handler."""
+"""Команда и handler change-password."""
 
 from dataclasses import dataclass
 

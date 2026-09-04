@@ -1,4 +1,4 @@
-"""Public query-side interface for catalog application use cases."""
+"""Публичный query-side интерфейс для application use case'ов catalog."""
 
 from application.queries.get_product import GetProductQuery, GetProductQueryHandler
 from application.queries.get_product_audit import (

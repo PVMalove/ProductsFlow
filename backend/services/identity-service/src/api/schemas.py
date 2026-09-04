@@ -47,7 +47,7 @@ class PasswordChange(BaseModel):
 
 
 class UserActivateRequest(BaseModel):
-    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+    """Path-bound — без JSON body, `user_id` приходит из URL."""
 
     user_id: UUID
 
@@ -56,7 +56,7 @@ class UserActivateRequest(BaseModel):
 
 
 class UserDeactivateRequest(BaseModel):
-    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+    """Path-bound — без JSON body, `user_id` приходит из URL."""
 
     user_id: UUID
 
@@ -68,7 +68,7 @@ class UserDeactivateRequest(BaseModel):
 
 
 class UserTargetAuditRequest(BaseModel):
-    """Path-bound — without a JSON body, `user_id` comes from the URL."""
+    """Path-bound — без JSON body, `user_id` приходит из URL."""
 
     user_id: UUID
 
@@ -77,7 +77,7 @@ class UserTargetAuditRequest(BaseModel):
 
 
 class UserGlobalAuditRequest(BaseModel):
-    """Query-bound — offset pagination for the global admin audit feed."""
+    """Query-bound — offset-пагинация глобального admin audit-фида."""
 
     page_index: int = Query(default=1, ge=1)
     page_size: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
@@ -87,7 +87,7 @@ class UserGlobalAuditRequest(BaseModel):
 
 
 class UserListRequest(BaseModel):
-    """Query-bound — `limit`/`after`/`before` come from the query string."""
+    """Query-bound — `limit`/`after`/`before` приходят из query-строки."""
 
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)

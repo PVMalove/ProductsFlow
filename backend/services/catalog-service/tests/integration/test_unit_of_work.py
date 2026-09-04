@@ -1,4 +1,4 @@
-"""Transactional integration seam for catalog command-side mutations (issue #246)."""
+"""Транзакционный интеграционный шов для command-side мутаций catalog (issue #246)."""
 
 import uuid
 
@@ -32,7 +32,7 @@ class _IdentityGateway:
 async def test_failed_create_rolls_back_cold_start_owner_projection(
     db_session: AsyncSession,
 ) -> None:
-    """The separately injected OwnerReadModel shares the handler's UoW."""
+    """Отдельно инъецированный OwnerReadModel разделяет UoW хендлера."""
     owner_id = uuid.uuid4()
     handler = CreateProductCommandHandler(
         SqlCatalogUnitOfWork(db_session),
@@ -57,7 +57,8 @@ async def test_failed_create_rolls_back_cold_start_owner_projection(
 async def test_image_mutations_rollback_together_without_partial_audit_or_outbox(
     db_session: AsyncSession,
 ) -> None:
-    """A failure after an image write leaves neither image nor audit/outbox state."""
+    """Отказ после записи картинки не оставляет ни состояния картинки, ни
+    audit/outbox."""
     owner_id = uuid.uuid4()
     product_id = uuid.uuid4()
     db_session.add(

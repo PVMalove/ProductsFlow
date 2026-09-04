@@ -12,7 +12,7 @@ from kernel_platform.topology import (
 )
 
 # amqp_connection/channel/events_exchange_exists (conftest.py) —
-# module/session-scoped, bound к session-scoped event loop; тесты и
+# module/session-scoped, привязаны к session-scoped event loop; тесты и
 # фикстуры этого модуля должны идти на том же loop — см. identity-service's
 # tests/integration/test_outbox_publisher.py.
 pytestmark = pytest.mark.asyncio(loop_scope="session")

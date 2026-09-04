@@ -1,1 +1,1 @@
-"""Cross-cutting policy and configuration for support-service."""
+"""Кросс-срезная политика и конфигурация для support-service."""

@@ -90,10 +90,10 @@ def _on_user_update(
 ) -> None:
     state = inspect(target)
     if state.attrs.is_deleted.history.has_changes() and target.is_deleted:
-        # One domain event (User.delete()) touches email/password_hash/
-        # is_active/is_deleted together — a single audit row describes it;
-        # the checks below would otherwise misdescribe it as a password
-        # change plus a deactivation.
+        # Одно доменное событие (User.delete()) трогает email/password_hash/
+        # is_active/is_deleted разом — одна audit-строка описывает это; иначе
+        # проверки ниже неверно описали бы это как смену пароля плюс
+        # деактивацию.
         _write_audit(
             connection,
             user_id=target.id,
@@ -152,7 +152,7 @@ def _to_entry(row: UserAuditLog) -> UserAuditEntry:
 
 
 class SqlUserAuditReader:
-    """SQL adapter for global and personal User audit reads."""
+    """SQL-адаптер для глобальных и персональных audit-чтений User."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

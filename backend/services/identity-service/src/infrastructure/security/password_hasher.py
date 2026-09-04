@@ -2,7 +2,7 @@ import bcrypt
 
 
 class BcryptPasswordHasher:
-    """Production password hashing adapter for application commands."""
+    """Production-адаптер хеширования пароля для application-команд."""
 
     def hash(self, password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

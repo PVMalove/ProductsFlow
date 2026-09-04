@@ -1,4 +1,4 @@
-"""ADR 0031: generic success envelope + `Result`-to-HTTP unwrapping."""
+"""ADR 0002/0003: общий конверт успеха + разворачивание `Result` в HTTP."""
 
 import pytest
 from kernel_domain.errors import Error, ErrorType

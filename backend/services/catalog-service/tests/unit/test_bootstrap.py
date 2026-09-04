@@ -10,10 +10,10 @@ ADMIN_ID = uuid.uuid4()
 
 
 class FakeAdminReadModel:
-    """Fake read port (prior art: identity-service's
-    tests/unit/fake_user_repository.py) — returns `None` for a fixed number
-    of polls, then the admin snapshot, so `wait_for_admin_user_id` can be
-    unit-tested without a real database or event consumer."""
+    """Фейковый read-порт (прецедент: identity-service's
+    tests/unit/fake_user_repository.py) — возвращает `None` фиксированное
+    число опросов, затем снапшот admin, чтобы `wait_for_admin_user_id` можно
+    было протестировать юнит-тестом без реальной БД или event-консьюмера."""
 
     def __init__(self, *, polls_until_found: int) -> None:
         self._polls_until_found = polls_until_found

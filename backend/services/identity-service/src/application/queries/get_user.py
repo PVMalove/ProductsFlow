@@ -1,4 +1,4 @@
-"""Get-user query and read-only handler."""
+"""Query и read-only handler get-user."""
 
 from dataclasses import dataclass
 
@@ -11,14 +11,12 @@ from domain.value_objects.user_id import UserId
 
 @dataclass(frozen=True)
 class GetUserQuery:
-    """DTO для получения информации о пользователе."""
+    """DTO запроса для получения данных пользователя.
 
-    """
-    DTO запроса для получения данных пользователя.
-    
     Attributes:
         user_id (UserId): Уникальный идентификатор пользователя.
     """
+
     user_id: UserId
 
 
@@ -27,17 +25,9 @@ class GetUserQueryHandler:
     Business Logic Summary
 
     Context & Purpose: Получение данных профиля пользователя по его ID.
-    Validations: Проверяет, запрашивает ли пользователь свои данные или он админ.
-    Data Sourcing: Данные извлекаются из UserReadModel/Repository.
-    """
-
-    """
-    Business Logic Summary
-    
-    Context & Purpose: Обрабатывает запрос на получение данных пользователя для чтения.
-    Validations: Проверяет существование пользователя.
-    Возвращает ошибку, если он не найден.
-    Data Sourcing: Данные извлекаются через порт чтения по ID.
+    Validations: Проверяет существование пользователя; авторизация (свои
+    данные или админ) обеспечивается на границе API.
+    Data Sourcing: Данные извлекаются через query-порт по ID.
     """
 
     def __init__(self, users: UserQueryPort) -> None:

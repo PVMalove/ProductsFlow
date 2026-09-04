@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 async def check_database_connectivity(engine: AsyncEngine) -> None:
-    """Verify the database accepts connections; raises on failure.
+    """Проверяет, что БД принимает соединения; при отказе поднимает исключение.
 
-    Run after `alembic upgrade head` as the last step of support-bootstrap
-    (ADR 0017) — support has no bucket-ensure or seed stage.
+    Выполняется после `alembic upgrade head` как последний шаг
+    support-bootstrap (ADR 0001) — у support нет этапа bucket-ensure или сида.
     """
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))

@@ -1,1 +1,2 @@
-"""Service-local secret loading policy belongs here when catalog needs one."""
+"""Здесь место для сервис-локальной политики загрузки секретов, когда
+catalog её заведёт."""

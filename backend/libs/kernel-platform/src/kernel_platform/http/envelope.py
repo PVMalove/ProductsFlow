@@ -1,4 +1,4 @@
-"""Generic BFF success envelope (ADR 0031).
+"""Общий конверт успешного BFF-ответа (ADR 0002).
 
 `ApiResponse[T]` не зависит ни от одного catalog/identity/support DTO — `T`
 подставляет сам вызывающий сервис (`ApiResponse[ProductView]` и т.п.)."""

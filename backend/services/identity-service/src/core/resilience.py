@@ -1,1 +1,1 @@
-"""Service-local resilience policy belongs here; no policy is enabled yet."""
+"""Здесь место для сервис-локальной resilience-политики; пока ни одна не включена."""

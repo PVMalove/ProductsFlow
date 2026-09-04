@@ -1,4 +1,4 @@
-"""SQLAlchemy implementation of the catalog transaction boundary."""
+"""Реализация транзакционной границы catalog на SQLAlchemy."""
 
 from kernel_platform.unit_of_work import SqlAlchemyUnitOfWork
 from sqlalchemy.ext.asyncio import AsyncSession

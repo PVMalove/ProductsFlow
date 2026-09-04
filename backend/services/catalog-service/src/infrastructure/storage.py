@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class S3Storage:
-    """S3-compatible object storage adapter for catalog images."""
+    """S3-совместимый адаптер объектного хранилища для картинок catalog."""
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class S3Storage:
     async def put_object(
         self, bucket_name: str, key: str, body: bytes, content_type: str
     ) -> None:
-        """Write an object unconditionally, replacing an existing object."""
+        """Записывает объект безусловно, заменяя уже существующий."""
         async with self.client() as client:
             await client.put_object(
                 Bucket=bucket_name,
@@ -54,7 +54,7 @@ class S3Storage:
             )
 
     async def delete_object(self, bucket_name: str, key: str) -> None:
-        """Delete an object and tolerate it already being absent."""
+        """Удаляет объект, толерантно к его отсутствию."""
         async with self.client() as client:
             try:
                 await client.delete_object(Bucket=bucket_name, Key=key)
@@ -76,7 +76,8 @@ class S3Storage:
     async def build_presigned_url(
         self, bucket_name: str, key: str, expires_in: int = 3600
     ) -> str:
-        """Build a time-limited read URL without making the bucket public."""
+        """Строит ограниченную по времени ссылку на чтение, не делая bucket
+        публичным."""
         async with self.client(endpoint_url=self._public_endpoint_url) as client:
             url = client.generate_presigned_url(
                 "get_object",

@@ -1,4 +1,4 @@
-"""ADR 0033: shared framework-independent Actor/ActorRole contract."""
+"""ADR 0005: общий framework-independent контракт Actor/ActorRole."""
 
 import dataclasses
 import uuid

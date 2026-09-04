@@ -57,8 +57,9 @@ UserProjectionDI = Annotated[UserProjectionPort, Depends(get_user_projection)]
 async def _verify_token(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> uuid.UUID:
-    """Local JWT verification only — no DB access, so a missing/invalid
-    token is rejected before a database session is ever opened."""
+    """Только локальная проверка JWT — без обращения к БД, поэтому
+    отсутствующий/невалидный токен отклоняется до того, как вообще
+    открывается сессия БД."""
     if credentials is None:
         raise _AUTH_REQUIRED
     try:
@@ -72,11 +73,11 @@ async def get_current_actor(
     user_id: Annotated[uuid.UUID, Depends(_verify_token)],
     projection: UserProjectionDI,
 ) -> Actor:
-    """Build the transport-neutral `Actor` from support's own local user
-    projection — never from JWT claims (ADR 0033). Deny-by-default: a
-    missing projection row is `401` (the caller may be genuine but the
-    async projection hasn't caught up yet), an inactive or tombstoned one is
-    `403`."""
+    """Строит transport-neutral `Actor` из собственной локальной проекции
+    пользователя support — никогда из claims JWT (ADR 0005/0012).
+    Deny-by-default: отсутствующая строка проекции — `401` (вызывающий
+    может быть настоящим, но асинхронная проекция ещё не догнала), неактивная
+    или tombstoned — `403`."""
     snapshot = await projection.get(user_id)
     if snapshot is None:
         raise _UNKNOWN_ACTOR

@@ -56,6 +56,49 @@ jobs:
       - run: python scripts/check_architecture.py --strict
       - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py tests/unit/test_ci_matrix.py -q
 
+  backend-e2e:
+    name: E2E (black-box через Gateway)
+    needs: changes
+    if: needs.changes.outputs.has_backend_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      PYTEST_ADDOPTS: --junitxml=${{ github.workspace }}/backend/e2e-test-results.xml
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # Стек (identity/catalog/support + RabbitMQ/MinIO/Postgres + Nginx
+      # Gateway) поднимается и уничтожается самой фикстурой tests/e2e/conftest.py
+      # через `docker compose`, уже доступный на раннере — своих секретов не
+      # требует, JWT-ключи генерирует в project-scoped volume.
+      - run: uv run pytest tests/e2e -q
+
+      - name: Publish Test Report
+        uses: dorny/test-reporter@v3
+        if: always()
+        with:
+          name: Test Results (e2e)
+          path: backend/e2e-test-results.xml
+          reporter: python-xunit
+          fail-on-error: 'true'
+
+      - name: Upload test results artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-e2e
+          path: backend/e2e-test-results.xml
+
   backend-lint:
     name: Lint (${{ matrix.member }})
     needs: changes

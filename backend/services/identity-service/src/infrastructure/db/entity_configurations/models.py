@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class UserModel(Base):
-    """Persistence representation of the identity domain's User aggregate."""
+    """Представление персистентности агрегата User доменной модели identity."""
 
     __tablename__ = "users"
 

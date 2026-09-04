@@ -1,4 +1,4 @@
-"""Public query-side interface for identity application use cases."""
+"""Публичный query-side интерфейс для application use case'ов identity."""
 
 from application.queries.get_current_user import (
     GetCurrentUserHandler,

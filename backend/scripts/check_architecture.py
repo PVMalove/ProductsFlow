@@ -1,8 +1,8 @@
-"""Small, dependency-free CQRS and layer-boundary architecture check.
+"""Небольшая, не требующая зависимостей проверка архитектуры CQRS и границ слоёв.
 
-The active backend has completed its CQRS migration.  Both dependency
-direction and mixed command/query modules are therefore blocking violations.
-The frozen monolith is outside the scan root and remains untouched.
+Активный backend завершил миграцию на CQRS. Поэтому и направление
+зависимостей, и смешанные command/query-модули — блокирующие нарушения.
+Замороженный монолит находится вне корня сканирования и не затрагивается.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class Finding:
 
 
 def scan(root: Path) -> list[Finding]:
-    """Return deterministic findings for application and domain Python files."""
+    """Возвращает детерминированные находки для файлов application и domain."""
 
     findings: list[Finding] = []
     for layer in ("domain", "application"):
@@ -110,7 +110,8 @@ def _imported_cqrs_sides(node: ast.AST) -> set[str]:
 
 
 def _name_tokens(name: str) -> set[str]:
-    """Split CamelCase and snake_case names before matching use-case markers."""
+    """Разбивает CamelCase и snake_case имена перед сопоставлением с
+    маркерами use case."""
 
     return {token.lower() for token in _NAME_TOKEN.findall(name)}
 

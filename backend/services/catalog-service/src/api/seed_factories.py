@@ -1,7 +1,7 @@
-"""Deterministic demo-product generator for catalog-bootstrap (issue #208),
-ported from the frozen monolith's `app/seed_factories.py` — same categories,
-adjectives, nouns and `fake.seed_instance(42)` so the seeded catalog is
-reproducible across environments."""
+"""Детерминированный генератор демо-товаров для catalog-bootstrap (issue #208),
+перенесённый из замороженного монолита `app/seed_factories.py` — те же
+категории, прилагательные, существительные и `fake.seed_instance(42)`,
+чтобы засеянный каталог был воспроизводим в разных окружениях."""
 
 from dataclasses import dataclass
 
@@ -83,9 +83,9 @@ def _generate_description(name: str) -> str:
 
 
 def generate_products(count: int = 100) -> list[ProductSeed]:
-    # Re-seeded on every call, not just at import time: makes the output
-    # deterministic regardless of how many times this module's shared `fake`
-    # instance has already been drawn from in-process (e.g. by other tests).
+    # Пересеивается при каждом вызове, не только при импорте: делает вывод
+    # детерминированным независимо от того, сколько раз общий `fake`-инстанс
+    # этого модуля уже был использован в процессе (например, другими тестами).
     fake.seed_instance(42)
     seen_names: set[str] = set()
     products: list[ProductSeed] = []

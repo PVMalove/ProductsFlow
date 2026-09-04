@@ -1,1 +1,1 @@
-"""Small helpers local to catalog-service."""
+"""Небольшие вспомогательные утилиты, локальные для catalog-service."""

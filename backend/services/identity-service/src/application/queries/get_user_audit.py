@@ -1,4 +1,4 @@
-"""User-audit query and handler."""
+"""Query и handler user-audit."""
 
 from dataclasses import dataclass
 
@@ -17,11 +17,12 @@ from domain.value_objects.user_id import UserId
 
 @dataclass(frozen=True)
 class GetUserAuditQuery:
-    """Read global audit data or one user's complete audit history.
+    """Читает глобальные audit-данные или полную audit-историю одного пользователя.
 
-    ``user_id=None`` selects the global administrator feed. Supplying a user
-    id selects either the caller's own history or an administrator's target
-    history; authorization is enforced by the API boundary.
+    ``user_id=None`` выбирает глобальный админский фид. Передача id
+    пользователя выбирает либо собственную историю вызывающего, либо
+    целевую историю для администратора; авторизация обеспечивается
+    границей API.
     """
 
     user_id: UserId | None = None
@@ -30,7 +31,7 @@ class GetUserAuditQuery:
 
 
 class GetUserAuditQueryHandler:
-    """Select the paginated global or unpaginated personal audit mode."""
+    """Выбирает пагинированный глобальный или непагинированный личный audit-режим."""
 
     def __init__(self, audit: UserAuditQueryPort, users: UserQueryPort) -> None:
         self._audit = audit

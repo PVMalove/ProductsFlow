@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Get-ticket query and visibility handler."""
+"""Query и visibility handler get-ticket."""
 
 import uuid
 from dataclasses import dataclass

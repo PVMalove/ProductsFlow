@@ -1,5 +1,5 @@
-"""Framework-independent output contracts for identity BFF endpoints
-(ADR 0033) — application handlers return these, HTTP only serializes them."""
+"""Framework-independent контракты вывода для BFF-эндпоинтов identity
+(ADR 0002) — application-хендлеры возвращают их, HTTP только сериализует."""
 
 import uuid
 from dataclasses import dataclass

@@ -74,9 +74,11 @@ db-history: _require-pkg ## Показать всю историю миграц�
 
 up_dev: ## Поднять dev-конфигурацию (docker-compose.yml + docker-compose.dev.yml; make up_dev service=identity-api)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d $(service)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml rm -f identity-bootstrap catalog-bootstrap support-bootstrap
 
 up_prod: ## Поднять prod-конфигурацию (docker-compose.yml + docker-compose.prod.yml; make up_prod service=identity-api)
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build $(service)
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f identity-bootstrap catalog-bootstrap support-bootstrap
 
 setup: ## Поднять *-db + MinIO + RabbitMQ, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
 	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq

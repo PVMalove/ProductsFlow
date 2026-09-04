@@ -1,1 +1,1 @@
-"""Service-local rate-limiting policy belongs here when catalog needs one."""
+"""Здесь место для сервис-локальной политики rate-limiting, когда catalog её заведёт."""

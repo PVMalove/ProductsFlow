@@ -1,4 +1,4 @@
-"""Public command-side interface for support application use cases."""
+"""Публичный command-side интерфейс для application use case'ов support."""
 
 from application.commands.add_ticket_message import (
     AddTicketMessageCommand,

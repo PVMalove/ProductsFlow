@@ -1,4 +1,4 @@
-"""Compatibility adapter for the pre-CQRS deactivation import path."""
+"""Adapter совместимости для до-CQRS пути импорта деактивации."""
 
 from application.commands.deactivate_user import (
     ActivateUserCommand,

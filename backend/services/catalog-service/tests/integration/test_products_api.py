@@ -79,7 +79,7 @@ async def test_create_product_persists_it_under_the_caller(
 async def test_create_product_returns_the_bff_success_envelope(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
-    """ADR 0031: `data`/`meta` обязательны, `meta` пуст для create."""
+    """ADR 0002: `data`/`meta` обязательны, `meta` пуст для create."""
     token, _ = _register_owner(identity_gateway)
 
     response = await catalog_client.post(
@@ -96,7 +96,7 @@ async def test_create_product_seeds_owner_read_model_on_cold_miss(
     identity_gateway: FakeIdentityGateway,
     db_session: AsyncSession,
 ) -> None:
-    """Story 15 (ADR 0012/0019): холодный промах закрывается на создании,
+    """Story 15 (ADR 0011): холодный промах закрывается на создании,
     строка с сентинелом 0 появляется до того, как её кто-то спросит."""
     token, owner_id = _register_owner(identity_gateway)
 
@@ -131,8 +131,8 @@ async def test_create_product_rejects_invalid_payload(
 async def test_create_product_rejects_a_malformed_request_body(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
-    """Framework-level Pydantic validation (не доменная) — тоже структурная
-    error-shape, но с каноническим VALIDATION_ERROR (ADR 0031)."""
+    """Валидация уровня фреймворка (Pydantic), не доменная — тоже
+    структурная форма ошибки, но с каноническим VALIDATION_ERROR (ADR 0003)."""
     token, _ = _register_owner(identity_gateway)
 
     response = await catalog_client.post(
@@ -256,7 +256,7 @@ async def test_get_product_is_hidden_when_its_owner_is_deactivated(
     product = await _create_product(catalog_client, owner_token)
     # Владелец деактивирован в identity — read-модель отражает это тем же
     # upsert-механизмом, каким это в production сделает консьюмер событий
-    # (issue #151, вне скоупа этого issue) — здесь сеется напрямую (ADR 0018).
+    # (issue #151, вне скоупа этого issue) — здесь сеется напрямую (ADR 0013).
     await upsert_owner_read_model(
         db_session,
         user_id=owner_id,
@@ -301,7 +301,7 @@ async def test_list_hides_deactivated_products_from_anonymous_viewer(
 async def test_list_products_returns_the_bff_success_envelope_with_page_info(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
-    """ADR 0031/issue #221: товары в `data`, полный cursor page-info в `meta`."""
+    """ADR 0002/issue #221: товары в `data`, полный cursor page-info в `meta`."""
     token, _ = _register_owner(identity_gateway)
     await _create_product(catalog_client, token)
 

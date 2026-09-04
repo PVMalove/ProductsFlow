@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Upsert-product-image command and handler."""
+"""Команда и handler upsert-product-image."""
 
 import uuid
 from dataclasses import dataclass

@@ -1,8 +1,9 @@
-"""Integration tests for `SupportUnitOfWork`'s transactional envelope
-(ADR 0034, issue #245) — proves atomicity/rollback/outbox-drain behavior of
-the UoW itself, independently of any single command handler's business
-logic (real Postgres, existing SAVEPOINT fixture / a genuine second
-connection where cross-transaction visibility must be observed)."""
+"""Интеграционные тесты транзакционной оболочки `SupportUnitOfWork`
+(ADR 0006, issue #245) — доказывают атомарность/rollback/outbox-drain
+поведение самого UoW, независимо от бизнес-логики какого-либо конкретного
+command handler'а (реальный Postgres, существующая SAVEPOINT-фикстура /
+настоящее второе соединение, где нужно наблюдать межтранзакционную
+видимость)."""
 
 import uuid
 from collections.abc import AsyncIterator
@@ -40,9 +41,9 @@ async def support_schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
 async def test_two_mutating_calls_commit_as_one_atomic_transaction(
     db_engine: AsyncEngine,
 ) -> None:
-    """A handler with 2+ mutating repository calls must commit as a single
-    transaction: invisible to other connections until `uow.commit()`, then
-    both mutations and both outbox rows visible together."""
+    """Handler с 2+ мутирующими вызовами репозитория должен коммититься как
+    одна транзакция: невидима другим соединениям до `uow.commit()`, затем
+    обе мутации и обе строки outbox видны вместе."""
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     author_id = uuid.uuid4()
 
@@ -95,9 +96,9 @@ async def test_two_mutating_calls_commit_as_one_atomic_transaction(
 async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
     db_session: AsyncSession,
 ) -> None:
-    """A failure inside the transaction rolls back everything from that
-    transaction — including a mutation that itself succeeded — not just the
-    call that raised."""
+    """Отказ внутри транзакции откатывает всё из этой транзакции — включая
+    мутацию, которая сама по себе прошла успешно — а не только вызов,
+    поднявший исключение."""
     author_id = uuid.uuid4()
     uow = SqlSupportUnitOfWork(db_session)
 
@@ -134,7 +135,7 @@ async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
                 body="Too late",
                 is_admin=False,
             )
-        # no explicit commit — rollback-by-default undoes the create() above too
+        # явного commit нет — rollback-by-default откатывает и create() выше тоже
 
     assert new_ticket_id is not None
     assert await db_session.get(TicketModel, new_ticket_id.value) is None

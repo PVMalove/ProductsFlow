@@ -34,9 +34,9 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
 def _unwrap[T](result: Result[T]) -> T:
-    """Response shapes that carry more than one `T` under `data`/`meta`
-    (a `User*`-vs-list union, custom offset pagination) can't go through
-    `match_result`/`match_page` — this keeps the same error translation."""
+    """Формы ответа, несущие больше одного `T` под `data`/`meta` (union
+    `User*` vs list, кастомная offset-пагинация) не проходят через
+    `match_result`/`match_page` — здесь сохраняется та же трансляция ошибок."""
     if result.is_err:
         error = result.error
         raise ApiError(

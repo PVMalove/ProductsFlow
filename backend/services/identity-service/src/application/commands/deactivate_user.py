@@ -1,4 +1,4 @@
-"""Activation and deactivation commands and handlers."""
+"""Команды и хендлеры активации и деактивации."""
 
 from dataclasses import dataclass
 

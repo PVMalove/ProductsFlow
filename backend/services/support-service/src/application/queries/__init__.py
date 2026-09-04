@@ -1,4 +1,4 @@
-"""Public query-side interface for support application use cases."""
+"""Публичный query-side интерфейс для application use case'ов support."""
 
 from application.queries.get_ticket import GetTicketQuery, GetTicketQueryHandler
 from application.queries.get_ticket_detail import (

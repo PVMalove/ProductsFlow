@@ -1,1 +1,1 @@
-"""HTTP and messaging adapters for support-service."""
+"""HTTP- и messaging-адаптеры для support-service."""

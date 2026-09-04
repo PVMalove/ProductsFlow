@@ -1,1 +1,1 @@
-"""Performance entrypoint reserved for identity-service scenarios."""
+"""Точка входа нагрузочных тестов, зарезервированная под сценарии identity-service."""

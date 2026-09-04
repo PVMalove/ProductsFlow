@@ -1,4 +1,4 @@
-"""SQLAlchemy implementation of the identity transaction boundary."""
+"""Реализация транзакционной границы identity на SQLAlchemy."""
 
 from kernel_platform.unit_of_work import SqlAlchemyUnitOfWork
 from sqlalchemy.ext.asyncio import AsyncSession

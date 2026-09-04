@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from tests.integration.conftest import SMOKE_QUEUE
 
-# db_engine binds to the session-scoped Postgres container, so the Postgres
-# tests below must run on that same event loop (asyncpg connections are
-# loop-bound) — same reasoning as the monolith's tests/integration/test_smoke.py.
-# Applied per-test, not as a module-level pytestmark, since this module also
-# has plain sync tests (pika has no async API).
+# db_engine привязан к session-scoped Postgres-контейнеру, поэтому Postgres-
+# тесты ниже должны выполняться на том же event loop (соединения asyncpg
+# привязаны к loop) — та же логика, что и у монолитного
+# tests/integration/test_smoke.py. Применяется по тесту, не как
+# module-level pytestmark, поскольку в этом модуле есть и обычные sync-тесты
+# (у pika нет async API).
 asyncio_session_loop = pytest.mark.asyncio(loop_scope="session")
 
 SMOKE_TABLE = "identity_smoke_probe"
@@ -44,12 +45,12 @@ async def test_postgres_container_is_reachable(db_engine: AsyncEngine) -> None:
 async def test_db_session_rollback_isolates_writes_between_tests(
     _smoke_probe_table: None, db_engine: AsyncEngine
 ) -> None:
-    # Reproduces the db_session fixture's begin+SAVEPOINT+rollback dance
-    # directly against db_engine (rather than using the db_session fixture
-    # itself), so this test can trigger the rollback mid-test and check its
-    # effect on a second, independent connection — proving the isolation
-    # mechanism actually discards writes, not just that another transaction
-    # can't see uncommitted ones.
+    # Воспроизводит танец begin+SAVEPOINT+rollback фикстуры db_session
+    # напрямую против db_engine (а не через саму фикстуру db_session), чтобы
+    # этот тест мог вызвать rollback посреди теста и проверить его эффект на
+    # втором, независимом соединении — доказывая, что механизм изоляции
+    # действительно отбрасывает записи, а не просто то, что другая
+    # транзакция не видит незакоммиченное.
     def _count(connection: Connection) -> int | None:
         return connection.execute(text(f"SELECT count(*) FROM {SMOKE_TABLE}")).scalar()
 
@@ -74,10 +75,11 @@ def test_rabbitmq_channel_is_reachable(rabbitmq_channel: BlockingChannel) -> Non
     assert rabbitmq_channel.is_open
 
 
-# Order-dependent by design: proves the rabbitmq_channel fixture's teardown
-# purge actually isolates state between tests, not just that a fresh queue
-# starts empty. Relies on pytest's default top-to-bottom execution order
-# within a module (no xdist/randomly plugin runs against this suite).
+# Специально зависит от порядка: доказывает, что purge в teardown фикстуры
+# rabbitmq_channel реально изолирует состояние между тестами, а не просто
+# то, что свежая очередь стартует пустой. Полагается на дефолтный порядок
+# выполнения pytest сверху вниз внутри модуля (плагины xdist/randomly к
+# этому сьюту не применяются).
 def test_rabbitmq_channel_leaves_a_message_for_the_next_test(
     rabbitmq_channel: BlockingChannel,
 ) -> None:

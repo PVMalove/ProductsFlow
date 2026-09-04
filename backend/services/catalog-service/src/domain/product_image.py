@@ -6,7 +6,7 @@ from domain.value_objects.product_id import ProductId
 
 @dataclass(frozen=True)
 class ProductImage:
-    """The single image record belonging to a Product aggregate."""
+    """Единственная запись картинки, принадлежащая агрегату Product."""
 
     product_id: ProductId
     s3_key: str

@@ -1,5 +1,5 @@
-"""Framework-independent output contracts for support BFF endpoints
-(ADR 0033) — application handlers return these, HTTP only serializes them."""
+"""Framework-independent контракты вывода для BFF-эндпоинтов support
+(ADR 0002) — application-хендлеры возвращают их, HTTP только сериализует."""
 
 import uuid
 from dataclasses import dataclass
@@ -33,8 +33,8 @@ class TicketMessageView:
 
 @dataclass(frozen=True)
 class TicketView:
-    """A ticket's own fields — no messages. Used by list items and by
-    mutation responses; ticket detail is `TicketDetailView` instead."""
+    """Собственные поля тикета — без сообщений. Используется элементами
+    списка и ответами на мутации; для деталей тикета — `TicketDetailView`."""
 
     id: uuid.UUID
     author_id: uuid.UUID | None

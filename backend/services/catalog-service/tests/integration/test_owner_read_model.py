@@ -62,7 +62,7 @@ async def test_upsert_applies_a_newer_version_over_an_older_one(
 async def test_upsert_ignores_an_older_version_arriving_after_a_newer_one(
     db_session: AsyncSession,
 ) -> None:
-    """Гонка доставки (ADR 0019, находки #64 по aio-pika): более старое
+    """Гонка доставки (ADR 0011, находки #64 по aio-pika): более старое
     событие, применённое после более нового, не должно откатывать строку."""
     user_id = uuid.uuid4()
     await upsert_owner_read_model(

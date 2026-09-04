@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Create-ticket command and handler."""
+"""Команда и handler create-ticket."""
 
 import uuid
 from dataclasses import dataclass

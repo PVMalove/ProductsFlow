@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Create-product command and handler."""
+"""Команда и handler create-product."""
 
 from dataclasses import dataclass
 

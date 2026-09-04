@@ -1,7 +1,7 @@
-"""Get-ticket-detail query and handler (ADR 0033).
+"""Query и handler get-ticket-detail (ADR 0002).
 
-One application query returns the ticket together with the first page of
-its messages, so the endpoint never orchestrates two handler calls."""
+Один application-query возвращает тикет вместе с первой страницей его
+сообщений, поэтому эндпоинт никогда не оркестрирует два вызова handler'а."""
 
 import uuid
 from dataclasses import dataclass
@@ -23,17 +23,17 @@ class GetTicketDetailQuery:
     limit: int
     after: Cursor | None = None
     before: Cursor | None = None
-    # Set by the admin-only detail route (`GET /tickets/admin/{id}`) — the
-    # owner-or-admin route leaves this `False` and keeps its existing
-    # fallback-to-owner behavior.
+    # Устанавливается admin-only маршрутом деталей (`GET /tickets/admin/{id}`)
+    # — маршрут owner-or-admin оставляет это `False` и сохраняет своё
+    # существующее поведение fallback-to-owner.
     require_admin: bool = False
 
 
 @dataclass(frozen=True)
 class TicketDetail:
-    """Handler-internal composite: `view` is the JSON-facing payload, while
-    `messages_page_info` stays out of it — the router places it in the root
-    `meta` instead (ADR 0033), never nested under `data`."""
+    """Внутренний для handler'а композит: `view` — JSON-facing payload, а
+    `messages_page_info` в него не входит — роутер помещает его в корневой
+    `meta` (ADR 0002), никогда не вложенным в `data`."""
 
     view: TicketDetailView
     messages_page_info: PageInfo

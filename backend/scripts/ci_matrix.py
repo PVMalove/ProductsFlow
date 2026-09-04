@@ -1,4 +1,4 @@
-"""Select the CI package and Docker-image matrices from changed repository paths."""
+"""Выбирает CI-матрицы пакетов и Docker-образов по изменённым путям репозитория."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ SHARED_INFRASTRUCTURE_FILES = {
 
 
 def select_targets(changed_paths: Iterable[str]) -> dict[str, object]:
-    """Return affected package, image, and architecture-check targets."""
+    """Возвращает затронутые цели: пакеты, образы и architecture-check."""
     paths = tuple(changed_paths)
     has_backend_changes = any(path.startswith("backend/") for path in paths)
 

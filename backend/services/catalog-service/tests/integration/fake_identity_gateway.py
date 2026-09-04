@@ -7,10 +7,10 @@ from kernel_platform.security.identity_client import CurrentUserInfo
 
 
 class FakeIdentityGateway:
-    """Фейковый `IdentityGateway` (ADR 0018, Seam A): не бьёт по сети,
+    """Фейковый `IdentityGateway` (ADR 0013, Seam A): не бьёт по сети,
     HTTP-слой catalog-service тестируется против настоящего Postgres, но
     против подставного identity. `register()` заводит токен, `unavailable`
-    имитирует недоступность identity для проверки fail-closed (ADR 0012)."""
+    имитирует недоступность identity для проверки fail-closed (ADR 0011)."""
 
     def __init__(self) -> None:
         self._users: dict[str, CurrentUserInfo] = {}

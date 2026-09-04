@@ -108,8 +108,9 @@ async def test_worker_projects_user_events_idempotently_and_by_version(
         assert projection.is_active is False
         assert projection.deleted is False
 
-        # A duplicate delivery of the latest event and a stale, out-of-order
-        # one must both be no-ops (ADR 0033 — ordered, idempotent by version).
+        # Повторная доставка последнего события и устаревшее, доставленное
+        # не по порядку, — оба должны быть no-op (ADR 0012 — упорядочено,
+        # идемпотентно по версии).
         await _publish_user_event(
             channel,
             message_id=204,
@@ -158,7 +159,7 @@ async def test_worker_tombstones_a_deleted_user_and_stale_events_cannot_revive_i
         assert deleted.deleted is True
         assert deleted.is_active is False
 
-        # A stale, already-superseded activation cannot revive the tombstone.
+        # Устаревшая, уже вытесненная активация не может воскресить tombstone.
         await _publish_user_event(
             channel, message_id=250, event_type="user.activated.v1", user_id=user_id
         )

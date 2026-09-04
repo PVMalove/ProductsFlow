@@ -1,5 +1,5 @@
-"""Framework-independent output contracts for catalog product commands
-(ADR 0031) — application handlers return these, HTTP only serializes them."""
+"""Framework-independent контракты вывода для команд товаров catalog
+(ADR 0002) — application-хендлеры возвращают их, HTTP только сериализует."""
 
 import uuid
 from dataclasses import dataclass

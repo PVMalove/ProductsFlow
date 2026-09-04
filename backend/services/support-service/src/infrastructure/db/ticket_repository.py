@@ -73,7 +73,7 @@ class TicketRepository:
     async def process_user_deleted(
         self, *, message_id: int, user_id: uuid.UUID
     ) -> bool:
-        """Apply one identity deletion atomically and idempotently."""
+        """Атомарно и идемпотентно применяет одно удаление identity."""
         inserted_id = await self._session.scalar(
             insert(ProcessedMessage)
             .values(message_id=message_id)

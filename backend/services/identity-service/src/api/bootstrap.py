@@ -22,12 +22,14 @@ logger = logging.getLogger(__name__)
 async def seed_admin_user(
     engine: AsyncEngine, *, admin_email: str, admin_password: str
 ) -> None:
-    """Ensure exactly one admin user exists, through real command handlers
-    (ADR 0017, issue #207) — no direct repository writes for identity/role.
+    """Гарантирует существование ровно одного admin-пользователя через
+    настоящие command handlers (ADR 0001, issue #207) — без прямых записей
+    в репозиторий identity/role.
 
-    Idempotent: a user already at `role=ADMIN` for `admin_email` is a no-op.
-    A user that exists but isn't ADMIN yet (a prior partial run) is promoted
-    without re-registering, since email uniqueness would reject that.
+    Идемпотентно: пользователь, уже имеющий `role=ADMIN` для `admin_email`,
+    — no-op. Пользователь, который существует, но ещё не ADMIN (предыдущий
+    частичный прогон), промоутится без повторной регистрации, поскольку
+    уникальность email её бы отклонила.
     """
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:

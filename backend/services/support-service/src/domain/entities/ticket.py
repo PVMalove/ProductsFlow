@@ -24,23 +24,24 @@ _MISSING = object()
 
 
 class TicketClosedError(ValueError):
-    """Raised when a normal mutation targets a terminal ticket."""
+    """Поднимается, когда обычная мутация нацелена на терминальный тикет."""
 
 
 class InvalidStatusTransitionError(ValueError):
-    """Raised when a status skips or reverses the normal lifecycle."""
+    """Поднимается, когда статус пропускает шаг или разворачивает обычный
+    жизненный цикл."""
 
 
 class TicketMessageNotFoundError(LookupError):
-    """Raised when a message is not part of the ticket."""
+    """Поднимается, когда сообщение не принадлежит тикету."""
 
 
 class TicketMessageImmutableError(ValueError):
-    """Raised when a system message is mutated."""
+    """Поднимается при попытке изменить системное сообщение."""
 
 
 class TicketMessageAlreadyDeletedError(ValueError):
-    """Raised when a deleted message is mutated again."""
+    """Поднимается при повторной мутации уже удалённого сообщения."""
 
 
 _NEXT_STATUS = {
@@ -216,11 +217,12 @@ class Ticket(Entity[TicketId]):
         return self._change_status(status, actor_category=actor_category)
 
     def anonymize_deleted_user(self, user_id: uuid.UUID) -> Result[bool]:
-        """Remove a deleted user's identity and close their active ticket.
+        """Удаляет личность удалённого пользователя и закрывает его активный тикет.
 
-        The deletion event is recorded by the application inbox, so this
-        aggregate operation is intentionally safe to call more than once: an
-        already anonymized ticket cannot receive another system message.
+        Событие удаления фиксируется application inbox, поэтому эта операция
+        над агрегатом намеренно безопасна к повторному вызову: уже
+        анонимизированный тикет не может получить ещё одно системное
+        сообщение.
         """
         owns_ticket = self.author_id == user_id
         if owns_ticket:

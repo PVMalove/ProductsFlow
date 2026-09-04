@@ -1,6 +1,7 @@
-"""Fake `SupportUnitOfWork` (ADR 0034, issue #245) — wraps the shared
-`FakeUnitOfWork` from test-support with the ticket repository fake each test
-constructs, mirroring the generic/per-service split of the real contract."""
+"""Фейковый `SupportUnitOfWork` (ADR 0006, issue #245) — оборачивает общий
+`FakeUnitOfWork` из test-support фейком репозитория тикетов, который
+конструирует каждый тест, зеркаля generic/per-service разделение реального
+контракта."""
 
 from typing import Any
 

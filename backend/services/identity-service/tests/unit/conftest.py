@@ -12,7 +12,7 @@ from tests.unit.keygen import write_rsa_key_file
 
 @pytest.fixture(autouse=True)
 def configured_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Give lifespan-based unit tests a parseable DB URL without connecting."""
+    """Даёт lifespan-based юнит-тестам парсируемый DB URL без подключения."""
     monkeypatch.setattr(
         settings,
         "identity_database_url",

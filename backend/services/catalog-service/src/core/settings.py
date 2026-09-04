@@ -2,11 +2,12 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Default resolves against this file's on-disk location (stable regardless
-# of the process's CWD — `make test`/`make dev` run pytest/uvicorn from
-# `backend/`, not from this package's own directory). Overridden by an
-# absolute path in the container image, where this module is installed into
-# `.venv/site-packages` instead (Dockerfile copies assets/ to /srv/assets).
+# Дефолт резолвится относительно расположения этого файла на диске
+# (стабильно независимо от CWD процесса — `make test`/`make dev` запускают
+# pytest/uvicorn из `backend/`, не из директории самого этого пакета).
+# Переопределяется абсолютным путём в образе контейнера, где этот модуль
+# установлен в `.venv/site-packages` (Dockerfile копирует assets/ в
+# /srv/assets).
 _DEFAULT_SEED_PLACEHOLDER_IMAGE_PATH = str(
     Path(__file__).resolve().parents[2] / "assets" / "placeholder.jpg"
 )
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     catalog_database_url: str = ""
     catalog_amqp_url: str = "amqp://guest:guest@localhost:5672/"
     # Базовый URL identity-service для `IdentityClient` (JWKS-верификация,
-    # `GET /api/v1/users/me`, ADR 0011/0012) — имя сервиса compose-сети
+    # `GET /api/v1/users/me`, ADR 0005/0011) — имя сервиса compose-сети
     # (`backend/docker-compose.yml`), не публичный хост.
     catalog_identity_base_url: str = "http://identity-api:8000"
     minio_endpoint: str = "http://minio:9000"

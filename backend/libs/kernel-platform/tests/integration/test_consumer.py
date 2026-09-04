@@ -10,7 +10,7 @@ from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
 
 # amqp_connection/channel/events_exchange_exists (conftest.py) —
-# module/session-scoped, bound к session-scoped event loop; см.
+# module/session-scoped, привязаны к session-scoped event loop; см.
 # test_topology.py.
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

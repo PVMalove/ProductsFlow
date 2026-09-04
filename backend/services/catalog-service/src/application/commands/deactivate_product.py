@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Deactivate-product command and handler."""
+"""Команда и handler deactivate-product."""
 
 import uuid
 from dataclasses import dataclass

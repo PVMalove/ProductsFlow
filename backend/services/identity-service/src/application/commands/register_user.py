@@ -1,4 +1,4 @@
-"""Register-user command and handler."""
+"""Команда и handler register-user."""
 
 from dataclasses import dataclass
 

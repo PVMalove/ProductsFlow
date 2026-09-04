@@ -1,4 +1,4 @@
-"""Identity transaction contract (ADR 0034)."""
+"""Транзакционный контракт identity (ADR 0006)."""
 
 from typing import Protocol
 

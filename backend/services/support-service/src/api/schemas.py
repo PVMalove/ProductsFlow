@@ -62,7 +62,7 @@ class TicketCreateRequest(BaseModel):
 
 
 class TicketListRequest(BaseModel):
-    """Query-bound — the caller's own cursor-paginated tickets."""
+    """Query-bound — собственные курсорно-пагинированные тикеты вызывающего."""
 
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)
@@ -79,7 +79,7 @@ class TicketListRequest(BaseModel):
 
 
 class AdminTicketListRequest(BaseModel):
-    """Query-bound — every ticket, cursor-paginated."""
+    """Query-bound — все тикеты, курсорно-пагинированные."""
 
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)
@@ -96,8 +96,8 @@ class AdminTicketListRequest(BaseModel):
 
 
 class TicketDetailRequest(BaseModel):
-    """Path- and query-bound — `ticket_id` from the URL, pagination for its
-    first page of messages from the query string."""
+    """Path- и query-bound — `ticket_id` из URL, пагинация первой страницы
+    его сообщений из query-строки."""
 
     ticket_id: uuid.UUID
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
@@ -117,8 +117,9 @@ class TicketDetailRequest(BaseModel):
 
 
 class AdminTicketDetailRequest(BaseModel):
-    """Path- and query-bound — same shape as `TicketDetailRequest`, but its
-    query forces the admin-only gate (`GET /tickets/admin/{ticket_id}`)."""
+    """Path- и query-bound — та же форма, что и `TicketDetailRequest`, но её
+    query принудительно включает admin-only гейт
+    (`GET /tickets/admin/{ticket_id}`)."""
 
     ticket_id: uuid.UUID
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
@@ -183,7 +184,7 @@ class TicketStatusChangeRequest(BaseModel):
 
 
 class TicketMessageDeleteRequest(BaseModel):
-    """Path-bound — without a JSON body, ids come from the URL."""
+    """Path-bound — без JSON body, id приходят из URL."""
 
     ticket_id: uuid.UUID
     message_id: uuid.UUID

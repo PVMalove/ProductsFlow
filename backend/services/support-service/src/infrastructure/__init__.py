@@ -1,1 +1,1 @@
-"""Infrastructure adapters for support-service."""
+"""Infrastructure-адаптеры для support-service."""

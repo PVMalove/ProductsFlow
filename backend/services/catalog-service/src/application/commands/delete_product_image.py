@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Delete-product-image command and handler."""
+"""Команда и handler delete-product-image."""
 
 import uuid
 from dataclasses import dataclass

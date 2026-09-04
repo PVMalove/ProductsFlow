@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Get-product-audit query and authorization handler."""
+"""Query и authorization handler get-product-audit."""
 
 import uuid
 from dataclasses import dataclass

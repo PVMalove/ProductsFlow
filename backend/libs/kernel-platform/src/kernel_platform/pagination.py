@@ -5,7 +5,7 @@
 (`created_at`, `id`), форма страницы (`has_more`/`has_prev` и т.п.) и
 кодирование/декодирование курсора в base64-строку. Второй подтверждённый
 потребитель — `identity-service` (issue #201/#202) — делает дублирование
-между сервисами неоправданным (тот же admission-принцип, что и ADR 0029 для
+между сервисами неоправданным (тот же admission-принцип, что и ADR 0006 для
 generic drain-в-outbox).
 """
 
@@ -20,7 +20,7 @@ MAX_PAGE_LIMIT = 100
 
 
 class InvalidCursorError(ValueError):
-    """The pagination cursor could not be decoded."""
+    """Курсор пагинации не удалось декодировать."""
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class PageInfo:
 class Page[T]:
     """Транспортно-независимая страница: элементы плюс их `PageInfo` —
     то, что list-хэндлеры возвращают через `Result`, а `match_page`
-    разворачивает в `data`/`meta` BFF-конверта (issue #221, ADR 0031)."""
+    разворачивает в `data`/`meta` BFF-конверта (issue #221, ADR 0002)."""
 
     items: list[T]
     page_info: PageInfo

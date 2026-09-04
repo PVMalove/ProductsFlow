@@ -1,4 +1,4 @@
-"""Application ports used to keep identity command and query sides separate."""
+"""Application-порты, разделяющие command- и query-стороны identity."""
 
 import enum
 from dataclasses import dataclass
@@ -14,7 +14,7 @@ from domain.value_objects.user_id import UserId
 
 @dataclass(frozen=True)
 class UserReadModel:
-    """Immutable projection returned by the identity read side."""
+    """Неизменяемая проекция, возвращаемая read-стороной identity."""
 
     id: UserId
     email: Email
@@ -24,20 +24,20 @@ class UserReadModel:
 
 @dataclass(frozen=True)
 class UserPage:
-    """A cursor-paginated page of users."""
+    """Курсорно-пагинированная страница пользователей."""
 
     items: list[UserReadModel]
     page_info: PageInfo
 
 
 class UserQueryPort(Protocol):
-    """Read-only access to the identity read model."""
+    """Доступ только для чтения к read-модели identity."""
 
     async def get_by_id(self, user_id: UserId) -> UserReadModel | None: ...
 
 
 class UserListQueryPort(Protocol):
-    """Read-only access to cursor-paginated users."""
+    """Доступ только для чтения к курсорно-пагинированным пользователям."""
 
     async def list(
         self,
@@ -49,7 +49,7 @@ class UserListQueryPort(Protocol):
 
 
 class UserAuditAction(enum.StrEnum):
-    """Actions recorded in the immutable User audit trail."""
+    """Действия, фиксируемые в неизменяемом audit trail User."""
 
     REGISTERED = "registered"
     PASSWORD_CHANGED = "password_changed"
@@ -61,7 +61,7 @@ class UserAuditAction(enum.StrEnum):
 
 @dataclass(frozen=True)
 class UserAuditEntry:
-    """Read model for one immutable User audit record."""
+    """Read-модель одной неизменяемой audit-записи User."""
 
     id: int
     user_id: UserId
@@ -73,7 +73,7 @@ class UserAuditEntry:
 
 @dataclass(frozen=True)
 class UserAuditPage:
-    """Offset-paginated page for the global User audit feed."""
+    """Offset-пагинированная страница глобального audit-фида User."""
 
     items: list[UserAuditEntry]
     page_index: int
@@ -83,7 +83,7 @@ class UserAuditPage:
 
 
 class UserAuditQueryPort(Protocol):
-    """Read-only access to User audit records."""
+    """Доступ только для чтения к audit-записям User."""
 
     async def list_all(self, *, page_index: int, page_size: int) -> UserAuditPage: ...
 
@@ -91,7 +91,7 @@ class UserAuditQueryPort(Protocol):
 
 
 class PasswordHasher(Protocol):
-    """Port for password hashing; implementations belong to infrastructure."""
+    """Порт хеширования пароля; реализации принадлежат infrastructure."""
 
     def hash(self, password: str) -> str: ...
 

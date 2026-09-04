@@ -1,7 +1,8 @@
-"""Shared constructor-privacy marker for this package's value objects
-(TicketId) and for `TicketMessage` (issue #252, a non-`Entity` child entity
-of `Ticket` with no common base `__init__` of its own) — same scheme as
-`kernel_domain.Entity`'s `_PRIVATE_MARKER`, but each of these types checks
-its own `__init__` against this one token instead of a centralized base."""
+"""Общий маркер приватности конструктора для value objects этого пакета
+(TicketId) и для `TicketMessage` (issue #252, дочерней сущности `Ticket`,
+не являющейся `Entity`, без своего общего базового `__init__`) — та же
+схема, что и `_PRIVATE_MARKER` у `kernel_domain.Entity`, но каждый из этих
+типов сверяет свой `__init__` с этим единым токеном вместо
+централизованной базы."""
 
 _PRIVATE_MARKER = object()

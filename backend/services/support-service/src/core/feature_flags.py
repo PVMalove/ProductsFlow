@@ -1,1 +1,1 @@
-"""Service-local feature flags belong here when support introduces one."""
+"""Здесь место для сервис-локальных feature flags, когда support их заведёт."""

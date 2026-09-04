@@ -25,10 +25,10 @@ router = APIRouter(prefix="/api/v1/products", tags=["product-images"])
 
 
 def _unwrap[T](result: Result[T]) -> T:
-    """The upload endpoint needs the mutation's `replaced` flag to pick a
-    status code before it can build the response View — a shape
-    `match_result`/`match_created` don't fit — so this keeps the same error
-    translation without wrapping the success value."""
+    """Эндпоинту загрузки нужен флаг `replaced` мутации, чтобы выбрать
+    статус-код до построения ответного View — форма, в которую
+    `match_result`/`match_created` не вписываются — поэтому здесь сохраняется
+    та же трансляция ошибок без обёртывания успешного значения."""
     if result.is_err:
         error = result.error
         raise ApiError(
@@ -65,11 +65,11 @@ async def upload_product_image(
     response.status_code = (
         status.HTTP_200_OK if mutation.replaced else status.HTTP_201_CREATED
     )
-    # `ProductImageMutation` deliberately carries only `replaced` — command
-    # handlers don't return query-side Views in this codebase (CQRS, see
-    # `test_image_command_result_does_not_expose_a_query_view`) — so the
-    # response View comes from a second, read-side handler call, not from
-    # collapsing the two into one.
+    # `ProductImageMutation` намеренно несёт только `replaced` — command
+    # handlers не возвращают query-side View в этой кодовой базе (CQRS, см.
+    # `test_image_command_result_does_not_expose_a_query_view`) — поэтому
+    # ответный View приходит из второго, read-side вызова handler'а, а не из
+    # слияния двух в один.
     view_result: Result[ProductImageView] = await read_handler.execute(
         request.to_query(actor=actor)
     )

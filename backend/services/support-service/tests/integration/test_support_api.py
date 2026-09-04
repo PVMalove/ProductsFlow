@@ -1,4 +1,4 @@
-"""HTTP contract tests for the support service (ADR 0033)."""
+"""HTTP-контрактные тесты для support-service (ADR 0002)."""
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta

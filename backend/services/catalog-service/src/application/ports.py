@@ -15,7 +15,7 @@ from domain.value_objects.product_id import ProductId
 
 @dataclass(frozen=True)
 class Actor:
-    """Authenticated caller passed from the HTTP adapter to a use case."""
+    """Аутентифицированный вызывающий, передаваемый из HTTP-адаптера в use case."""
 
     user_id: uuid.UUID
     token: str
@@ -23,7 +23,7 @@ class Actor:
 
 @dataclass(frozen=True)
 class OwnerSnapshot:
-    """The owner fields needed by catalog visibility decisions."""
+    """Поля владельца, нужные для решений о видимости в catalog."""
 
     user_id: uuid.UUID
     role: str

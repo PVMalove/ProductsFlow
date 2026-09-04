@@ -124,9 +124,9 @@ async def _apply_projection(
     message_id: int,
     body: bytes,
 ) -> UserEventSnapshot:
-    """Idempotent, ordered projection upsert (ADR 0033) — safe to retry on
-    its own merits via `last_applied_outbox_id`, independent of the
-    message-id inbox that guards ticket anonymization below."""
+    """Идемпотентный, упорядоченный upsert проекции (ADR 0012) — безопасен к
+    повторам сам по себе через `last_applied_outbox_id`, независимо от
+    message-id inbox, который защищает анонимизацию тикетов ниже."""
     snapshot = _parse_user_event_snapshot(event_type, body)
     async with session_factory() as session:
         await upsert_user_projection(
@@ -145,9 +145,9 @@ async def handle_user_event(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    """Apply one identity user event to the local projection and, for a
-    deletion, additionally anonymize the caller's tickets through the
-    existing message-id inbox (ADR 0033)."""
+    """Применяет одно событие пользователя identity к локальной проекции и,
+    для удаления, дополнительно анонимизирует тикеты вызывающего через уже
+    существующий message-id inbox (ADR 0012)."""
     event_type = _event_type(message)
     message_id = _message_id(message)
 
@@ -188,7 +188,7 @@ def build_user_event_handler(
 
 
 async def main() -> None:
-    """Run Support's user-event projection and deletion consumer."""
+    """Запускает консьюмер проекции user-событий и удаления Support."""
     if not settings.support_database_url:
         raise RuntimeError("SUPPORT_DATABASE_URL must be configured")
     engine = create_async_engine(settings.support_database_url)

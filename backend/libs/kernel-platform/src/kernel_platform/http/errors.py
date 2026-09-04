@@ -1,4 +1,5 @@
-"""Structured BFF error shape + domain `Result` status mapping (ADR 0031)."""
+"""Структурированная форма ошибки BFF + маппинг статусов доменного
+`Result` (ADR 0002/0003)."""
 
 from kernel_domain.errors import ErrorType
 from pydantic import BaseModel

@@ -1,4 +1,4 @@
-"""Platform-owned FastAPI exception handlers (ADR 0031).
+"""Платформенные FastAPI exception handlers (ADR 0003).
 
 Нормализуют FastAPI `HTTPException`, request-validation, ожидаемые
 service-исключения и неожиданные сбои в единую структурированную
@@ -20,9 +20,9 @@ from kernel_platform.http.errors import ApiError, ErrorBody, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
-# Канонические коды из doc/architecture/bff_api_contract.md — переопределяют
-# HTTPStatus.name там, где doc называет отдельное машиночитаемое имя
-# (400/422 — единый VALIDATION_ERROR, а не BAD_REQUEST/UNPROCESSABLE_ENTITY).
+# Канонические коды из ADR 0003 — переопределяют HTTPStatus.name там, где
+# ADR называет отдельное машиночитаемое имя (400/422 — единый
+# VALIDATION_ERROR, а не BAD_REQUEST/UNPROCESSABLE_ENTITY).
 _CANONICAL_CODE_OVERRIDES: dict[int, str] = {
     status.HTTP_400_BAD_REQUEST: "VALIDATION_ERROR",
     status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",

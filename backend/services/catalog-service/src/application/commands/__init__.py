@@ -1,4 +1,4 @@
-"""Public command-side interface for catalog application use cases."""
+"""Публичный command-side интерфейс для application use case'ов catalog."""
 
 from application.commands.activate_product import (
     ActivateProductCommand,

@@ -12,6 +12,7 @@ class SqlSupportUnitOfWork(SqlAlchemyUnitOfWork):
         self.tickets: TicketRepository = SqlTicketRepository(session)
 
 
-# Static structural check: mypy verifies that the concrete implementation
-# satisfies every operation required by the domain UnitOfWork contract.
+# Статическая структурная проверка: mypy убеждается, что конкретная
+# реализация удовлетворяет каждую операцию, требуемую доменным контрактом
+# UnitOfWork.
 _support_unit_of_work_implementation: type[SupportUnitOfWork] = SqlSupportUnitOfWork

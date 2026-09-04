@@ -1,9 +1,9 @@
-"""Get-current-user query and handler (ADR 0033).
+"""Query и handler get-current-user (ADR 0005).
 
-`/users/me` does not trust JWT claims as the source of its response: the
-security dependency only authenticates and builds the transport-neutral
-`Actor`, while this handler reloads the caller's current state and returns
-the framework-independent `UserView`."""
+`/users/me` не доверяет claims JWT как источнику своего ответа: security-
+зависимость только аутентифицирует и строит transport-neutral `Actor`, а
+этот handler перечитывает актуальное состояние вызывающего и возвращает
+framework-independent `UserView`."""
 
 from dataclasses import dataclass
 

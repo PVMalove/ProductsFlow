@@ -1,4 +1,4 @@
-"""HTTP contract tests for the identity service."""
+"""HTTP-контрактные тесты для identity-service."""
 
 from collections.abc import AsyncIterator
 from pathlib import Path

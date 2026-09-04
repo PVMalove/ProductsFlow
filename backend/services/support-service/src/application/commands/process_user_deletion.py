@@ -11,7 +11,7 @@ class ProcessUserDeletionCommand:
 
 
 class ProcessUserDeletionCommandHandler:
-    """Apply a user deletion through the transactional support port."""
+    """Применяет удаление пользователя через транзакционный порт support."""
 
     def __init__(self, uow: SupportUnitOfWork) -> None:
         self._uow = uow

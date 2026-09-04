@@ -1,4 +1,4 @@
-"""Delete-own-account command and handler."""
+"""Команда и handler delete-own-account."""
 
 from dataclasses import dataclass
 
@@ -17,7 +17,7 @@ class DeleteAccountCommand:
 
 
 class DeleteAccountCommandHandler:
-    """Заменяет учётную запись анонимизированным tombstone (ADR 0035)."""
+    """Заменяет учётную запись анонимизированным tombstone (ADR 0007)."""
 
     def __init__(self, uow: IdentityUnitOfWork) -> None:
         self._uow = uow

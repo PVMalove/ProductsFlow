@@ -1,4 +1,4 @@
-"""support local user projection (ADR 0033)
+"""support local user projection (ADR 0012)
 
 Revision ID: 0005_user_projection
 Revises: 0004_user_deletion_inbox

@@ -9,12 +9,12 @@ from infrastructure import storage as storage_module
 def test_app_starts_without_invoking_minio_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A syntactically valid URL is enough — create_async_engine() doesn't
-    # connect eagerly, but it does need to parse (prior art: identity-service's
-    # tests/unit/test_main.py). The real settings.catalog_database_url is only
-    # populated via env/.env, so this must not be left to the ambient
-    # environment — an empty default raises ArgumentError before lifespan
-    # ever reaches the MinIO check this test exists to prove.
+    # Достаточно синтаксически валидного URL — create_async_engine() не
+    # подключается сразу, но парсить его обязана (прецедент: identity-service's
+    # tests/unit/test_main.py). Настоящий settings.catalog_database_url
+    # заполняется только через env/.env, поэтому нельзя полагаться на
+    # окружение по умолчанию — пустой дефолт поднимет ArgumentError раньше,
+    # чем lifespan вообще дойдёт до проверки MinIO, которую доказывает этот тест.
     monkeypatch.setattr(
         settings,
         "catalog_database_url",

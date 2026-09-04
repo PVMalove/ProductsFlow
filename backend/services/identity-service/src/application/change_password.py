@@ -1,4 +1,4 @@
-"""Compatibility adapter for the pre-CQRS password-change import path."""
+"""Adapter совместимости для до-CQRS пути импорта смены пароля."""
 
 from application.commands.change_password import (
     ChangePasswordCommand,

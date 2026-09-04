@@ -21,7 +21,7 @@ def generate_private_key_pem() -> bytes:
 @lru_cache(maxsize=32)
 def load_private_key(path: str) -> rsa.RSAPrivateKey:
     """Читает и парсит ключ один раз на путь, затем отдаёт из памяти — ключ
-    проверяет токены локально, без чтения файла на каждый запрос (ADR 0011).
+    проверяет токены локально, без чтения файла на каждый запрос (ADR 0005).
     Кэш ключуется строкой пути, поэтому разные тесты с разными tmp-путями
     никогда не делят записи; неудачный разбор (исключение) не кэшируется."""
     with open(path, "rb") as key_file:
@@ -68,7 +68,7 @@ def build_jwk(public_key: rsa.RSAPublicKey, kid: str) -> dict[str, str]:
 
 def validate_prod_key(settings: Settings) -> None:
     """Fail-fast: при APP_ENV=prod пустой/нечитаемый приватный ключ валит старт.
-    При любом другом APP_ENV — дефолты допускаются (ADR 0011)."""
+    При любом другом APP_ENV — дефолты допускаются (ADR 0005)."""
     if settings.app_env != "prod":
         return
     if not settings.identity_jwt_private_key_path:

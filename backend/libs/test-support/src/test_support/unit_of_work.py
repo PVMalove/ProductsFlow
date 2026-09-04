@@ -1,4 +1,4 @@
-"""Общий `FakeUnitOfWork` test-double (ADR 0034) — async context manager без
+"""Общий `FakeUnitOfWork` test-double (ADR 0006) — async context manager без
 реальной БД, с флагами `committed`/`rolled_back` вместо проверки вызовов на
 моке. Каждый сервис расширяет его своими fake-репозиториями, зеркаля
 generic/per-service разделение реального `kernel_platform.unit_of_work`."""

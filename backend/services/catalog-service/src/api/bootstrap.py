@@ -50,11 +50,12 @@ async def wait_for_admin_user_id(
     timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> uuid.UUID:
-    """Bounded poll for the `OwnerReadModel` row `catalog-worker` projects
-    from identity's `user.registered.v1`/`user.role_changed.v1` events
-    (issue #208) — no fixed/well-known admin id exists (`users.id` is a
-    UUID), so this is the only way to discover it. Fails loudly rather than
-    fabricating a `user_id` if the row never appears."""
+    """Ограниченный по времени поллинг строки `OwnerReadModel`, которую
+    `catalog-worker` проецирует из событий identity
+    `user.registered.v1`/`user.role_changed.v1` (issue #208) — фиксированного
+    или заранее известного admin id не существует (`users.id` — UUID),
+    поэтому это единственный способ его обнаружить. Падает громко, а не
+    выдумывает `user_id`, если строка так и не появилась."""
     deadline = time.monotonic() + timeout_seconds
     while True:
         snapshot = await read_model.find_by_role(ADMIN_ROLE)
@@ -80,11 +81,11 @@ async def _seed_products(
     image_storage: ProductImageStorage,
     bucket_name: str,
 ) -> None:
-    """Create `PRODUCT_COUNT` demo products through the real
-    `CreateProductCommand`/`UpsertProductImageCommand` handlers (issue #208)
-    — no direct repository writes for the domain entities they own.
-    Idempotent: a non-empty `products` table means a prior run already
-    seeded the catalog, so this is a no-op."""
+    """Создаёт `PRODUCT_COUNT` демо-товаров через настоящие хендлеры
+    `CreateProductCommand`/`UpsertProductImageCommand` (issue #208) — без
+    прямых записей в репозиторий доменных сущностей, которыми они владеют.
+    Идемпотентно: непустая таблица `products` означает, что предыдущий
+    запуск уже засеял каталог, поэтому это no-op."""
     existing_count = await session.scalar(
         select(func.count()).select_from(ProductModel)
     )

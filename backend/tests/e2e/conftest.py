@@ -62,7 +62,7 @@ async def _wait_for_response(
     retry_statuses: Iterable[int] = (),
     **request_kwargs: object,
 ) -> httpx.Response:
-    """Poll only explicitly transient outcomes; every other HTTP failure is final."""
+    """Опрашивает только явно транзиентные исходы; любой другой HTTP-отказ финален."""
     allowed_retries = frozenset(retry_statuses)
     deadline = time.monotonic() + _READINESS_DEADLINE_SECONDS
     delay = _MIN_RETRY_DELAY_SECONDS
@@ -96,11 +96,11 @@ async def _wait_for_response(
 async def _wait_for_ticket_closed(
     client: httpx.AsyncClient, *, url: str, headers: dict[str, str]
 ) -> dict[str, object]:
-    """Poll a ticket-detail response until Support's async user-deletion
-    consumer closes it. Unlike `_wait_for_response`, the transient signal
-    lives in the response body, not the status code: only a `200` with a
-    non-terminal `status` is retried — every other outcome (a non-`200`, or
-    a request error) ends the test immediately."""
+    """Опрашивает ответ детали тикета, пока async-консьюмер удаления
+    пользователя Support его не закроет. В отличие от `_wait_for_response`,
+    транзиентный сигнал живёт в теле ответа, не в статус-коде: повторяется
+    только `200` с нетерминальным `status` — любой другой исход (не-`200`
+    или ошибка запроса) немедленно завершает тест."""
     deadline = time.monotonic() + _READINESS_DEADLINE_SECONDS
     delay = _MIN_RETRY_DELAY_SECONDS
     last_body = "<no response received>"

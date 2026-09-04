@@ -16,8 +16,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 # Тот же `Base` (и, значит, `Base.metadata`), что и `kernel_platform`'овский
-# `OutboxMessage` (ADR 0021) — так тесты (`Base.metadata.create_all`) и
-# hand-written Alembic-ревизия видят все таблицы catalog-service вместе.
+# `OutboxMessage` (ADR 0010) — так тесты (`Base.metadata.create_all`) и
+# написанная вручную Alembic-ревизия видят все таблицы catalog-service вместе.
 
 
 class ProductModel(Base):

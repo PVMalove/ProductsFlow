@@ -7,7 +7,7 @@ from domain.entities.product import Product
 
 
 class ProductAuthorizer:
-    """Application authorization rules shared by product use cases."""
+    """Правила авторизации приложения, общие для use case'ов товара."""
 
     def __init__(self, identity: IdentityGateway) -> None:
         self._identity = identity

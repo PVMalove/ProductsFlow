@@ -1,4 +1,4 @@
-name: productsflow-backend
+name: product_flow-backend
 
 services:
   identity-db:
@@ -18,7 +18,7 @@ services:
       - backend-network
 
   identity-bootstrap:
-    # One-off bootstrap step (ADR 0017, issue #207): alembic upgrade head,
+    # One-off bootstrap step (ADR 0001, issue #207): alembic upgrade head,
     # then seeding the super-admin user through the real RegisterUser/
     # ChangeUserRole command handlers — no direct repository writes.
     build:
@@ -57,10 +57,10 @@ services:
       - backend-network
 
   identity-worker:
-    # Outbox Publisher (ADR 0014, issue #100) — вторая точка входа
-    # identity-service, не HTTP-процесс (ADR 0010: тот же образ, другой
-    # CMD). Никогда не делит процесс с identity-api: краш/рестарт паблишера
-    # не задевает обработку запросов.
+    # Outbox Publisher (ADR 0010, issue #100) — вторая точка входа
+    # identity-service, не HTTP-процесс: тот же образ, другой CMD. Никогда
+    # не делит процесс с identity-api: краш/рестарт паблишера не задевает
+    # обработку запросов.
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
@@ -92,7 +92,7 @@ services:
       - backend-network
 
   catalog-bootstrap:
-    # One-off bootstrap step (ADR 0017, issue #208): alembic upgrade head,
+    # One-off bootstrap step (ADR 0001, issue #208): alembic upgrade head,
     # then ensure_minio_buckets, then a bounded wait for catalog-worker to
     # project identity's admin user into OwnerReadModel before seeding 360
     # demo products through the real CreateProductCommand/
@@ -119,9 +119,10 @@ services:
       MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
       MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
       MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
-      # Settings' default resolves relative to the installed package's own
-      # file (site-packages in this image) — override with where the
-      # Dockerfile actually copies the asset (WORKDIR /srv).
+      # Дефолт в Settings резолвится относительно файла самого
+      # установленного пакета (site-packages в этом образе) —
+      # переопределяем туда, куда Dockerfile реально копирует ассет
+      # (WORKDIR /srv).
       CATALOG_SEED_PLACEHOLDER_IMAGE_PATH: /srv/assets/placeholder.jpg
     depends_on:
       catalog-db:
@@ -153,14 +154,14 @@ services:
       - backend-network
 
   catalog-worker:
-    # User-event projection worker (ADR 0010/0019) — тот же образ catalog,
+    # User-event projection worker (ADR 0010/0011) — тот же образ catalog,
     # отдельный процесс и CMD, что и catalog-api. Зависит только от
-    # catalog-db (issue #208): catalog-bootstrap's admin-discovery poll
-    # relies on THIS service to project identity's events into
-    # OwnerReadModel, so it must be able to start independently of
-    # catalog-bootstrap, not gated behind it. It can race the "alembic
-    # upgrade head" step of catalog-bootstrap on a cold start; the retry
-    # loop below rides out that window with a fixed 3s backoff.
+    # catalog-db (issue #208): поллинг admin-discovery в catalog-bootstrap
+    # полагается именно на ЭТОТ сервис, проецирующий события identity в
+    # OwnerReadModel, поэтому он должен уметь стартовать независимо от
+    # catalog-bootstrap, не будучи заблокированным им. Он может обогнать шаг
+    # "alembic upgrade head" в catalog-bootstrap на холодном старте; retry-
+    # цикл ниже переживает это окно с фиксированным backoff 3с.
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
@@ -198,10 +199,10 @@ services:
       - backend-network
 
   rabbitmq:
-    # Broker for outbox publishing (ADR 0014) and the ADR 0015 topology —
-    # identity/catalog/support declare their own exchange/queues on startup
-    # (idempotently), this is just the broker itself. Quorum queues need
-    # RabbitMQ 4.x (ADR 0015: x-delivery-limit defaults arrived in 4.0).
+    # Брокер для публикации outbox-событий и топологии (обе — ADR 0010) —
+    # identity/catalog/support объявляют свои exchange/очереди на старте
+    # (идемпотентно), это только сам брокер. Quorum-очередям нужен
+    # RabbitMQ 4.x (дефолты x-delivery-limit появились в 4.0).
     image: rabbitmq:4.1-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: guest
@@ -231,7 +232,7 @@ services:
       - backend-network
 
   support-bootstrap:
-    # One-off bootstrap step (ADR 0017): alembic upgrade head, then a DB
+    # One-off bootstrap step (ADR 0001): alembic upgrade head, then a DB
     # connectivity check. support has no bucket-ensure and no seed stage —
     # an empty ticket table is a legitimate starting state.
     build:

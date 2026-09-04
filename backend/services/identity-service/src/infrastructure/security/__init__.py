@@ -1,1 +1,1 @@
-"""Authentication adapters for identity-service."""
+"""Адаптеры аутентификации для identity-service."""

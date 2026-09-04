@@ -11,7 +11,7 @@ from domain.value_objects.product_id import ProductId
 class ProductEvent(DomainEvent):
     """Общий предок Product-событий — все они несут `product_id`; выделено,
     чтобы код, читающий события единообразно (например, generic drain в
-    Outbox, ADR 0029), мог опираться на поле `product_id`, не различая
+    Outbox, ADR 0006/0011), мог опираться на поле `product_id`, не различая
     конкретный подкласс через `isinstance`. Реализует часть общего
     контракта `DomainEvent`, общую для всех Product-событий: `aggregate_type`
     и маппинг `product_id` в `aggregate_id()`/базовый `to_payload()`."""

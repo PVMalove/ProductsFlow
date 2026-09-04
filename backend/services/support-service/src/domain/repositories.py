@@ -10,9 +10,9 @@ from domain.value_objects.ticket_id import TicketId
 
 
 class TicketRepository(Protocol):
-    """Full ticket repository contract — query methods plus the serialized
-    mutation operations used by command handlers through `SupportUnitOfWork`
-    (ADR 0034)."""
+    """Полный контракт репозитория тикетов — query-методы плюс
+    сериализованные mutation-операции, используемые command handler'ами
+    через `SupportUnitOfWork` (ADR 0006)."""
 
     async def create(self, ticket: Ticket) -> Ticket: ...
 

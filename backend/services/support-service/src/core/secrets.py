@@ -1,1 +1,2 @@
-"""Service-local secret loading policy belongs here when support needs one."""
+"""Здесь место для сервис-локальной политики загрузки секретов, когда
+support её заведёт."""

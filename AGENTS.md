@@ -19,23 +19,30 @@ Document the tracker and its workflow in this repository when the project uses o
 
 ## Commands
 
-Use `N/A` for command slots that do not apply to this project.
+All commands run from `backend/` (that's where the `Makefile` lives — there is no
+root-level `Makefile`). Every target is scoped to one package/service; there is no
+bare "build everything" command.
 
 ```bash
-make install       # setup
-make up_dev        # run local development dependencies
-make test          # test
-make check         # lint/typecheck/format checks
-make build         # build Docker images
+cd backend
+make setup                    # bring up *-db + MinIO + RabbitMQ, run migrations (no seed, no *-api)
+make demo                     # setup + seed (admin, demo products) + workers
+make up_dev service=<svc>     # bring up dev profile (identity-api/catalog-api/support-api); omit service= for all
+make test pkg=<member>        # pytest for one package (libs/<name> or services/<name>)
+make check pkg=<member>       # ruff + mypy + vulture for one package
+make architecture-check       # CQRS / dependency-direction gate (check_architecture.py)
+make build service=<svc>      # docker compose build
 ```
 
 ## Repository map
 
 `backend/libs/` contains shared packages (`kernel-domain`, `kernel-platform`,
 `observability`, `test-support`). `backend/services/` contains `identity-service`,
-`catalog-service`, and `support-service`.
-`tests/` contains the root regression suite; `docs/` contains architecture, workflow,
-and ADR documentation.
+`catalog-service`, and `support-service`, each with its own `tests/{unit,integration}/`.
+`backend/tests/e2e/` holds the cross-service black-box suite (through an E2E-only
+Nginx Gateway — there is no production API Gateway). There is no root-level `tests/`
+directory. `docs/adr/` holds the ADR base (start at `docs/adr/README.md`);
+`docs/architecture/backend_architecture.md` holds the accompanying diagrams and prose.
 
 ## Boundaries
 
@@ -99,5 +106,5 @@ instruction chooses the checkout strategy.
 ## Known pitfalls
 
 All project code belongs under `backend/`. Each backend package has
-its own environment and `pyproject.toml`. The project requires Python 3.14. Preserve
+its own `pyproject.toml`, but they share a single `backend/uv.lock` and `.venv`. The project requires Python 3.14. Preserve
 unrelated dirty changes and run the quality gate before PR creation.

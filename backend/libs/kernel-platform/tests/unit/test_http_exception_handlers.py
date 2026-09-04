@@ -1,5 +1,5 @@
-"""ADR 0031: platform exception handlers normalize every failure shape into
-the structured `{"error": {"code", "message"}}` envelope."""
+"""ADR 0003: платформенные exception handlers нормализуют любую форму
+отказа в структурированный конверт `{"error": {"code", "message"}}`."""
 
 import httpx
 import pytest
@@ -10,8 +10,8 @@ from kernel_platform.http.exception_handlers import register_error_handlers
 
 
 class _DemoServiceError(Exception):
-    """Stand-in for a service's own `ApplicationError` base (structural
-    code/message/status_code, no inheritance from kernel_platform)."""
+    """Заглушка вместо собственного базового `ApplicationError` сервиса
+    (структурный code/message/status_code, без наследования от kernel_platform)."""
 
     code = "DEMO_UNAVAILABLE"
     message = "demo service недоступен"
@@ -58,9 +58,9 @@ def _build_app() -> FastAPI:
 
 @pytest.fixture
 def client() -> httpx.AsyncClient:
-    # raise_app_exceptions=False: /boom deliberately lets an unhandled
-    # exception reach the platform's catch-all — without this, ASGITransport
-    # re-raises it into the test instead of returning the 500 the handler built.
+    # raise_app_exceptions=False: /boom намеренно позволяет необработанному
+    # исключению дойти до платформенного catch-all — без этого ASGITransport
+    # поднимет его заново в тесте вместо возврата 500, который строит handler.
     transport = httpx.ASGITransport(app=_build_app(), raise_app_exceptions=False)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
