@@ -10,7 +10,7 @@ from application.commands.activate_user import (
     ActivateUserCommandHandler,
 )
 from contracts.user import UserView
-from domain.repositories import UserRepository
+from domain.unit_of_work import IdentityUnitOfWork
 from domain.user_id import UserId
 
 
@@ -21,32 +21,34 @@ class DeactivateUserCommand:
 
 
 class DeactivateUserCommandHandler:
-    def __init__(self, users: UserRepository) -> None:
-        self._users = users
+    def __init__(self, uow: IdentityUnitOfWork) -> None:
+        self._uow = uow
 
     async def execute(self, command: DeactivateUserCommand) -> Result[UserView]:
-        if command.target_user_id == command.actor_user_id:
-            return Result[UserView].fail(
-                Error(
-                    code="cannot_deactivate_self",
-                    description="Пользователь не может деактивировать самого себя",
-                    type=ErrorType.FORBIDDEN,
+        async with self._uow:
+            if command.target_user_id == command.actor_user_id:
+                return Result[UserView].fail(
+                    Error(
+                        code="cannot_deactivate_self",
+                        description="Пользователь не может деактивировать самого себя",
+                        type=ErrorType.FORBIDDEN,
+                    )
                 )
-            )
-        user = await self._users.get_by_id(command.target_user_id)
-        if user is None:
-            return Result[UserView].fail(
-                Error(
-                    code="user_not_found",
-                    description="Пользователь не найден",
-                    type=ErrorType.NOT_FOUND,
+            user = await self._uow.users.get_by_id(command.target_user_id)
+            if user is None:
+                return Result[UserView].fail(
+                    Error(
+                        code="user_not_found",
+                        description="Пользователь не найден",
+                        type=ErrorType.NOT_FOUND,
+                    )
                 )
-            )
-        result = user.deactivate()
-        if result.is_err:
-            return Result[UserView].fail(result.error)
-        await self._users.save(user)
-        return Result[UserView].ok(UserView.from_user(user))
+            result = user.deactivate()
+            if result.is_err:
+                return Result[UserView].fail(result.error)
+            await self._uow.users.save(user)
+            await self._uow.commit()
+            return Result[UserView].ok(UserView.from_user(user))
 
 
 __all__ = [

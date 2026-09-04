@@ -53,7 +53,7 @@ class UserRepository:
 
     async def add(self, user: User) -> None:
         self.session.add(_to_model(user))
-        await self._commit(user)
+        await drain_events_to_outbox(self.session, user)
 
     async def save(self, user: User) -> None:
         row = await self.session.get(UserModel, user.id.value)
@@ -63,11 +63,7 @@ class UserRepository:
         row.password_hash = user.password_hash
         row.role = user.role.value
         row.is_active = user.is_active
-        await self._commit(user)
-
-    async def _commit(self, user: User) -> None:
         await drain_events_to_outbox(self.session, user)
-        await self.session.commit()
 
 
 def _to_model(user: User) -> UserModel:

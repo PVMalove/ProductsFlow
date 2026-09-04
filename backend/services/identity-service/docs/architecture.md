@@ -9,10 +9,11 @@ and `core` owns service-local security and configuration policy.
 Identity writes are defined in `application/commands/`, with one module per
 related operation and immutable command DTOs plus dedicated command handlers.
 The package `__init__.py` is the public command-side facade. Handlers depend on the domain-owned
-`UserRepository` contract and `PasswordHasher`; concrete persistence and hashing adapters stay outside the
-application layer. Registration, login, password changes, and activation or
-deactivation therefore retain their existing domain and outbox contracts while
-having an explicit command-side seam.
+`IdentityUnitOfWork` contract and `PasswordHasher`; concrete persistence and
+hashing adapters stay outside the application layer. The UoW exposes the
+domain-owned `UserRepository`, shares the request-scoped session, rolls back
+unless a handler explicitly commits on its successful path, and keeps command
+mutations and their outbox rows atomic.
 
 Identity reads use immutable DTOs in `application/queries/`, with one module per
 query and a package-level public facade. `GetUserQueryHandler` accepts only
@@ -32,8 +33,9 @@ boundary.
 
 `infrastructure.db.user_repository.UserRepository` maps the aggregate to the
 SQLAlchemy `UserModel`. Every mutating method drains domain events through the
-shared kernel-platform outbox operation and commits once, so the user row and
-its outbox rows share one transaction. ORM listeners in `infrastructure.db.audit`
+shared kernel-platform outbox operation, while
+`infrastructure.db.unit_of_work.SqlIdentityUnitOfWork` owns the single commit;
+the user row and its outbox rows therefore share one transaction. ORM listeners in `infrastructure.db.audit`
 write the immutable user audit trail and resolve the actor from the shared
 request `ContextVar` (falling back to the affected user's id outside HTTP).
 `SqlUserQueryRepository` and `SqlUserAuditReader` provide the corresponding

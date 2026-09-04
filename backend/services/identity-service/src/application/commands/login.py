@@ -7,7 +7,7 @@ from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
 from domain.email import Email
-from domain.repositories import UserRepository
+from domain.unit_of_work import IdentityUnitOfWork
 from domain.user import User
 
 
@@ -28,38 +28,42 @@ class LoginCommandHandler:
     Side Effects: Нет.
     """
 
-    def __init__(self, users: UserRepository, password_hasher: PasswordHasher) -> None:
-        self._users = users
+    def __init__(
+        self, uow: IdentityUnitOfWork, password_hasher: PasswordHasher
+    ) -> None:
+        self._uow = uow
         self._password_hasher = password_hasher
 
     async def execute(self, command: LoginCommand) -> Result[User]:
-        try:
-            email = Email(command.email)
-        except ValueError:
-            return Result[User].fail(
-                Error(
-                    code="invalid_credentials",
-                    description="Неверный email или пароль",
-                    type=ErrorType.UNAUTHORIZED,
+        async with self._uow:
+            try:
+                email = Email(command.email)
+            except ValueError:
+                return Result[User].fail(
+                    Error(
+                        code="invalid_credentials",
+                        description="Неверный email или пароль",
+                        type=ErrorType.UNAUTHORIZED,
+                    )
                 )
-            )
-        user = await self._users.get_by_email(email)
-        if user is None or not self._password_hasher.verify(
-            command.password, user.password_hash
-        ):
-            return Result[User].fail(
-                Error(
-                    code="invalid_credentials",
-                    description="Неверный email или пароль",
-                    type=ErrorType.UNAUTHORIZED,
+            user = await self._uow.users.get_by_email(email)
+            if user is None or not self._password_hasher.verify(
+                command.password, user.password_hash
+            ):
+                return Result[User].fail(
+                    Error(
+                        code="invalid_credentials",
+                        description="Неверный email или пароль",
+                        type=ErrorType.UNAUTHORIZED,
+                    )
                 )
-            )
-        if not user.is_active:
-            return Result[User].fail(
-                Error(
-                    code="user_deactivated",
-                    description="Пользователь деактивирован",
-                    type=ErrorType.FORBIDDEN,
+            if not user.is_active:
+                return Result[User].fail(
+                    Error(
+                        code="user_deactivated",
+                        description="Пользователь деактивирован",
+                        type=ErrorType.FORBIDDEN,
+                    )
                 )
-            )
-        return Result[User].ok(user)
+            await self._uow.commit()
+            return Result[User].ok(user)

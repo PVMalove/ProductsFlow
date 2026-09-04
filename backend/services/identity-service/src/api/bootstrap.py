@@ -13,7 +13,7 @@ from core.settings import settings
 from domain.email import Email
 from domain.role import Role
 from domain.user_id import UserId
-from infrastructure.db.user_repository import UserRepository
+from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 from infrastructure.security.password_hasher import BcryptPasswordHasher
 
 logger = logging.getLogger(__name__)
@@ -31,17 +31,17 @@ async def seed_admin_user(
     """
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
-        repository = UserRepository(session)
+        uow = SqlIdentityUnitOfWork(session)
         email = Email(admin_email)
 
-        existing = await repository.get_by_email(email)
+        existing = await uow.users.get_by_email(email)
         if existing is not None and existing.role == Role.ADMIN:
             logger.info("identity-bootstrap: admin user already seeded; skipping")
             return
 
         if existing is None:
             register_result = await RegisterUserCommandHandler(
-                repository, BcryptPasswordHasher()
+                uow, BcryptPasswordHasher()
             ).execute(RegisterUserCommand(admin_email, admin_password))
             if register_result.is_err:
                 raise RuntimeError(
@@ -52,7 +52,7 @@ async def seed_admin_user(
         else:
             target_user_id = existing.id
 
-        change_role_result = await ChangeUserRoleCommandHandler(repository).execute(
+        change_role_result = await ChangeUserRoleCommandHandler(uow).execute(
             ChangeUserRoleCommand(target_user_id=target_user_id, role=Role.ADMIN)
         )
         if change_role_result.is_err:

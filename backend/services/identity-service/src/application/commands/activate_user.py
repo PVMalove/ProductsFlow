@@ -6,7 +6,7 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.user import UserView
-from domain.repositories import UserRepository
+from domain.unit_of_work import IdentityUnitOfWork
 from domain.user_id import UserId
 
 
@@ -20,21 +20,23 @@ class ActivateUserCommand:
 class ActivateUserCommandHandler:
     """Активирует деактивированную учётную запись и сохраняет агрегат."""
 
-    def __init__(self, users: UserRepository) -> None:
-        self._users = users
+    def __init__(self, uow: IdentityUnitOfWork) -> None:
+        self._uow = uow
 
     async def execute(self, command: ActivateUserCommand) -> Result[UserView]:
-        user = await self._users.get_by_id(command.target_user_id)
-        if user is None:
-            return Result[UserView].fail(
-                Error(
-                    code="user_not_found",
-                    description="Пользователь не найден",
-                    type=ErrorType.NOT_FOUND,
+        async with self._uow:
+            user = await self._uow.users.get_by_id(command.target_user_id)
+            if user is None:
+                return Result[UserView].fail(
+                    Error(
+                        code="user_not_found",
+                        description="Пользователь не найден",
+                        type=ErrorType.NOT_FOUND,
+                    )
                 )
-            )
-        result = user.activate()
-        if result.is_err:
-            return Result[UserView].fail(result.error)
-        await self._users.save(user)
-        return Result[UserView].ok(UserView.from_user(user))
+            result = user.activate()
+            if result.is_err:
+                return Result[UserView].fail(result.error)
+            await self._uow.users.save(user)
+            await self._uow.commit()
+            return Result[UserView].ok(UserView.from_user(user))

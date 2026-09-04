@@ -18,6 +18,7 @@ from domain.user_id import UserId
 from infrastructure.db import audit as _audit  # noqa: F401
 from infrastructure.db import models as _models  # noqa: F401
 from infrastructure.db.session import get_db_session
+from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 from infrastructure.db.user_repository import UserRepository
 from tests.unit.keygen import write_rsa_key_file
 
@@ -116,7 +117,10 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
     admin = await UserRepository(db_session).get_by_id(UserId(admin_id))
     assert admin is not None
     admin.role = Role.ADMIN
-    await UserRepository(db_session).save(admin)
+    uow = SqlIdentityUnitOfWork(db_session)
+    async with uow:
+        await uow.users.save(admin)
+        await uow.commit()
 
     admin_login = await client.post(
         "/api/v1/auth/login",
