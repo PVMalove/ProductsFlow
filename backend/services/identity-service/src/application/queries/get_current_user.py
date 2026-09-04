@@ -12,7 +12,7 @@ from kernel_domain.result import Result
 
 from application.ports import UserQueryPort
 from contracts.user import UserView
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

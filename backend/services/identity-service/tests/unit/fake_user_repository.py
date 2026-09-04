@@ -1,7 +1,7 @@
-from domain.email import Email
+from domain.entities.user import User
 from domain.repositories import UserRepository
-from domain.user import User
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 
 class FakeUserRepository(UserRepository):

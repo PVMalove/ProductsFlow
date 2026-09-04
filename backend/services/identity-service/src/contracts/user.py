@@ -5,8 +5,8 @@ import uuid
 from dataclasses import dataclass
 
 from application.ports import UserReadModel
+from domain.entities.user import User
 from domain.role import Role
-from domain.user import User
 
 
 @dataclass(frozen=True)

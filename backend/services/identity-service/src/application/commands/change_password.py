@@ -7,9 +7,9 @@ from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
 from contracts.user import UserView
-from domain.raw_password import RawPassword
 from domain.unit_of_work import IdentityUnitOfWork
-from domain.user_id import UserId
+from domain.value_objects.raw_password import RawPassword
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

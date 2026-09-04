@@ -1,8 +1,8 @@
 from typing import Protocol, runtime_checkable
 
-from domain.email import Email
-from domain.user import User
-from domain.user_id import UserId
+from domain.entities.user import User
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 
 @runtime_checkable

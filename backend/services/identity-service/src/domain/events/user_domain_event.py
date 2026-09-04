@@ -4,9 +4,9 @@ from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
 
-from domain.email import Email
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True, kw_only=True)

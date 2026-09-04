@@ -4,11 +4,11 @@ from sqlalchemy import Select, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.ports import UserListQueryPort, UserPage, UserReadModel
-from domain.email import Email
+from domain.entities.user import User
 from domain.repositories import UserRepository as UserRepositoryPort
 from domain.role import Role
-from domain.user import User
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 # Importing the listener module is intentional: it registers User ORM events
 # whenever the repository is used, including from application code.
@@ -19,9 +19,9 @@ _UserRows = list[UserModel]
 
 
 def _to_domain(row: UserModel) -> User:
-    return User(
-        UserId(row.id),
-        email=Email(row.email),
+    return User.reconstitute(
+        UserId.create(row.id),
+        email=Email.create(row.email).value,
         password_hash=row.password_hash,
         role=Role(row.role),
         is_active=row.is_active,
@@ -81,8 +81,8 @@ _user_repository_implementation: type[UserRepositoryPort] = UserRepository
 
 def _to_read_model(row: UserModel) -> UserReadModel:
     return UserReadModel(
-        id=UserId(row.id),
-        email=Email(row.email),
+        id=UserId.create(row.id),
+        email=Email.create(row.email).value,
         role=Role(row.role),
         is_active=row.is_active,
     )

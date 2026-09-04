@@ -1,20 +1,21 @@
 from kernel_domain.errors import ErrorType
 
-from domain.email import Email
+from domain.entities.user import User
 from domain.events import PasswordChanged
-from domain.role import Role
-from domain.user import User
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+
+
+def _user(*, is_active: bool) -> User:
+    user = User.register(Email.create("user@example.com").value, "old-hash").value
+    user.pull_events()
+    if not is_active:
+        user.deactivate()
+        user.pull_events()
+    return user
 
 
 def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -> None:
-    user = User(
-        UserId.generate(),
-        email=Email("user@example.com"),
-        password_hash="old-hash",
-        role=Role.USER,
-        is_active=True,
-    )
+    user = _user(is_active=True)
 
     result = user.change_password("new-hash")
 
@@ -28,13 +29,7 @@ def test_change_password_updates_the_hash_and_pulls_a_password_changed_event() -
 
 
 def test_change_password_rejects_a_deactivated_user_without_mutating_the_hash() -> None:
-    user = User(
-        UserId.generate(),
-        email=Email("user@example.com"),
-        password_hash="old-hash",
-        role=Role.USER,
-        is_active=False,
-    )
+    user = _user(is_active=False)
 
     result = user.change_password("new-hash")
 

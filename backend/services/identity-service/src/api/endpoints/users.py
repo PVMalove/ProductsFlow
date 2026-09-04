@@ -26,7 +26,7 @@ from api.security import AdminActor, RequiredActor
 from application.ports import UserAuditEntry, UserAuditPage
 from application.queries import GetCurrentUserQuery, GetUserAuditQuery
 from contracts.user import UserView
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -49,7 +49,7 @@ def _unwrap[T](result: Result[T]) -> T:
 async def read_current_user(
     actor: RequiredActor, handler: GetCurrentUserDI
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(GetCurrentUserQuery(user_id=UserId(actor.id)))
+    result = await handler.execute(GetCurrentUserQuery(user_id=UserId.create(actor.id)))
     return match_result(result)
 
 
@@ -67,7 +67,7 @@ async def read_own_audit_logs(
     actor: RequiredActor, handler: UserAuditDI
 ) -> ApiResponse[list[UserAuditEntry]]:
     entries = _unwrap(
-        await handler.execute(GetUserAuditQuery(user_id=UserId(actor.id)))
+        await handler.execute(GetUserAuditQuery(user_id=UserId.create(actor.id)))
     )
     assert isinstance(entries, list)
     return ApiResponse(data=entries)

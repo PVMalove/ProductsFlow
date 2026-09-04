@@ -9,7 +9,7 @@ from application.queries.get_current_user import (
 )
 from contracts.user import UserView
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
@@ -37,7 +37,7 @@ async def test_get_current_user_reloads_state_and_returns_a_view() -> None:
     ).execute(RegisterUserCommand("user@example.com", "password1"))
 
     result = await GetCurrentUserHandler(ReadOnlyUserProjection(repository)).execute(
-        GetCurrentUserQuery(UserId(registered.value.id))
+        GetCurrentUserQuery(UserId.create(registered.value.id))
     )
 
     assert result.is_ok
@@ -53,7 +53,7 @@ async def test_get_current_user_returns_not_found_for_an_unknown_actor() -> None
     repository = FakeUserRepository()
 
     result = await GetCurrentUserHandler(ReadOnlyUserProjection(repository)).execute(
-        GetCurrentUserQuery(UserId.generate())
+        GetCurrentUserQuery(UserId.new_id())
     )
 
     assert result.is_err

@@ -7,10 +7,10 @@ from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
 from contracts.user import UserView
-from domain.email import Email
-from domain.raw_password import RawPassword
+from domain.entities.user import User
 from domain.unit_of_work import IdentityUnitOfWork
-from domain.user import User
+from domain.value_objects.email import Email
+from domain.value_objects.raw_password import RawPassword
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,10 @@ class RegisterUserCommandHandler:
 
     async def execute(self, command: RegisterUserCommand) -> Result[UserView]:
         async with self._uow:
-            email = Email(command.email)
+            email_result = Email.create(command.email)
+            if email_result.is_err:
+                return Result[UserView].fail(email_result.error)
+            email = email_result.value
             if await self._uow.users.exists_by_email(email):
                 return Result[UserView].fail(
                     Error(

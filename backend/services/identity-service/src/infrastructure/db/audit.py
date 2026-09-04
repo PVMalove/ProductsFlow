@@ -27,7 +27,7 @@ from application.ports import (
     UserAuditPage,
     UserAuditQueryPort,
 )
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 from infrastructure.db.entity_configurations.models import UserModel
 
 
@@ -131,8 +131,8 @@ async def get_audit_logs_by_user(
 def _to_entry(row: UserAuditLog) -> UserAuditEntry:
     return UserAuditEntry(
         id=row.id,
-        user_id=UserId(row.user_id),
-        actor_user_id=UserId(row.actor_user_id),
+        user_id=UserId.create(row.user_id),
+        actor_user_id=UserId.create(row.actor_user_id),
         action=UserAuditAction(str(row.action)),
         description=row.description,
         created_at=row.created_at,

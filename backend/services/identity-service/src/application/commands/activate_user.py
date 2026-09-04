@@ -7,7 +7,7 @@ from kernel_domain.result import Result
 
 from contracts.user import UserView
 from domain.unit_of_work import IdentityUnitOfWork
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

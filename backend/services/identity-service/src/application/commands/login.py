@@ -6,9 +6,9 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
-from domain.email import Email
+from domain.entities.user import User
 from domain.unit_of_work import IdentityUnitOfWork
-from domain.user import User
+from domain.value_objects.email import Email
 
 
 @dataclass(frozen=True)
@@ -36,9 +36,8 @@ class LoginCommandHandler:
 
     async def execute(self, command: LoginCommand) -> Result[User]:
         async with self._uow:
-            try:
-                email = Email(command.email)
-            except ValueError:
+            email_result = Email.create(command.email)
+            if email_result.is_err:
                 return Result[User].fail(
                     Error(
                         code="invalid_credentials",
@@ -46,7 +45,7 @@ class LoginCommandHandler:
                         type=ErrorType.UNAUTHORIZED,
                     )
                 )
-            user = await self._uow.users.get_by_email(email)
+            user = await self._uow.users.get_by_email(email_result.value)
             if user is None or not self._password_hasher.verify(
                 command.password, user.password_hash
             ):
