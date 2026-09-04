@@ -16,7 +16,7 @@ from application.commands import (
     ProcessUserDeletionCommandHandler,
 )
 from core.settings import settings
-from infrastructure.db.ticket_repository import TicketRepository
+from infrastructure.db.unit_of_work import SqlSupportUnitOfWork
 from infrastructure.db.user_projection import upsert_user_projection
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ async def handle_user_event(
 
     async with session_factory() as session:
         processed = await ProcessUserDeletionCommandHandler(
-            TicketRepository(session)
+            SqlSupportUnitOfWork(session)
         ).execute(
             ProcessUserDeletionCommand(message_id=message_id, user_id=snapshot.user_id)
         )

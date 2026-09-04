@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from api.bootstrap import seed_admin_user
 from domain.role import Role
 from infrastructure.db import audit as _audit  # noqa: F401
-from infrastructure.db import models as _models  # noqa: F401
-from infrastructure.db.models import UserModel
+from infrastructure.db.entity_configurations.models import UserModel
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

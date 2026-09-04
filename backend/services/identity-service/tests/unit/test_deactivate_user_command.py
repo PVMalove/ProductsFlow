@@ -7,6 +7,7 @@ from application.deactivate_user import (
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.events import Deactivated
 from domain.user import User
+from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
@@ -14,9 +15,8 @@ from tests.unit.fake_user_repository import FakeUserRepository
 async def _register(
     repository: FakeUserRepository, hasher: FakePasswordHasher, email: str
 ) -> User:
-    await RegisterUserCommandHandler(repository, hasher).execute(
-        RegisterUserCommand(email, "password1")
-    )
+    handler = RegisterUserCommandHandler(FakeIdentityUnitOfWork(repository), hasher)
+    await handler.execute(RegisterUserCommand(email, "password1"))
     return repository.users[email]
 
 
@@ -25,7 +25,8 @@ async def test_deactivate_rejects_an_actor_deactivating_themself() -> None:
     hasher = FakePasswordHasher()
     user = await _register(repository, hasher, "user@example.com")
 
-    result = await DeactivateUserCommandHandler(repository).execute(
+    handler = DeactivateUserCommandHandler(FakeIdentityUnitOfWork(repository))
+    result = await handler.execute(
         DeactivateUserCommand(target_user_id=user.id, actor_user_id=user.id)
     )
 
@@ -41,7 +42,8 @@ async def test_deactivate_happy_path_delegates_to_the_aggregate_and_persists() -
     target.pull_events()
     actor = await _register(repository, hasher, "actor@example.com")
 
-    result = await DeactivateUserCommandHandler(repository).execute(
+    handler = DeactivateUserCommandHandler(FakeIdentityUnitOfWork(repository))
+    result = await handler.execute(
         DeactivateUserCommand(target_user_id=target.id, actor_user_id=actor.id)
     )
 

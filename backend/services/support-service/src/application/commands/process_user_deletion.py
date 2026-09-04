@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import dataclass
 
-from application.ports import UserDeletionPort
+from domain.unit_of_work import SupportUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -13,11 +13,15 @@ class ProcessUserDeletionCommand:
 class ProcessUserDeletionCommandHandler:
     """Apply a user deletion through the transactional support port."""
 
-    def __init__(self, repository: UserDeletionPort) -> None:
-        self._repository = repository
+    def __init__(self, uow: SupportUnitOfWork) -> None:
+        self._uow = uow
 
     async def execute(self, command: ProcessUserDeletionCommand) -> bool:
-        return await self._repository.process_user_deleted(
-            message_id=command.message_id,
-            user_id=command.user_id,
-        )
+        async with self._uow:
+            processed = await self._uow.tickets.process_user_deleted(
+                message_id=command.message_id,
+                user_id=command.user_id,
+            )
+            if processed:
+                await self._uow.commit()
+        return processed

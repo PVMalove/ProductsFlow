@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
-from infrastructure.db.models import ProductModel
+from infrastructure.db.entity_configurations.models import ProductModel
 from infrastructure.db.owner_read_model import upsert_owner_read_model
 from infrastructure.db.product_repository import ProductRepository
+from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -191,21 +192,23 @@ async def test_activate_deactivate_toggle_persisted_state(
 async def test_delete_removes_row_and_writes_outbox_row(
     db_session: AsyncSession,
 ) -> None:
-    repo = ProductRepository(db_session)
-    created = (
-        await repo.create(
-            name="Название товара",
-            description="",
-            price=1.0,
-            category="Категория",
-            user_id=uuid.uuid4(),
-        )
-    ).value
+    uow = SqlCatalogUnitOfWork(db_session)
+    async with uow:
+        created = (
+            await uow.products.create(
+                name="Название товара",
+                description="",
+                price=1.0,
+                category="Категория",
+                user_id=uuid.uuid4(),
+            )
+        ).value
 
-    deleted = await repo.delete(created.id)
-    assert deleted is not None
+        deleted = await uow.products.delete(created.id)
+        assert deleted is not None
+        await uow.commit()
 
-    assert await repo.get_by_id(created.id) is None
+    assert await uow.products.get_by_id(created.id) is None
 
     outbox_rows = await _outbox_rows_for(db_session, created.id.value)
     assert [row.event_type for row in outbox_rows] == [

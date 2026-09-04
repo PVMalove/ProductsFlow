@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from application.ports import TicketMutationPort
 from contracts.ticket import TicketView
 from domain.ticket import TicketClosedError
+from domain.unit_of_work import SupportUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -21,31 +21,33 @@ class AddTicketMessageCommand:
 
 
 class AddTicketMessageCommandHandler:
-    def __init__(self, repository: TicketMutationPort) -> None:
-        self._repository = repository
+    def __init__(self, uow: SupportUnitOfWork) -> None:
+        self._uow = uow
 
     async def execute(self, command: AddTicketMessageCommand) -> Result[TicketView]:
-        try:
-            ticket = await self._repository.add_message(
-                ticket_id=command.ticket_id,
-                actor_id=command.actor_id,
-                body=command.body,
-                is_admin=command.is_admin,
-            )
-        except TicketClosedError:
-            return Result[TicketView].fail(
-                Error(
-                    code="TICKET_CLOSED",
-                    description="Закрытый тикет нельзя изменять",
-                    type=ErrorType.CONFLICT,
+        async with self._uow:
+            try:
+                ticket = await self._uow.tickets.add_message(
+                    ticket_id=command.ticket_id,
+                    actor_id=command.actor_id,
+                    body=command.body,
+                    is_admin=command.is_admin,
                 )
-            )
-        if ticket is None:
-            return Result[TicketView].fail(
-                Error(
-                    code="TICKET_NOT_FOUND",
-                    description="Тикет не найден",
-                    type=ErrorType.NOT_FOUND,
+            except TicketClosedError:
+                return Result[TicketView].fail(
+                    Error(
+                        code="TICKET_CLOSED",
+                        description="Закрытый тикет нельзя изменять",
+                        type=ErrorType.CONFLICT,
+                    )
                 )
-            )
+            if ticket is None:
+                return Result[TicketView].fail(
+                    Error(
+                        code="TICKET_NOT_FOUND",
+                        description="Тикет не найден",
+                        type=ErrorType.NOT_FOUND,
+                    )
+                )
+            await self._uow.commit()
         return Result[TicketView].ok(TicketView.from_domain(ticket))

@@ -21,8 +21,10 @@ from application.queries import (
     ListUsersQueryHandler,
 )
 from domain.repositories import UserRepository
+from domain.unit_of_work import IdentityUnitOfWork
 from infrastructure.db.audit import SqlUserAuditReader
 from infrastructure.db.session import DbSessionDI
+from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 from infrastructure.db.user_repository import (
     SqlUserQueryRepository,
 )
@@ -37,6 +39,13 @@ def get_user_repository(session: DbSessionDI) -> SqlUserRepository:
 
 
 UserRepositoryDI = Annotated[UserRepository, Depends(get_user_repository)]
+
+
+def get_identity_uow(session: DbSessionDI) -> IdentityUnitOfWork:
+    return SqlIdentityUnitOfWork(session)
+
+
+IdentityUnitOfWorkDI = Annotated[IdentityUnitOfWork, Depends(get_identity_uow)]
 
 
 def get_user_query_repository(session: DbSessionDI) -> SqlUserQueryRepository:
@@ -62,27 +71,27 @@ PasswordHasherDI = Annotated[PasswordHasher, Depends(get_password_hasher)]
 
 
 def get_register_handler(
-    repository: UserRepositoryDI, hasher: PasswordHasherDI
+    uow: IdentityUnitOfWorkDI, hasher: PasswordHasherDI
 ) -> RegisterUserCommandHandler:
-    return RegisterUserCommandHandler(repository, hasher)
+    return RegisterUserCommandHandler(uow, hasher)
 
 
 RegisterUserDI = Annotated[RegisterUserCommandHandler, Depends(get_register_handler)]
 
 
 def get_login_handler(
-    repository: UserRepositoryDI, hasher: PasswordHasherDI
+    uow: IdentityUnitOfWorkDI, hasher: PasswordHasherDI
 ) -> LoginCommandHandler:
-    return LoginCommandHandler(repository, hasher)
+    return LoginCommandHandler(uow, hasher)
 
 
 LoginDI = Annotated[LoginCommandHandler, Depends(get_login_handler)]
 
 
 def get_change_password_handler(
-    repository: UserRepositoryDI, hasher: PasswordHasherDI
+    uow: IdentityUnitOfWorkDI, hasher: PasswordHasherDI
 ) -> ChangePasswordCommandHandler:
-    return ChangePasswordCommandHandler(repository, hasher)
+    return ChangePasswordCommandHandler(uow, hasher)
 
 
 ChangePasswordDI = Annotated[
@@ -91,18 +100,18 @@ ChangePasswordDI = Annotated[
 
 
 def get_activate_handler(
-    repository: UserRepositoryDI,
+    uow: IdentityUnitOfWorkDI,
 ) -> ActivateUserCommandHandler:
-    return ActivateUserCommandHandler(repository)
+    return ActivateUserCommandHandler(uow)
 
 
 ActivateUserDI = Annotated[ActivateUserCommandHandler, Depends(get_activate_handler)]
 
 
 def get_deactivate_handler(
-    repository: UserRepositoryDI,
+    uow: IdentityUnitOfWorkDI,
 ) -> DeactivateUserCommandHandler:
-    return DeactivateUserCommandHandler(repository)
+    return DeactivateUserCommandHandler(uow)
 
 
 DeactivateUserDI = Annotated[
@@ -144,6 +153,7 @@ __all__ = [
     "DeactivateUserDI",
     "DbSessionDI",
     "GetCurrentUserDI",
+    "IdentityUnitOfWorkDI",
     "ListUsersDI",
     "LoginDI",
     "PasswordHasherDI",
@@ -152,5 +162,6 @@ __all__ = [
     "UserAuditReaderDI",
     "UserQueryRepositoryDI",
     "UserRepositoryDI",
+    "get_identity_uow",
     "get_user_repository",
 ]

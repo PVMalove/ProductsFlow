@@ -6,9 +6,9 @@ from kernel_platform.http.exception_handlers import register_error_handlers
 from observability.middleware import RequestContextMiddleware
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from api.auth import router as auth_router
-from api.jwks import router as jwks_router
-from api.users import router as users_router
+from api.endpoints.auth import router as auth_router
+from api.endpoints.jwks import router as jwks_router
+from api.endpoints.users import router as users_router
 from application.errors import ApplicationError
 from core.logging_config import configure_logging
 from core.secrets import validate_prod_key

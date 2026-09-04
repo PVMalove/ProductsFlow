@@ -2,6 +2,7 @@ from kernel_domain.errors import ErrorType
 
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.role import Role
+from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
@@ -9,7 +10,8 @@ from tests.unit.fake_user_repository import FakeUserRepository
 async def test_register_persists_the_user_and_returns_ok() -> None:
     repository = FakeUserRepository()
     hasher = FakePasswordHasher()
-    handler = RegisterUserCommandHandler(repository, hasher)
+    uow = FakeIdentityUnitOfWork(repository)
+    handler = RegisterUserCommandHandler(uow, hasher)
 
     result = await handler.execute(RegisterUserCommand("user@example.com", "password1"))
 
@@ -20,11 +22,14 @@ async def test_register_persists_the_user_and_returns_ok() -> None:
     stored = repository.users["user@example.com"]
     assert stored.id.value == view.id
     assert stored.password_hash == hasher.hash("password1")
+    assert uow.committed is True
 
 
 async def test_register_fails_with_conflict_when_email_already_exists() -> None:
     repository = FakeUserRepository()
-    handler = RegisterUserCommandHandler(repository, FakePasswordHasher())
+    handler = RegisterUserCommandHandler(
+        FakeIdentityUnitOfWork(repository), FakePasswordHasher()
+    )
     first = await handler.execute(RegisterUserCommand("user@example.com", "password1"))
     assert first.is_ok
 
@@ -36,7 +41,9 @@ async def test_register_fails_with_conflict_when_email_already_exists() -> None:
 
 async def test_register_does_not_construct_the_aggregate_on_a_duplicate_email() -> None:
     repository = FakeUserRepository()
-    handler = RegisterUserCommandHandler(repository, FakePasswordHasher())
+    handler = RegisterUserCommandHandler(
+        FakeIdentityUnitOfWork(repository), FakePasswordHasher()
+    )
     await handler.execute(RegisterUserCommand("user@example.com", "password1"))
     users_before = dict(repository.users)
 
@@ -46,7 +53,9 @@ async def test_register_does_not_construct_the_aggregate_on_a_duplicate_email() 
 
 
 async def test_register_fails_with_validation_on_a_weak_password() -> None:
-    handler = RegisterUserCommandHandler(FakeUserRepository(), FakePasswordHasher())
+    handler = RegisterUserCommandHandler(
+        FakeIdentityUnitOfWork(FakeUserRepository()), FakePasswordHasher()
+    )
 
     result = await handler.execute(RegisterUserCommand("user@example.com", "short"))
 
@@ -56,7 +65,9 @@ async def test_register_fails_with_validation_on_a_weak_password() -> None:
 
 async def test_register_does_not_hash_a_weak_password() -> None:
     repository = FakeUserRepository()
-    handler = RegisterUserCommandHandler(repository, FakePasswordHasher())
+    handler = RegisterUserCommandHandler(
+        FakeIdentityUnitOfWork(repository), FakePasswordHasher()
+    )
 
     await handler.execute(RegisterUserCommand("user@example.com", "short"))
 

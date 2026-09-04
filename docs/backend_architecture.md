@@ -46,7 +46,6 @@ backend/
 ## 3. Макро-Архитектура (Межсервисное взаимодействие)
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. Внешние клиенты общаются с системой через API Gateway. Синхронные межсервисные вызовы сведены к минимуму во избежание каскадных сбоев.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
@@ -103,11 +102,9 @@ graph TD
 ```
 
 ---
-
 ## 4. Микро-Архитектура (Устройство отдельного сервиса)
 
 Организация кода внутри сервиса (например, `identity-service`) строго следует правилу инверсии зависимостей. 
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
@@ -157,7 +154,6 @@ graph TD
 ```
 
 ### Доменная модель и Наследование
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 classDiagram
@@ -197,7 +193,6 @@ classDiagram
 ### 5.1. Stateless JWT Авторизация (Локальная проверка)
 
 При проверке прав доступа микросервисам не нужно делать HTTP-запрос в `identity-service`. Они используют публичный ключ для криптографической валидации подписи.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 sequenceDiagram
@@ -228,7 +223,6 @@ sequenceDiagram
 ### 5.2. Публикация событий (Transactional Outbox)
 
 Гарантирует, что система не окажется в неконсистентном состоянии, если после записи в БД RabbitMQ будет временно недоступен.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph LR
@@ -259,13 +253,11 @@ graph LR
 ```
 
 ---
-
 ## 6. DevOps и CI/CD
 
 ### 6.1. Изолированные миграции БД (Alembic)
 
 Несмотря на Polyrepo, работа с БД прозрачна для разработчика. Каждому сервису выделена своя схема/база и своя таблица `alembic_version`.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 sequenceDiagram
@@ -297,7 +289,6 @@ sequenceDiagram
 ### 6.2. CI/CD: Матричное тестирование (GitHub Actions)
 
 В монорепозитории тестируется и собирается только то, что изменилось. Матричная сборка запускает проверки параллельно, радикально ускоряя пайплайн.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph LR
@@ -326,7 +317,6 @@ graph LR
 ```
 
 ---
-
 ## 7. Продвинутые архитектурные паттерны (CQRS, S3, UUID)
 
 В рамках непрерывного развития платформы (согласно **ADR 0023** и **ADR 0024**), архитектура системы включает в себя ряд продвинутых паттернов. Ниже описаны ключевые реализованные концепции.
@@ -338,7 +328,6 @@ graph LR
 В разделяемой библиотеке `kernel-domain` реализованы базовые абстракции `ICommandHandler` и `IQueryHandler`. Маршрутизаторы (Routers) в `api/v1/` стали максимально тонкими: они лишь валидируют HTTP-запрос через Pydantic и передают DTO в соответствующий Handler. 
 
 Кроме того, интерфейсы-порты репозиториев (например, `UserRepository`, `ProductRepository`, `TicketRepository`) перенесены строго в **Domain-слой**, обеспечивая идеальную инверсию зависимостей (Clean Architecture).
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
@@ -393,7 +382,6 @@ graph TD
 
 `catalog-service` полностью реализует хранение изображений товаров через S3-совместимое хранилище (**MinIO**). 
 Параллельно RabbitMQ-воркеры обеспечивают консистентность данных: при получении события об удалении/деактивации пользователя из `identity-service`, воркер каталога асинхронно обновляет `owner_read_model`, моментально скрывая товары этого пользователя из поисковой выдачи.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 sequenceDiagram
@@ -442,7 +430,6 @@ sequenceDiagram
    - **Outbox Pattern:** `OutboxMixin` (SQLAlchemy) для автоматической генерации таблиц и сохранения доменных событий внутри транзакций.
    - **RabbitMQ:** Абстракция консьюмера (Consumer) с "подкапотной" реализацией паттернов Dead Letter Queue (DLQ) и Exponential Backoff для ретраев при ошибках сети.
    - **Security:** Валидация JWT-токенов через `PyJWT`, кэширование публичных ключей RSA и проверка пермиссий.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
@@ -471,7 +458,6 @@ graph TD
 Микросервисы общаются между собой исключительно асинхронно через паттерн **Choreography** (Хореография), реагируя на доменные события друг друга. В системе нет центрального оркестратора — каждый сервис сам знает, что делать при наступлении глобального события.
 
 Рассмотрим самый сложный сквозной поток: **Удаление пользователя**.
-
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 sequenceDiagram
@@ -515,3 +501,77 @@ sequenceDiagram
 
 **Преимущества такого подхода:**
 Если `catalog-service` в момент удаления пользователя недоступен (упал или обновляется), событие безопасно останется в очереди RabbitMQ. Как только сервис поднимется, консьюмер прочитает событие и скроет товары. Это обеспечивает **Eventual Consistency** (согласованность в конечном счете) без риска каскадного падения системы.
+
+## Транзакции и Unit of Work (ADR 0034)
+
+### 1. Классовая структура (Dependency Inversion)
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+classDiagram
+    direction BT
+
+    class UnitOfWork {
+        <<Protocol>>
+        +__aenter__() Self
+        +__aexit__(exc) None
+        +commit() None
+        +rollback() None
+    }
+
+    class CatalogUnitOfWork {
+        <<Protocol>>
+        +ProductRepository products
+    }
+    
+    class SqlAlchemyUnitOfWork {
+        -AsyncSession _session
+        -_committed: bool
+        +__aenter__()
+        +__aexit__(exc)
+        +commit()
+        +rollback()
+    }
+
+    class SqlCatalogUnitOfWork {
+        +SqlProductRepository products
+    }
+
+    CatalogUnitOfWork --|> UnitOfWork : extends
+    SqlAlchemyUnitOfWork ..|> UnitOfWork : implements
+    SqlCatalogUnitOfWork --|> SqlAlchemyUnitOfWork : extends
+    SqlCatalogUnitOfWork ..|> CatalogUnitOfWork : implements
+```
+
+### 2. Жизненный цикл в Command Handler
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    participant API as FastAPI Router
+    participant Handler as Command Handler
+    participant UoW as SqlCatalogUnitOfWork
+    participant Repo as ProductRepository
+    participant DB as PostgreSQL (AsyncSession)
+
+    API->>Handler: execute(Command)
+    
+    Handler->>UoW: async with (открытие блока)
+    activate UoW
+    UoW-->>Handler: __aenter__()
+    
+    Handler->>Repo: create(product)
+    Repo->>DB: session.add(entity)
+    
+    alt Доменная ошибка (Result.is_err)
+        Handler-->>API: return Result.fail(error)
+        Note right of UoW: Блок завершается (commit не вызван)
+        UoW->>DB: session.rollback() (из __aexit__)
+    else Успешное выполнение
+        Handler->>UoW: commit()
+        UoW->>DB: session.commit()
+        Note over DB: Срабатывает OutboxMixin!<br/>События уходят в Outbox таблицу
+        Handler-->>API: return Result.ok(ProductView)
+    end
+    deactivate UoW
+```

@@ -7,8 +7,8 @@ from kernel_platform.http.exception_handlers import register_error_handlers
 from kernel_platform.security.identity_client import IdentityClient
 from observability.middleware import RequestContextMiddleware
 
-from api.product_images import router as product_images_router
-from api.products import router as products_router
+from api.endpoints.product_images import router as product_images_router
+from api.endpoints.products import router as products_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker

@@ -4,7 +4,7 @@ from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from domain.events import (
+from domain.events.product_domain_event import (
     ProductActivated,
     ProductCreated,
     ProductDeactivated,

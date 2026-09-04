@@ -2,10 +2,12 @@ import uuid
 
 import pytest
 
-from domain.events.ticket_created import TicketCreated
-from domain.events.ticket_message_added import TicketMessageAdded
-from domain.events.ticket_message_deleted import TicketMessageDeleted
-from domain.events.ticket_message_edited import TicketMessageEdited
+from domain.events.ticket_domain_event import (
+    TicketCreated,
+    TicketMessageAdded,
+    TicketMessageDeleted,
+    TicketMessageEdited,
+)
 from domain.ticket import (
     InvalidStatusTransitionError,
     Ticket,

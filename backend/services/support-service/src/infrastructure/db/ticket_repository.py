@@ -15,7 +15,11 @@ from domain.events import (
 from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket, TicketStatus
-from infrastructure.db.models import ProcessedMessage, TicketMessageModel, TicketModel
+from infrastructure.db.entity_configurations.models import (
+    ProcessedMessage,
+    TicketMessageModel,
+    TicketModel,
+)
 
 
 class TicketRepository:
@@ -36,59 +40,52 @@ class TicketRepository:
             self._session.add(_to_message_model(message))
         for event in ticket.pull_events():
             self._session.add(_to_outbox(event))
-        await self._session.commit()
         return ticket
 
     async def process_user_deleted(
         self, *, message_id: int, user_id: uuid.UUID
     ) -> bool:
         """Apply one identity deletion atomically and idempotently."""
-        try:
-            inserted_id = await self._session.scalar(
-                insert(ProcessedMessage)
-                .values(message_id=message_id)
-                .on_conflict_do_nothing()
-                .returning(ProcessedMessage.message_id)
-            )
-            if inserted_id is None:
-                await self._session.rollback()
-                return False
+        inserted_id = await self._session.scalar(
+            insert(ProcessedMessage)
+            .values(message_id=message_id)
+            .on_conflict_do_nothing()
+            .returning(ProcessedMessage.message_id)
+        )
+        if inserted_id is None:
+            return False
 
-            ticket_rows = list(
+        ticket_rows = list(
+            (
+                await self._session.scalars(
+                    select(TicketModel)
+                    .where(TicketModel.author_id == user_id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        for row in ticket_rows:
+            ticket = await self._to_domain(row)
+            ticket.anonymize_deleted_user(user_id)
+            row.author_id = ticket.author_id
+            row.status = ticket.status.value
+            message_rows = list(
                 (
                     await self._session.scalars(
-                        select(TicketModel)
-                        .where(TicketModel.author_id == user_id)
-                        .with_for_update()
+                        select(TicketMessageModel).where(
+                            TicketMessageModel.ticket_id == ticket.id
+                        )
                     )
                 ).all()
             )
-            for row in ticket_rows:
-                ticket = await self._to_domain(row)
-                ticket.anonymize_deleted_user(user_id)
-                row.author_id = ticket.author_id
-                row.status = ticket.status.value
-                message_rows = list(
-                    (
-                        await self._session.scalars(
-                            select(TicketMessageModel).where(
-                                TicketMessageModel.ticket_id == ticket.id
-                            )
-                        )
-                    ).all()
-                )
-                existing_rows = {message.id: message for message in message_rows}
-                for message in ticket.messages:
-                    message_row = existing_rows.get(message.id)
-                    if message_row is None:
-                        self._session.add(_to_message_model(message))
-                    else:
-                        message_row.author_id = message.author_id
-                await self._drain_outbox(ticket)
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+            existing_rows = {message.id: message for message in message_rows}
+            for message in ticket.messages:
+                message_row = existing_rows.get(message.id)
+                if message_row is None:
+                    self._session.add(_to_message_model(message))
+                else:
+                    message_row.author_id = message.author_id
+            await self._drain_outbox(ticket)
         return True
 
     async def add_message(
@@ -101,23 +98,17 @@ class TicketRepository:
     ) -> Ticket | None:
         row = await self._load_for_update(ticket_id)
         if row is None or (not is_admin and row.author_id != actor_id):
-            await self._session.rollback()
             return None
 
         ticket = await self._to_domain(row)
-        try:
-            message = ticket.add_message(
-                author_id=actor_id,
-                body=body,
-                actor_category="admin" if is_admin else "user",
-            )
-            row.status = ticket.status.value
-            self._session.add(_to_message_model(message))
-            await self._drain_outbox(ticket)
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+        message = ticket.add_message(
+            author_id=actor_id,
+            body=body,
+            actor_category="admin" if is_admin else "user",
+        )
+        row.status = ticket.status.value
+        self._session.add(_to_message_model(message))
+        await self._drain_outbox(ticket)
         return ticket
 
     async def change_status(
@@ -125,18 +116,12 @@ class TicketRepository:
     ) -> Ticket | None:
         row = await self._load_for_update(ticket_id)
         if row is None:
-            await self._session.rollback()
             return None
 
         ticket = await self._to_domain(row)
-        try:
-            ticket.change_status(status, actor_category="admin")
-            row.status = ticket.status.value
-            await self._drain_outbox(ticket)
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+        ticket.change_status(status, actor_category="admin")
+        row.status = ticket.status.value
+        await self._drain_outbox(ticket)
         return ticket
 
     async def edit_message(
@@ -150,27 +135,20 @@ class TicketRepository:
     ) -> Ticket | None:
         ticket_row = await self._load_for_update(ticket_id)
         if ticket_row is None or (not is_admin and ticket_row.author_id != actor_id):
-            await self._session.rollback()
             return None
         message_row = await self._load_message(ticket_id, message_id)
         if message_row is None or message_row.author_id != actor_id:
-            await self._session.rollback()
             return None
 
         ticket = await self._to_domain(ticket_row)
-        try:
-            message = ticket.edit_message(
-                message_id=message_id,
-                author_id=actor_id,
-                body=body,
-                actor_category="admin" if is_admin else "user",
-            )
-            message_row.body = message.body
-            await self._drain_outbox(ticket)
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+        message = ticket.edit_message(
+            message_id=message_id,
+            author_id=actor_id,
+            body=body,
+            actor_category="admin" if is_admin else "user",
+        )
+        message_row.body = message.body
+        await self._drain_outbox(ticket)
         return ticket
 
     async def delete_message(
@@ -183,27 +161,20 @@ class TicketRepository:
     ) -> Ticket | None:
         ticket_row = await self._load_for_update(ticket_id)
         if ticket_row is None or (not is_admin and ticket_row.author_id != actor_id):
-            await self._session.rollback()
             return None
         message_row = await self._load_message(ticket_id, message_id)
         if message_row is None:
-            await self._session.rollback()
             return None
 
         ticket = await self._to_domain(ticket_row)
-        try:
-            message = ticket.delete_message(
-                message_id=message_id,
-                actor_id=actor_id,
-                actor_category="admin" if is_admin else "user",
-            )
-            message_row.body = message.body
-            message_row.is_deleted = message.is_deleted
-            await self._drain_outbox(ticket)
-            await self._session.commit()
-        except Exception:
-            await self._session.rollback()
-            raise
+        message = ticket.delete_message(
+            message_id=message_id,
+            actor_id=actor_id,
+            actor_category="admin" if is_admin else "user",
+        )
+        message_row.body = message.body
+        message_row.is_deleted = message.is_deleted
+        await self._drain_outbox(ticket)
         return ticket
 
     async def get_for_author(
@@ -411,7 +382,7 @@ class TicketRepository:
 
 
 def _to_outbox(event: DomainEvent) -> OutboxMessage:
-    from domain.events.ticket_created import TicketCreated
+    from domain.events.ticket_domain_event import TicketCreated
 
     if isinstance(event, TicketCreated):
         payload = {
