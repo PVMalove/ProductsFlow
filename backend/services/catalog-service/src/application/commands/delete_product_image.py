@@ -14,8 +14,8 @@ from application.ports import (
     IdentityGateway,
     ProductImageStorage,
 )
-from domain.product_id import ProductId
 from domain.unit_of_work import CatalogUnitOfWork
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,9 @@ class DeleteProductImageCommandHandler:
 
     async def execute(self, command: DeleteProductImageCommand) -> Result[None]:
         async with self._uow:
-            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            product = await self._uow.products.get_by_id(
+                ProductId.create(command.product_id)
+            )
             if product is None:
                 raise ProductNotFoundError
             await self._authorizer.require_owner_or_admin(command.actor, product)

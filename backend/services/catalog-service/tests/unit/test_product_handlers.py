@@ -33,10 +33,10 @@ from application.queries import (
     ListProductsQueryHandler,
 )
 from contracts.product import ProductView
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import PageInfo, ProductPage
+from domain.value_objects.product_id import ProductId
 from tests.unit.fake_catalog_unit_of_work import FakeCatalogUnitOfWork
 
 OWNER_ID = uuid.uuid4()
@@ -49,7 +49,7 @@ def _product(
     user_id: uuid.UUID = OWNER_ID,
 ) -> Product:
     result = Product.create(
-        ProductId(product_id),
+        ProductId.create(product_id),
         name="Товар",
         description="Описание",
         price=10.0,

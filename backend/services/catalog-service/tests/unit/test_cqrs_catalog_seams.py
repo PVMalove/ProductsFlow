@@ -31,8 +31,8 @@ from application.queries import (
     ListProductsQuery,
     ListProductsQueryHandler,
 )
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
+from domain.value_objects.product_id import ProductId
 from tests.unit.fake_catalog_unit_of_work import FakeCatalogUnitOfWork
 
 OWNER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -106,7 +106,7 @@ class FakeProductRepository:
         assert isinstance(category, str)
         assert isinstance(user_id, uuid.UUID)
         result = Product.create(
-            ProductId.generate(),
+            ProductId.new_id(),
             name=name,
             description=description,
             price=price,

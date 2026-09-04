@@ -4,7 +4,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 from infrastructure.db.product_repository import ProductRepository
 from tests.integration.conftest import FakeImageStorage
 
@@ -258,7 +258,7 @@ async def test_seed_object_is_not_deleted(
     assert isinstance(raw_product_id, str)
     product_id = uuid.UUID(raw_product_id)
     await ProductRepository(db_session).upsert_product_image(
-        ProductId(product_id),
+        ProductId.create(product_id),
         s3_key="seed/placeholder.jpg",
         content_type="image/jpeg",
         size_bytes=10,

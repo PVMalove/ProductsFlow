@@ -1,5 +1,7 @@
 import uuid
+from typing import cast
 
+from kernel_domain import _PRIVATE_MARKER
 from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
@@ -11,12 +13,14 @@ from domain.events.product_domain_event import (
     ProductDeleted,
     ProductUpdated,
 )
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 
 NAME_MIN_LENGTH = 3
 NAME_MAX_LENGTH = 100
 CATEGORY_MIN_LENGTH = 3
 CATEGORY_MAX_LENGTH = 100
+
+_MISSING = object()
 
 
 def _validate(*, name: str, category: str, price: float) -> Error | None:
@@ -50,11 +54,16 @@ def _validate(*, name: str, category: str, price: float) -> Error | None:
 class Product(Entity[ProductId]):
     """Агрегат Товара (issue #148, ADR 0021). `user_id` — идентификатор
     Владельца из identity-service (`UserId`, GUID); больше не FK в БД catalog
-    (Владелец резолвится через `OwnerReadModel`, TD §4.2)."""
+    (Владелец резолвится через `OwnerReadModel`, TD §4.2).
+
+    Конструктор вызывается только через `create()` (новый товар) или
+    `reconstitute()` (гидратация из БД) — маркер приватности проверяется
+    централизованно в `Entity.__init__`."""
 
     def __init__(
         self,
-        id: ProductId,
+        marker: object = _MISSING,
+        id: ProductId = cast("ProductId", _MISSING),
         *,
         name: str,
         description: str,
@@ -63,7 +72,7 @@ class Product(Entity[ProductId]):
         user_id: uuid.UUID,
         is_active: bool,
     ) -> None:
-        super().__init__(id)
+        super().__init__(marker, id=id)
         self.name = name
         self.description = description
         self.price = price
@@ -87,6 +96,7 @@ class Product(Entity[ProductId]):
             return Result[Product].fail(error)
 
         product = cls(
+            _PRIVATE_MARKER,
             id,
             name=name,
             description=description,
@@ -105,6 +115,29 @@ class Product(Entity[ProductId]):
             )
         )
         return Result[Product].ok(product)
+
+    @classmethod
+    def reconstitute(
+        cls,
+        id: ProductId,
+        *,
+        name: str,
+        description: str,
+        price: float,
+        category: str,
+        user_id: uuid.UUID,
+        is_active: bool,
+    ) -> "Product":
+        return cls(
+            _PRIVATE_MARKER,
+            id,
+            name=name,
+            description=description,
+            price=price,
+            category=category,
+            user_id=user_id,
+            is_active=is_active,
+        )
 
     def update(
         self,
@@ -165,8 +198,9 @@ class Product(Entity[ProductId]):
         self.add_domain_event(ProductDeactivated(product_id=self.id))
         return Result[None].ok(None)
 
-    def mark_deleted(self) -> None:
+    def mark_deleted(self) -> Result[None]:
         """Удаление — не переход состояния агрегата (строка просто исчезает
         из БД, CONTEXT.md «Удаление»), но само событие всё равно должно уйти
         в Outbox — репозиторий вызывает это перед `session.delete()`."""
         self.add_domain_event(ProductDeleted(product_id=self.id))
+        return Result[None].ok(None)

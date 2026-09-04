@@ -12,8 +12,7 @@ from application.ports import (
     ProductCommandPort,
     ProductQueryPort,
 )
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import (
     Cursor,
@@ -23,6 +22,7 @@ from domain.repositories import (
 from domain.repositories import (
     ProductRepository as ProductRepositoryPort,
 )
+from domain.value_objects.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.entity_configurations.models import (
     ProductImageModel,
@@ -39,8 +39,8 @@ _ProductRows = list[ProductModel]
 
 
 def _to_domain(row: ProductModel) -> Product:
-    return Product(
-        ProductId(row.id),
+    return Product.reconstitute(
+        ProductId.create(row.id),
         name=row.name,
         description=row.description,
         price=row.price,
@@ -52,7 +52,7 @@ def _to_domain(row: ProductModel) -> Product:
 
 def _to_image_domain(row: ProductImageModel) -> ProductImage:
     return ProductImage(
-        product_id=ProductId(row.product_id),
+        product_id=ProductId.create(row.product_id),
         s3_key=row.s3_key,
         content_type=row.content_type,
         size_bytes=row.size_bytes,
@@ -82,7 +82,7 @@ class ProductRepository:
         user_id: uuid.UUID,
     ) -> Result[Product]:
         result = Product.create(
-            ProductId.generate(),
+            ProductId.new_id(),
             name=name,
             description=description,
             price=price,
