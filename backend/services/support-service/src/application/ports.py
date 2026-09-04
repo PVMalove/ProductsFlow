@@ -6,21 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from domain.repositories import Cursor, MessagePage, TicketPage
-from domain.ticket import Ticket, TicketStatus
-
-
-class TicketCommandPort(Protocol):
-    """Transactional persistence operations used by command handlers."""
-
-    async def create(self, ticket: Ticket) -> Ticket: ...
-
-
-class UserDeletionPort(Protocol):
-    """Atomic application boundary for identity deletion events."""
-
-    async def process_user_deleted(
-        self, *, message_id: int, user_id: uuid.UUID
-    ) -> bool: ...
+from domain.ticket import Ticket
 
 
 @dataclass(frozen=True)
@@ -38,42 +24,6 @@ class UserProjectionSnapshot:
 
 class UserProjectionPort(Protocol):
     async def get(self, user_id: uuid.UUID) -> UserProjectionSnapshot | None: ...
-
-
-class TicketMutationPort(Protocol):
-    """Serialized ticket mutation operations used by command handlers."""
-
-    async def add_message(
-        self,
-        *,
-        ticket_id: uuid.UUID,
-        actor_id: uuid.UUID,
-        body: str,
-        is_admin: bool,
-    ) -> Ticket | None: ...
-
-    async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
-    ) -> Ticket | None: ...
-
-    async def edit_message(
-        self,
-        *,
-        ticket_id: uuid.UUID,
-        message_id: uuid.UUID,
-        actor_id: uuid.UUID,
-        body: str,
-        is_admin: bool = False,
-    ) -> Ticket | None: ...
-
-    async def delete_message(
-        self,
-        *,
-        ticket_id: uuid.UUID,
-        message_id: uuid.UUID,
-        actor_id: uuid.UUID,
-        is_admin: bool,
-    ) -> Ticket | None: ...
 
 
 class TicketQueryPort(Protocol):
@@ -113,10 +63,7 @@ class TicketQueryPort(Protocol):
 
 
 __all__ = [
-    "TicketCommandPort",
-    "TicketMutationPort",
     "TicketQueryPort",
-    "UserDeletionPort",
     "UserProjectionPort",
     "UserProjectionSnapshot",
 ]

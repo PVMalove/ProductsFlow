@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from fake_support_unit_of_work import FakeSupportUnitOfWork
 
 from application.commands import (
     AddTicketMessageCommand,
@@ -66,9 +67,10 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     repository = FakeMutationRepository(ticket)
+    uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
 
-    result = await AddTicketMessageCommandHandler(repository).execute(
+    result = await AddTicketMessageCommandHandler(uow).execute(
         AddTicketMessageCommand(
             ticket_id=ticket.id,
             actor_id=actor_id,
@@ -80,6 +82,7 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
     assert result.is_ok
     assert result.value == TicketView.from_domain(ticket)
     assert repository.message_calls == [(actor_id, True)]
+    assert uow.committed
 
 
 @pytest.mark.asyncio
@@ -88,9 +91,10 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     repository = FakeMutationRepository(ticket)
+    uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
 
-    result = await ChangeTicketStatusCommandHandler(repository).execute(
+    result = await ChangeTicketStatusCommandHandler(uow).execute(
         ChangeTicketStatusCommand(
             ticket_id=ticket.id,
             actor_id=actor_id,
@@ -102,6 +106,7 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
     assert result.is_ok
     assert result.value == TicketView.from_domain(ticket)
     assert repository.status_calls == [(actor_id, TicketStatus.IN_PROGRESS)]
+    assert uow.committed
 
 
 @pytest.mark.asyncio
@@ -110,8 +115,9 @@ async def test_change_status_command_forbids_a_non_admin_actor() -> None:
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     repository = FakeMutationRepository(ticket)
+    uow = FakeSupportUnitOfWork(repository)
 
-    result = await ChangeTicketStatusCommandHandler(repository).execute(
+    result = await ChangeTicketStatusCommandHandler(uow).execute(
         ChangeTicketStatusCommand(
             ticket_id=ticket.id,
             actor_id=uuid.uuid4(),
@@ -123,6 +129,7 @@ async def test_change_status_command_forbids_a_non_admin_actor() -> None:
     assert result.is_err
     assert result.error.code == "FORBIDDEN"
     assert repository.status_calls == []
+    assert not uow.committed
 
 
 @pytest.mark.asyncio
@@ -131,10 +138,11 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     repository = FakeMutationRepository(ticket)
+    uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id
     assert ticket.author_id is not None
 
-    result = await EditTicketMessageCommandHandler(repository).execute(
+    result = await EditTicketMessageCommandHandler(uow).execute(
         EditTicketMessageCommand(
             ticket_id=ticket.id,
             message_id=message_id,
@@ -147,6 +155,7 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
     assert result.is_ok
     assert result.value == TicketView.from_domain(ticket)
     assert repository.edit_calls == [(ticket.id, message_id, "Corrected", True)]
+    assert uow.committed
 
 
 @pytest.mark.asyncio
@@ -155,9 +164,10 @@ async def test_delete_message_command_passes_admin_moderation_context() -> None:
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     repository = FakeMutationRepository(ticket)
+    uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id
 
-    result = await DeleteTicketMessageCommandHandler(repository).execute(
+    result = await DeleteTicketMessageCommandHandler(uow).execute(
         DeleteTicketMessageCommand(
             ticket_id=ticket.id,
             message_id=message_id,
@@ -169,3 +179,4 @@ async def test_delete_message_command_passes_admin_moderation_context() -> None:
     assert result.is_ok
     assert result.value is None
     assert repository.delete_calls == [(ticket.id, message_id, True)]
+    assert uow.committed

@@ -1,9 +1,10 @@
 import uuid
 
 import pytest
+from fake_support_unit_of_work import FakeSupportUnitOfWork
 
 from application.commands import CreateTicketCommand, CreateTicketCommandHandler
-from application.ports import TicketCommandPort, TicketQueryPort
+from application.ports import TicketQueryPort
 from application.queries import (
     GetTicketQuery,
     GetTicketQueryHandler,
@@ -17,6 +18,7 @@ from application.queries import (
 from contracts.ticket import TicketDetailView
 from domain.repositories import MessagePage, PageInfo, TicketPage
 from domain.ticket import Ticket
+from domain.unit_of_work import SupportUnitOfWork
 
 
 class FakeTicketRepository:
@@ -77,9 +79,10 @@ class FakeTicketRepository:
 @pytest.mark.asyncio
 async def test_create_ticket_command_uses_the_command_port() -> None:
     repository = FakeTicketRepository()
+    uow = FakeSupportUnitOfWork(repository)
     author_id = uuid.uuid4()
 
-    result = await CreateTicketCommandHandler(repository).execute(
+    result = await CreateTicketCommandHandler(uow).execute(
         CreateTicketCommand(
             author_id=author_id,
             subject="Subject",
@@ -93,6 +96,7 @@ async def test_create_ticket_command_uses_the_command_port() -> None:
     assert result.value == TicketDetailView.from_domain(
         repository.created, repository.created.messages
     )
+    assert uow.committed
 
 
 @pytest.mark.asyncio
@@ -150,4 +154,4 @@ def test_support_cqrs_handlers_expose_execute_only() -> None:
 
     assert all(hasattr(handler_type, "execute") for handler_type in handler_types)
     assert all(not hasattr(handler_type, "handle") for handler_type in handler_types)
-    assert TicketCommandPort is not TicketQueryPort
+    assert SupportUnitOfWork is not TicketQueryPort

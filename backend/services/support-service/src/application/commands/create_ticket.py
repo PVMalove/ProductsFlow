@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 from kernel_domain.result import Result
 
-from application.ports import TicketCommandPort
 from contracts.ticket import TicketDetailView
 from domain.ticket import Ticket
+from domain.unit_of_work import SupportUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -21,8 +21,8 @@ class CreateTicketCommand:
 
 
 class CreateTicketCommandHandler:
-    def __init__(self, repository: TicketCommandPort) -> None:
-        self._repository = repository
+    def __init__(self, uow: SupportUnitOfWork) -> None:
+        self._uow = uow
 
     async def execute(self, command: CreateTicketCommand) -> Result[TicketDetailView]:
         ticket = Ticket.create(
@@ -30,7 +30,9 @@ class CreateTicketCommandHandler:
             subject=command.subject,
             first_message=command.first_message,
         )
-        created = await self._repository.create(ticket)
+        async with self._uow:
+            created = await self._uow.tickets.create(ticket)
+            await self._uow.commit()
         return Result[TicketDetailView].ok(
             TicketDetailView.from_domain(created, created.messages)
         )
