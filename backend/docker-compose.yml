@@ -50,6 +50,8 @@ services:
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
       IDENTITY_JWT_PRIVATE_KEY_PATH: ${IDENTITY_JWT_PRIVATE_KEY_PATH}
       IDENTITY_ACCESS_TOKEN_TTL_HOURS: ${IDENTITY_ACCESS_TOKEN_TTL_HOURS}
+    volumes:
+      - ./secrets:/srv/secrets:ro
     depends_on:
       identity-bootstrap:
         condition: service_completed_successfully

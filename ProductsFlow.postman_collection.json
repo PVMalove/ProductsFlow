@@ -1,0 +1,874 @@
+{
+    "info": {
+        "name": "ProductsFlow AI (Detailed API Reference)",
+        "description": "Полная коллекция со всеми 32 эндпоинтами из Identity, Catalog и Support сервисов.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "identityUrl",
+            "value": "http://localhost:8001",
+            "type": "string"
+        },
+        {
+            "key": "catalogUrl",
+            "value": "http://localhost:8002",
+            "type": "string"
+        },
+        {
+            "key": "supportUrl",
+            "value": "http://localhost:8003",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "product_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "ticket_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "message_id",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Identity Service",
+            "item": [
+                {
+                    "name": "Register",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"Password123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/auth/register",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "register"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "username",
+                                    "value": "admin@productsflow.local",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "password",
+                                    "value": "dev-only-admin-password-2026",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/auth/login",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get JWKS",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/.well-known/jwks.json",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                ".well-known",
+                                "jwks.json"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Current User",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/me",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "me"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Change Own Password",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"old_password\": \"Password123\",\n    \"new_password\": \"NewPassword456\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/me/password",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "me",
+                                "password"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Current User",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/me",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "me"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Current User Audit",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/me/audit",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "me",
+                                "audit"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: List All Audit Logs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/audit?page_index=1&page_size=20",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "audit"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page_index",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "page_size",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: List Users",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/?limit=20",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                ""
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: Get User Audit",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/{{user_id}}/audit",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "{{user_id}}",
+                                "audit"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: Activate User",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/{{user_id}}/activate",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "{{user_id}}",
+                                "activate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: Deactivate User",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{identityUrl}}/api/v1/users/{{user_id}}/deactivate",
+                            "host": [
+                                "{{identityUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "users",
+                                "{{user_id}}",
+                                "deactivate"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Catalog Service",
+            "item": [
+                {
+                    "name": "Create Product",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Крутой товар\",\n    \"description\": \"Детальное описание товара...\",\n    \"price\": 199.99,\n    \"category\": \"electronics\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "List Products",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products?limit=20",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Product Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Product",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"price\": 150.00,\n    \"description\": \"Обновленное описание\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Activate Product",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/activate",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "activate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Deactivate Product",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/deactivate",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "deactivate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Product",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Product Audit",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/audit",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "audit"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Upload Product Image",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/image",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "image"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Product Image URL",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/image",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "image"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Product Image",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{catalogUrl}}/api/v1/products/{{product_id}}/image",
+                            "host": [
+                                "{{catalogUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "products",
+                                "{{product_id}}",
+                                "image"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Support Service",
+            "item": [
+                {
+                    "name": "Create Ticket",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"subject\": \"Проблема с оплатой\",\n    \"first_message\": \"Добрый день, у меня списались средства, но товар не появился...\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "List Tickets",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Ticket Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/{{ticket_id}}",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "{{ticket_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Add Message",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"body\": \"Прикладываю дополнительную информацию...\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/{{ticket_id}}/messages",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "{{ticket_id}}",
+                                "messages"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Message",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"body\": \"Измененное сообщение\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/{{ticket_id}}/messages/{{message_id}}",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "{{ticket_id}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Message",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/{{ticket_id}}/messages/{{message_id}}",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "{{ticket_id}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: List All Tickets",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/admin",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "admin"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: Get Ticket Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/admin/{{ticket_id}}",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "admin",
+                                "{{ticket_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Admin: Update Ticket Status",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"status\": \"IN_PROGRESS\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{supportUrl}}/api/v1/tickets/{{ticket_id}}/status",
+                            "host": [
+                                "{{supportUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "tickets",
+                                "{{ticket_id}}",
+                                "status"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "try {",
+                    "    var jsonData = pm.response.json();",
+                    "    ",
+                    "    // 1. Глобальный перехват токена",
+                    "    if (jsonData.access_token) {",
+                    "        pm.collectionVariables.set(\"token\", jsonData.access_token);",
+                    "    }",
+                    "",
+                    "    // 2. Глобальный перехват ID для всех сущностей",
+                    "    if (jsonData.data && jsonData.data.id) {",
+                    "        var url = pm.request.url.getPath();",
+                    "        if (url.includes(\"/products\")) {",
+                    "            pm.collectionVariables.set(\"product_id\", jsonData.data.id);",
+                    "        } else if (url.includes(\"/tickets\") && !url.includes(\"/messages\")) {",
+                    "            pm.collectionVariables.set(\"ticket_id\", jsonData.data.id);",
+                    "        } else if (url.includes(\"/messages\")) {",
+                    "            pm.collectionVariables.set(\"message_id\", jsonData.data.id);",
+                    "        } else if (url.includes(\"/users\") || url.includes(\"/register\")) {",
+                    "            pm.collectionVariables.set(\"user_id\", jsonData.data.id);",
+                    "        }",
+                    "    }",
+                    "} catch (e) {",
+                    "    // Ответ не JSON (например 204 No Content), игнорируем",
+                    "}"
+                ]
+            }
+        },
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Умная подстановка токена, если стандартный Auth не сработал",
+                    "var token = pm.collectionVariables.get(\"token\");",
+                    "if (token && !pm.request.headers.has(\"Authorization\")) {",
+                    "    var url = pm.request.url.getPath();",
+                    "    // Не шлем токен на логин и регистрацию",
+                    "    if (!url.includes(\"/auth/\")) {",
+                    "        pm.request.headers.add({",
+                    "            key: \"Authorization\",",
+                    "            value: \"Bearer \" + token",
+                    "        });",
+                    "    }",
+                    "}"
+                ]
+            }
+        }
+    ]
+}
