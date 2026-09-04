@@ -122,12 +122,21 @@ class Ticket(Entity[TicketId]):
             )
 
         ticket_id = TicketId.new_id()
-        message = TicketMessage.create(
-            id=uuid.uuid4(),
-            ticket_id=ticket_id,
-            author_id=author_id,
-            body=first_message,
-        )
+        try:
+            message = TicketMessage.create(
+                id=uuid.uuid4(),
+                ticket_id=ticket_id,
+                author_id=author_id,
+                body=first_message,
+            )
+        except ValueError as exc:
+            return Result[Ticket].fail(
+                Error(
+                    code="invalid_first_message",
+                    description=str(exc),
+                    type=ErrorType.VALIDATION,
+                )
+            )
         ticket = cls(
             _PRIVATE_MARKER,
             ticket_id,

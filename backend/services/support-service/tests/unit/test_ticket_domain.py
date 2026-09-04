@@ -77,8 +77,13 @@ def test_ticket_rejects_invalid_subject(subject: str) -> None:
 
 @pytest.mark.parametrize("body", ["", " ", "x" * 10001])
 def test_ticket_rejects_invalid_first_message(body: str) -> None:
-    with pytest.raises(ValueError):
-        Ticket.create(author_id=uuid.uuid4(), subject="subject", first_message=body)
+    result = Ticket.create(
+        author_id=uuid.uuid4(), subject="subject", first_message=body
+    )
+
+    assert result.is_err
+    assert result.error.code == "invalid_first_message"
+    assert result.error.type is ErrorType.VALIDATION
 
 
 def test_ticket_author_message_reopens_resolved_ticket() -> None:
