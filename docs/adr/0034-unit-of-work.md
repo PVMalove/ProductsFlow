@@ -1,12 +1,12 @@
 # 0034. Unit of Work: контракт транзакции для command handler'ов
-
+`
 **Статус:** Accepted\
 **Дата:** 2026-09-03\
 **Supersedes:** пример `Transaction`/`commit_with_outbox()` в [ADR 0028](0028-cqrs-baseline-and-architecture-check.md) (остальной текст 0028 не пересматривается, см. ниже)\
 **Связанные issues:** #243 (epic), #244 (этот ADR), #245 (kernel-platform + support-service), #246 (catalog-service), #247 (identity-service)
-
+`
 ## Контекст
-
+`
 В backend нет абстракции транзакции. `commit()` вызывает сам репозиторий —
 приватный `_commit()`/инлайновый `session.commit()` внутри
 `product_repository.py` (catalog-service), `user_repository.py`
@@ -17,7 +17,7 @@
 command handler вызывает 2+ мутирующих метода репозитория, это уже сейчас не
 атомарно: при ошибке между вызовами первая мутация остаётся закоммиченной, а
 вторая — нет.
-
+`
 Дополнительно, [ADR 0028](0028-cqrs-baseline-and-architecture-check.md)
 содержит пример command handler'а, использующего порт `Transaction` с методом
 `commit_with_outbox(events)`. Ни `Transaction`, ни `commit_with_outbox()` не
@@ -25,13 +25,13 @@ command handler вызывает 2+ мутирующих метода репоз
 а `drain_events_to_outbox` (ADR 0029) вызывается отдельно, не через
 транзакционный порт. Пример в 0028 — аспирационный и разошёлся с кодом;
 архитектурная документация противоречит реальности.
-
+`
 ## Решение
-
+`
 `kernel-platform` получает generic `UnitOfWork` — **structural `Protocol`, не
 `ABC`** (тот же стиль, что и у существующих repository-портов, ADR 0027),
 объявляющий только жизненный цикл транзакции:
-
+`
 ```python
 class UnitOfWork(Protocol):
     async def __aenter__(self) -> Self: ...
@@ -39,7 +39,7 @@ class UnitOfWork(Protocol):
     async def commit(self) -> None: ...
     async def rollback(self) -> None: ...
 ```
-
+`
 Протокол не знает ни об одном конкретном репозитории — это инфраструктурная
 забота про сессию/транзакцию. Живёт рядом с `outbox/drain.py` в
 `kernel-platform`, не в `kernel-domain` — тот же прецедент, что ADR 0027 уже
@@ -47,15 +47,15 @@ class UnitOfWork(Protocol):
 класс в `kernel-platform`, реализующий повторяющуюся бухгалтерию (reuse
 переданной сессии, rollback по умолчанию, никогда не закрывать сессию), чтобы
 три сервиса не дублировали её по отдельности.
-
+`
 Каждый сервис расширяет generic-контракт собственным Protocol с
 атрибутами-репозиториями этого сервиса, например:
-
+`
 ```python
 class SupportUnitOfWork(UnitOfWork, Protocol):
     tickets: TicketRepository
 ```
-
+`
 Аналогично `CatalogUnitOfWork`/`IdentityUnitOfWork` — набор атрибутов
 соответствует репозиториям, которые сегодня получают command handler'ы этого
 сервиса. Конкретная реализация **переиспользует уже существующую
@@ -63,29 +63,29 @@ request-scoped `AsyncSession`**, полученную параметром ко�
 создаёт свою через `session_factory()` — и инстанцирует репозитории сервиса
 поверх той же сессии. `UnitOfWork.__aexit__` не закрывает сессию: её
 жизненный цикл остаётся за существующим teardown в `get_db_session`.
-
+`
 **Rollback по умолчанию:** если `commit()` не был вызван явно — ни через
 исключение, ни через штатный возврат без коммита — транзакция откатывается
 при выходе из `async with self.uow:`. Command handler оборачивает тело в
 `async with self.uow:` и явно вызывает `await self.uow.commit()` только на
 успешном пути; ранний `Result.error(...)`-возврат или исключение этот вызов
 пропускают, и транзакция откатывается.
-
+`
 Репозитории перестают сами коммитить: из всех мутирующих методов убирается
 `session.commit()`/`_commit()`. **Явный вызов
 `drain_events_to_outbox(session, entity)` (ADR 0029) сохраняется на прежнем
 месте — в точке мутации** — не переезжает в `uow.commit()`. ADR 0021 не
 пересматривается: drain остаётся explicit-вызовом, не автоматическим сбором
 событий из `session.new`/`session.dirty`.
-
+`
 Раскатка — тремя последовательными PR в интеграционную ветку
 `integration/unit-of-work`: kernel-platform + support-service (#245,
 наименьший риск — меньше всего handler'ов, уже есть прецедент про
 outbox-through-repository), затем catalog-service (#246), затем
 identity-service (#247).
-
+`
 ## Considered Options
-
+`
 - **`ABC` вместо `Protocol`** — отклонено: repository-порты в этой кодовой
   базе уже объявлены как structural `Protocol` (ADR 0027); `UnitOfWork` — тот
   же тип контракта (граница между application и infrastructure), и `ABC`
@@ -115,9 +115,9 @@ identity-service (#247).
   устранить. Rollback-по-умолчанию делает «забыли закоммитить» безопасным по
   умолчанию: максимум потерянная (не персистентная) валидная мутация,
   никогда — незавершённая частичная.
-
+`
 ## Отношение к существующим ADR
-
+`
 - **ADR 0028**: только пример `Transaction`/`commit_with_outbox()` помечен
   superseded (см. заметку в самом файле); остальной текст не пересматривается.
 - **`backend/services/support-service/docs/adr/0002-outbox-through-repository.md`**:
@@ -129,9 +129,9 @@ identity-service (#247).
   агрегирует уже существующие repository-контракты атрибутами.
 - **ADR 0029** (generic drain-в-outbox) и **ADR 0021** (catalog outbox write
   mechanism) — не пересматриваются, см. Решение и Considered Options выше.
-
+`
 ## Consequences
-
+`
 - Command handler получает один параметр `uow: <Service>UnitOfWork` вместо
   отдельных мутирующих репозиториев; read-only cross-cutting порты
   (`IdentityGateway`, `OwnerReadModel` и т.п.) остаются отдельными
@@ -151,3 +151,76 @@ identity-service (#247).
   независимо ревьюабелен и мёржабелен; до завершения всех трёх часть
   сервисов временно коммитит через `UnitOfWork`, часть — по-прежнему через
   репозиторий (переходное состояние, не одновременный big-bang).
+`
+## Диаграммы и Схемы (Unit of Work)
+### 1. Классовая структура (Dependency Inversion)
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+classDiagram
+    direction BT
+
+    class UnitOfWork {
+        <<Protocol>>
+        +__aenter__() Self
+        +__aexit__(exc) None
+        +commit() None
+        +rollback() None
+    }
+
+    class CatalogUnitOfWork {
+        <<Protocol>>
+        +ProductRepository products
+    }
+    
+    class SqlAlchemyUnitOfWork {
+        -AsyncSession _session
+        -_committed: bool
+        +__aenter__()
+        +__aexit__(exc)
+        +commit()
+        +rollback()
+    }
+
+    class SqlCatalogUnitOfWork {
+        +SqlProductRepository products
+    }
+
+    CatalogUnitOfWork --|> UnitOfWork : extends
+    SqlAlchemyUnitOfWork ..|> UnitOfWork : implements
+    SqlCatalogUnitOfWork --|> SqlAlchemyUnitOfWork : extends
+    SqlCatalogUnitOfWork ..|> CatalogUnitOfWork : implements
+```
+
+### 2. Жизненный цикл в Command Handler
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    participant API as FastAPI Router
+    participant Handler as Command Handler
+    participant UoW as SqlCatalogUnitOfWork
+    participant Repo as ProductRepository
+    participant DB as PostgreSQL (AsyncSession)
+
+    API->>Handler: execute(Command)
+    
+    Handler->>UoW: async with (открытие блока)
+    activate UoW
+    UoW-->>Handler: __aenter__()
+    
+    Handler->>Repo: create(product)
+    Repo->>DB: session.add(entity)
+    
+    alt Доменная ошибка (Result.is_err)
+        Handler-->>API: return Result.fail(error)
+        Note right of UoW: Блок завершается (commit не вызван)
+        UoW->>DB: session.rollback() (из __aexit__)
+    else Успешное выполнение
+        Handler->>UoW: commit()
+        UoW->>DB: session.commit()
+        Note over DB: Срабатывает OutboxMixin!<br/>События уходят в Outbox таблицу
+        Handler-->>API: return Result.ok(ProductView)
+    end
+    deactivate UoW
+```
