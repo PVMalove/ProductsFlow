@@ -3,6 +3,7 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
+from fake_support_unit_of_work import FakeSupportUnitOfWork
 
 from api.worker import (
     _message_id,
@@ -69,13 +70,15 @@ async def test_user_deletion_handler_delegates_to_transactional_port() -> None:
 
     user_id = uuid.uuid4()
     port = FakeDeletionPort()
+    uow = FakeSupportUnitOfWork(port)
 
-    result = await ProcessUserDeletionCommandHandler(port).execute(
+    result = await ProcessUserDeletionCommandHandler(uow).execute(
         ProcessUserDeletionCommand(message_id=7, user_id=user_id)
     )
 
     assert result is True
     assert port.call == (7, user_id)
+    assert uow.committed
 
 
 def test_parse_user_event_snapshot_defaults_registered_role_and_active() -> None:

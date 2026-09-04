@@ -17,6 +17,7 @@ from domain.ticket import (
 )
 from infrastructure.db.models import TicketMessageModel, TicketModel
 from infrastructure.db.ticket_repository import SqlTicketRepository
+from infrastructure.db.unit_of_work import SqlSupportUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -203,16 +204,23 @@ async def test_concurrent_admin_messages_are_serialized(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
     )
     async with session_factory() as session:
-        await SqlTicketRepository(session).create(ticket)
+        uow = SqlSupportUnitOfWork(session)
+        async with uow:
+            await uow.tickets.create(ticket)
+            await uow.commit()
 
     async def append(body: str) -> Ticket | None:
         async with session_factory() as session:
-            return await SqlTicketRepository(session).add_message(
-                ticket_id=ticket.id,
-                actor_id=uuid.uuid4(),
-                body=body,
-                is_admin=True,
-            )
+            uow = SqlSupportUnitOfWork(session)
+            async with uow:
+                result = await uow.tickets.add_message(
+                    ticket_id=ticket.id,
+                    actor_id=uuid.uuid4(),
+                    body=body,
+                    is_admin=True,
+                )
+                await uow.commit()
+            return result
 
     first, second = await asyncio.gather(append("First reply"), append("Second reply"))
 

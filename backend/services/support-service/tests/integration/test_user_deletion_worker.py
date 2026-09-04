@@ -76,6 +76,7 @@ async def test_user_deletion_is_atomic_and_idempotent(
     )
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
+        await session.commit()
 
     message = type(
         "IncomingMessage",
@@ -151,6 +152,7 @@ async def test_rabbitmq_contract_consumes_support_queue_idempotently(
     )
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
+        await session.commit()
 
     try:
         await _publish_user_deleted(channel, message_id=9002, user_id=user_id)
@@ -183,6 +185,7 @@ async def test_user_deletion_serializes_with_concurrent_ticket_message(
     )
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
+        await session.commit()
 
     deletion_message = type(
         "IncomingMessage",
@@ -208,6 +211,7 @@ async def test_user_deletion_serializes_with_concurrent_ticket_message(
                 body="Concurrent message",
                 is_admin=False,
             )
+            await session.commit()
 
     await asyncio.gather(delete_user(), append_message())
 
@@ -241,6 +245,7 @@ async def test_transaction_failure_rolls_back_inbox_and_retry_completes(
     )
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
+        await session.commit()
 
     original = Ticket.anonymize_deleted_user
     failed = False

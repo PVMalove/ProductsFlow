@@ -12,13 +12,9 @@ from infrastructure.db.ticket_repository import SqlTicketRepository
 class RecordingSession:
     def __init__(self) -> None:
         self.added: list[object] = []
-        self.commit_count = 0
 
     def add(self, value: object) -> None:
         self.added.append(value)
-
-    async def commit(self) -> None:
-        self.commit_count += 1
 
     async def flush(self) -> None:
         pass
@@ -29,7 +25,6 @@ class MutationSession(RecordingSession):
         super().__init__()
         self.ticket = ticket
         self.message = message
-        self.rollback_count = 0
 
     async def scalar(self, statement: object) -> TicketModel:
         return self.ticket
@@ -41,12 +36,9 @@ class MutationSession(RecordingSession):
 
         return Result()
 
-    async def rollback(self) -> None:
-        self.rollback_count += 1
-
 
 @pytest.mark.asyncio
-async def test_create_adds_ticket_message_and_outbox_before_one_commit() -> None:
+async def test_create_adds_ticket_message_and_outbox_without_committing() -> None:
     session = RecordingSession()
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="Message"
@@ -59,7 +51,6 @@ async def test_create_adds_ticket_message_and_outbox_before_one_commit() -> None
         "TicketMessageModel",
         "OutboxMessage",
     }
-    assert session.commit_count == 1
 
 
 def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageModel]:
@@ -84,7 +75,7 @@ def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageMode
 
 
 @pytest.mark.asyncio
-async def test_add_message_writes_only_technical_outbox_data_before_one_commit() -> (
+async def test_add_message_writes_only_technical_outbox_data_without_committing() -> (
     None
 ):
     author_id = uuid.uuid4()
@@ -100,7 +91,6 @@ async def test_add_message_writes_only_technical_outbox_data_before_one_commit()
 
     assert result is not None
     assert row.status == TicketStatus.OPEN.value
-    assert session.commit_count == 1
     outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
     assert len(outbox) == 1
     assert outbox[0].event_type == "ticket.message_added.v1"
@@ -122,7 +112,6 @@ async def test_edit_message_updates_body_and_writes_technical_outbox_event() -> 
 
     assert result is not None
     assert message.body == "Corrected text"
-    assert session.commit_count == 1
     outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
     assert len(outbox) == 1
     assert outbox[0].event_type == "ticket.message_edited.v1"
@@ -145,7 +134,6 @@ async def test_admin_delete_soft_deletes_message_and_writes_technical_event() ->
     assert result is not None
     assert message.body == "[Сообщение удалено]"
     assert message.is_deleted is True
-    assert session.commit_count == 1
     outbox = [item for item in session.added if isinstance(item, OutboxMessage)]
     assert len(outbox) == 1
     assert outbox[0].event_type == "ticket.message_deleted.v1"
@@ -167,11 +155,11 @@ async def test_editing_message_on_another_ticket_owner_is_hidden() -> None:
 
     assert result is None
     assert message.body == "First message"
-    assert session.commit_count == 0
+    assert session.added == []
 
 
 @pytest.mark.asyncio
-async def test_rejected_status_change_rolls_back_without_persisting_mutation() -> None:
+async def test_rejected_status_change_raises_without_mutating_session() -> None:
     author_id = uuid.uuid4()
     row, first_message = _stored_ticket(author_id)
     session = MutationSession(row, first_message)
@@ -184,5 +172,3 @@ async def test_rejected_status_change_rolls_back_without_persisting_mutation() -
         )
 
     assert session.added == []
-    assert session.commit_count == 0
-    assert session.rollback_count == 1

@@ -14,12 +14,21 @@ from application.queries import (
     ListAdminTicketsQueryHandler,
     ListTicketsQueryHandler,
 )
+from domain.unit_of_work import SupportUnitOfWork
 from infrastructure.db.session import DbSessionDI
 from infrastructure.db.ticket_repository import TicketRepository
+from infrastructure.db.unit_of_work import SqlSupportUnitOfWork
 
 
-def get_create_ticket_handler(session: DbSessionDI) -> CreateTicketCommandHandler:
-    return CreateTicketCommandHandler(TicketRepository(session))
+def get_support_uow(session: DbSessionDI) -> SupportUnitOfWork:
+    return SqlSupportUnitOfWork(session)
+
+
+SupportUnitOfWorkDI = Annotated[SupportUnitOfWork, Depends(get_support_uow)]
+
+
+def get_create_ticket_handler(uow: SupportUnitOfWorkDI) -> CreateTicketCommandHandler:
+    return CreateTicketCommandHandler(uow)
 
 
 CreateTicketDI = Annotated[
@@ -28,9 +37,9 @@ CreateTicketDI = Annotated[
 
 
 def get_add_ticket_message_handler(
-    session: DbSessionDI,
+    uow: SupportUnitOfWorkDI,
 ) -> AddTicketMessageCommandHandler:
-    return AddTicketMessageCommandHandler(TicketRepository(session))
+    return AddTicketMessageCommandHandler(uow)
 
 
 AddTicketMessageDI = Annotated[
@@ -39,9 +48,9 @@ AddTicketMessageDI = Annotated[
 
 
 def get_change_ticket_status_handler(
-    session: DbSessionDI,
+    uow: SupportUnitOfWorkDI,
 ) -> ChangeTicketStatusCommandHandler:
-    return ChangeTicketStatusCommandHandler(TicketRepository(session))
+    return ChangeTicketStatusCommandHandler(uow)
 
 
 ChangeTicketStatusDI = Annotated[
@@ -50,9 +59,9 @@ ChangeTicketStatusDI = Annotated[
 
 
 def get_edit_ticket_message_handler(
-    session: DbSessionDI,
+    uow: SupportUnitOfWorkDI,
 ) -> EditTicketMessageCommandHandler:
-    return EditTicketMessageCommandHandler(TicketRepository(session))
+    return EditTicketMessageCommandHandler(uow)
 
 
 EditTicketMessageDI = Annotated[
@@ -61,9 +70,9 @@ EditTicketMessageDI = Annotated[
 
 
 def get_delete_ticket_message_handler(
-    session: DbSessionDI,
+    uow: SupportUnitOfWorkDI,
 ) -> DeleteTicketMessageCommandHandler:
-    return DeleteTicketMessageCommandHandler(TicketRepository(session))
+    return DeleteTicketMessageCommandHandler(uow)
 
 
 DeleteTicketMessageDI = Annotated[
