@@ -4,7 +4,8 @@ from typing import Any, cast
 
 from kernel_domain.value_object import ValueObject
 
-_PRIVATE_MARKER = object()
+from domain.value_objects import _PRIVATE_MARKER
+
 _MISSING = object()
 
 

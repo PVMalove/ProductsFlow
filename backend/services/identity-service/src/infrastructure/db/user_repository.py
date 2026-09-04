@@ -18,10 +18,18 @@ from infrastructure.db.entity_configurations.models import UserModel
 _UserRows = list[UserModel]
 
 
+def _hydrate_email(value: str) -> Email:
+    """A stored email was already validated by `Email.create()` on write —
+    a failure here means the row itself is corrupt, not a business error."""
+    result = Email.create(value)
+    assert result.is_ok, f"invalid email in users row: {value!r}"
+    return result.value
+
+
 def _to_domain(row: UserModel) -> User:
     return User.reconstitute(
         UserId.create(row.id),
-        email=Email.create(row.email).value,
+        email=_hydrate_email(row.email),
         password_hash=row.password_hash,
         role=Role(row.role),
         is_active=row.is_active,
@@ -82,7 +90,7 @@ _user_repository_implementation: type[UserRepositoryPort] = UserRepository
 def _to_read_model(row: UserModel) -> UserReadModel:
     return UserReadModel(
         id=UserId.create(row.id),
-        email=Email.create(row.email).value,
+        email=_hydrate_email(row.email),
         role=Role(row.role),
         is_active=row.is_active,
     )

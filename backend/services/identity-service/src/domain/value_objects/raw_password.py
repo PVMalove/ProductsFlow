@@ -5,9 +5,10 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_domain.value_object import ValueObject
 
+from domain.value_objects import _PRIVATE_MARKER
+
 _MIN_LENGTH = 8
 
-_PRIVATE_MARKER = object()
 _MISSING = object()
 
 
