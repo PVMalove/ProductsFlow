@@ -37,6 +37,7 @@ from domain.product import Product
 from domain.product_id import ProductId
 from domain.product_image import ProductImage
 from domain.repositories import PageInfo, ProductPage
+from tests.unit.fake_catalog_unit_of_work import FakeCatalogUnitOfWork
 
 OWNER_ID = uuid.uuid4()
 OTHER_ID = uuid.uuid4()
@@ -170,7 +171,7 @@ def _dependencies(
 async def test_create_product_seeds_owner_before_creating() -> None:
     product = _product()
     repo, owners, identity = _dependencies(product=product)
-    handler = CreateProductCommandHandler(repo, owners, identity)
+    handler = CreateProductCommandHandler(FakeCatalogUnitOfWork(repo), owners, identity)
 
     result = await handler.execute(
         CreateProductCommand(
@@ -229,7 +230,7 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = UpdateProductCommandHandler(repo, identity)
+    handler = UpdateProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
 
     result = await handler.execute(
         UpdateProductCommand(
@@ -257,7 +258,7 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     repo, owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = DeleteProductCommandHandler(repo, identity)
+    handler = DeleteProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
 
     with pytest.raises(ProductAccessDeniedError):
         await handler.execute(
@@ -273,7 +274,7 @@ async def test_delete_product_by_owner_returns_ok_result_with_none_value() -> No
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = DeleteProductCommandHandler(repo, identity)
+    handler = DeleteProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
 
     result = await handler.execute(
         DeleteProductCommand(product_id=product.id.value, actor=_actor())
@@ -291,15 +292,15 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     )
     actor = _actor()
 
-    activate_result = await ActivateProductCommandHandler(repo, identity).execute(
-        ActivateProductCommand(product_id=product.id.value, actor=actor)
-    )
+    activate_result = await ActivateProductCommandHandler(
+        FakeCatalogUnitOfWork(repo), identity
+    ).execute(ActivateProductCommand(product_id=product.id.value, actor=actor))
     assert activate_result.is_ok
     assert activate_result.value == ProductView.from_domain(product)
 
-    deactivate_result = await DeactivateProductCommandHandler(repo, identity).execute(
-        DeactivateProductCommand(product_id=product.id.value, actor=actor)
-    )
+    deactivate_result = await DeactivateProductCommandHandler(
+        FakeCatalogUnitOfWork(repo), identity
+    ).execute(DeactivateProductCommand(product_id=product.id.value, actor=actor))
     assert deactivate_result.is_ok
     assert deactivate_result.value == ProductView.from_domain(product)
 

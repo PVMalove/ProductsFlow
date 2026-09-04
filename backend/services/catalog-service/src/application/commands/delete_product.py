@@ -11,9 +11,9 @@ from application.errors import ProductNotFoundError
 from application.ports import (
     Actor,
     IdentityGateway,
-    ProductCommandPort,
 )
 from domain.product_id import ProductId
+from domain.unit_of_work import CatalogUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -34,17 +34,19 @@ class DeleteProductCommandHandler:
     """
 
     def __init__(
-        self, repository: ProductCommandPort, identity: IdentityGateway
+        self, uow: CatalogUnitOfWork, identity: IdentityGateway
     ) -> None:
-        self._repository = repository
+        self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
 
     async def execute(self, command: DeleteProductCommand) -> Result[None]:
-        product = await self._repository.get_by_id(ProductId(command.product_id))
-        if product is None:
-            raise ProductNotFoundError
-        await self._authorizer.require_owner_or_admin(command.actor, product)
-        deleted = await self._repository.delete(product.id)
-        if deleted is None:
-            raise ProductNotFoundError
+        async with self._uow:
+            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            if product is None:
+                raise ProductNotFoundError
+            await self._authorizer.require_owner_or_admin(command.actor, product)
+            deleted = await self._uow.products.delete(product.id)
+            if deleted is None:
+                raise ProductNotFoundError
+            await self._uow.commit()
         return Result[None].ok(None)

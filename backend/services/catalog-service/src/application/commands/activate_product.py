@@ -11,10 +11,10 @@ from application.errors import ProductNotFoundError
 from application.ports import (
     Actor,
     IdentityGateway,
-    ProductCommandPort,
 )
 from contracts.product import ProductView
 from domain.product_id import ProductId
+from domain.unit_of_work import CatalogUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -35,19 +35,21 @@ class ActivateProductCommandHandler:
     """
 
     def __init__(
-        self, repository: ProductCommandPort, identity: IdentityGateway
+        self, uow: CatalogUnitOfWork, identity: IdentityGateway
     ) -> None:
-        self._repository = repository
+        self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
 
     async def execute(self, command: ActivateProductCommand) -> Result[ProductView]:
-        product = await self._repository.get_by_id(ProductId(command.product_id))
-        if product is None:
-            raise ProductNotFoundError
-        await self._authorizer.require_owner_or_admin(command.actor, product)
-        result = await self._repository.activate(product.id)
-        if result is None:
-            raise ProductNotFoundError
-        if result.is_err:
-            return Result[ProductView].fail(result.error)
+        async with self._uow:
+            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            if product is None:
+                raise ProductNotFoundError
+            await self._authorizer.require_owner_or_admin(command.actor, product)
+            result = await self._uow.products.activate(product.id)
+            if result is None:
+                raise ProductNotFoundError
+            if result.is_err:
+                return Result[ProductView].fail(result.error)
+            await self._uow.commit()
         return Result[ProductView].ok(ProductView.from_domain(result.value))

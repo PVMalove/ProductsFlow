@@ -59,12 +59,11 @@ def _to_image_domain(row: ProductImageModel) -> ProductImage:
 
 
 class ProductRepository:
-    """CRUD + keyset-пагинация для `Product` (issue #148). `_commit` —
-    единственное место, которое видит и доменную сущность, и `AsyncSession`
-    (ADR 0021): каждый мутирующий метод сам коммитит свою транзакцию, атомарно
-    фиксируя изменение `ProductModel` и вставленные строки `outbox_messages`.
-    Маппинг событий в строки Outbox — generic `drain_events_to_outbox` из
-    `kernel_platform` (ADR 0029), репозиторий его не переопределяет.
+    """CRUD + keyset-пагинация для `Product` (issue #148).
+
+    Мутирующие методы добавляют ORM-изменения и дренируют доменные события в
+    outbox в точке мутации. Фиксация транзакции принадлежит CatalogUnitOfWork
+    (ADR 0034), поэтому этот адаптер никогда не коммитит самостоятельно.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -102,7 +101,7 @@ class ProductRepository:
                 is_active=product.is_active,
             )
         )
-        await self._commit(product)
+        await drain_events_to_outbox(self.session, product)
         return result
 
     async def get_by_id(self, product_id: ProductId) -> Product | None:
@@ -133,7 +132,7 @@ class ProductRepository:
         row.description = product.description
         row.price = product.price
         row.category = product.category
-        await self._commit(product)
+        await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 
     async def activate(self, product_id: ProductId) -> Result[Product] | None:
@@ -155,7 +154,7 @@ class ProductRepository:
             return Result[Product].fail(result.error)
 
         row.is_active = product.is_active
-        await self._commit(product)
+        await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
@@ -167,7 +166,6 @@ class ProductRepository:
         product.mark_deleted()
         await drain_events_to_outbox(self.session, product)
         await self.session.delete(row)
-        await self.session.commit()
         return product
 
     async def get_product_image(self, product_id: ProductId) -> ProductImage | None:
@@ -215,7 +213,6 @@ class ProductRepository:
                 ),
             )
         )
-        await self.session.commit()
         return image
 
     async def delete_product_image(
@@ -234,7 +231,6 @@ class ProductRepository:
                 description="Удалена картинка товара",
             )
         )
-        await self.session.commit()
 
     async def list(
         self,
@@ -313,11 +309,6 @@ class ProductRepository:
             (await self.session.scalars(stmt.limit(limit + 1))).all()
         )
         return rows[:limit], len(rows) > limit
-
-    async def _commit(self, product: Product) -> None:
-        await drain_events_to_outbox(self.session, product)
-        await self.session.commit()
-
 
 # Static structural check: mypy verifies that the concrete implementation
 # satisfies every operation required by the domain repository contract.
