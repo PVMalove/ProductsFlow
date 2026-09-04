@@ -10,11 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from application.pagination import decode_cursor
-from domain.ticket import (
+from domain.entities.ticket import (
     Ticket,
     TicketMessageImmutableError,
-    TicketStatus,
 )
+from domain.ticket_status import TicketStatus
 from infrastructure.db.entity_configurations.models import (
     TicketMessageModel,
     TicketModel,
@@ -45,12 +45,14 @@ async def test_ticket_and_outbox_are_persisted_together(
 
     await SqlTicketRepository(db_session).create(ticket)
 
-    stored_ticket = await db_session.get(TicketModel, ticket.id)
+    stored_ticket = await db_session.get(TicketModel, ticket.id.value)
     stored_message = await db_session.scalar(
-        select(TicketMessageModel).where(TicketMessageModel.ticket_id == ticket.id)
+        select(TicketMessageModel).where(
+            TicketMessageModel.ticket_id == ticket.id.value
+        )
     )
     outbox = await db_session.scalar(
-        select(OutboxMessage).where(OutboxMessage.aggregate_id == ticket.id)
+        select(OutboxMessage).where(OutboxMessage.aggregate_id == ticket.id.value)
     )
     assert stored_ticket is not None
     assert stored_message is not None
@@ -153,7 +155,7 @@ async def test_ticket_mutations_persist_messages_statuses_and_text_free_events(
         (
             await db_session.scalars(
                 select(OutboxMessage)
-                .where(OutboxMessage.aggregate_id == ticket.id)
+                .where(OutboxMessage.aggregate_id == ticket.id.value)
                 .order_by(OutboxMessage.id)
             )
         ).all()
@@ -191,7 +193,7 @@ async def test_non_owner_message_is_not_persisted(
         (
             await db_session.scalars(
                 select(TicketMessageModel).where(
-                    TicketMessageModel.ticket_id == ticket.id
+                    TicketMessageModel.ticket_id == ticket.id.value
                 )
             )
         ).all()
@@ -234,7 +236,7 @@ async def test_concurrent_admin_messages_are_serialized(
             (
                 await session.scalars(
                     select(TicketMessageModel).where(
-                        TicketMessageModel.ticket_id == ticket.id
+                        TicketMessageModel.ticket_id == ticket.id.value
                     )
                 )
             ).all()
@@ -275,7 +277,7 @@ async def test_message_edit_and_admin_moderation_are_transactional(
         (
             await db_session.scalars(
                 select(OutboxMessage)
-                .where(OutboxMessage.aggregate_id == ticket.id)
+                .where(OutboxMessage.aggregate_id == ticket.id.value)
                 .order_by(OutboxMessage.id)
             )
         ).all()
@@ -390,7 +392,7 @@ async def test_message_moderation_rejects_closed_and_system_messages(
     system_message_id = uuid.uuid4()
     system_message = TicketMessageModel(
         id=system_message_id,
-        ticket_id=system_ticket.id,
+        ticket_id=system_ticket.id.value,
         author_id=uuid.uuid4(),
         body="System message",
         created_at=datetime.now(UTC),

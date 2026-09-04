@@ -5,7 +5,8 @@ import uuid
 from dataclasses import dataclass
 
 from application.ports import TicketQueryPort
-from domain.ticket import Ticket
+from domain.entities.ticket import Ticket
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
@@ -14,13 +15,13 @@ class GetTicketQuery:
 
     """
     DTO запроса для получения детальной информации о тикете.
-    
+
     Attributes:
-        ticket_id (uuid.UUID): Идентификатор запрашиваемого тикета.
+        ticket_id (TicketId): Идентификатор запрашиваемого тикета.
         author_id (uuid.UUID): Идентификатор пользователя, выполняющего запрос.
         is_admin (bool): Флаг, указывающий, является ли пользователь администратором.
     """
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     author_id: uuid.UUID
     is_admin: bool = False
 

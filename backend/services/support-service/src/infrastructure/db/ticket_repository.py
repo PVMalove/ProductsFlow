@@ -6,15 +6,17 @@ from sqlalchemy import Select, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domain.entities.ticket import Ticket
+from domain.entities.ticket_message import TicketMessage
 from domain.events import (
     TicketMessageAdded,
     TicketMessageDeleted,
     TicketMessageEdited,
     TicketStatusChanged,
 )
-from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
-from domain.ticket import Ticket, TicketStatus
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 from infrastructure.db.entity_configurations.models import (
     ProcessedMessage,
     TicketMessageModel,
@@ -29,7 +31,7 @@ class TicketRepository:
     async def create(self, ticket: Ticket) -> Ticket:
         self._session.add(
             TicketModel(
-                id=ticket.id,
+                id=ticket.id.value,
                 author_id=ticket.author_id,
                 subject=ticket.subject,
                 status=ticket.status.value,
@@ -73,7 +75,7 @@ class TicketRepository:
                 (
                     await self._session.scalars(
                         select(TicketMessageModel).where(
-                            TicketMessageModel.ticket_id == ticket.id
+                            TicketMessageModel.ticket_id == ticket.id.value
                         )
                     )
                 ).all()
@@ -91,7 +93,7 @@ class TicketRepository:
     async def add_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         actor_id: uuid.UUID,
         body: str,
         is_admin: bool,
@@ -112,7 +114,7 @@ class TicketRepository:
         return ticket
 
     async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None:
         row = await self._load_for_update(ticket_id)
         if row is None:
@@ -127,7 +129,7 @@ class TicketRepository:
     async def edit_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         body: str,
@@ -154,7 +156,7 @@ class TicketRepository:
     async def delete_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         is_admin: bool,
@@ -178,17 +180,17 @@ class TicketRepository:
         return ticket
 
     async def get_for_author(
-        self, ticket_id: uuid.UUID, author_id: uuid.UUID
+        self, ticket_id: TicketId, author_id: uuid.UUID
     ) -> Ticket | None:
         row = await self._session.scalar(
             select(TicketModel).where(
-                TicketModel.id == ticket_id, TicketModel.author_id == author_id
+                TicketModel.id == ticket_id.value, TicketModel.author_id == author_id
             )
         )
         return await self._to_domain(row) if row is not None else None
 
-    async def get_by_id(self, ticket_id: uuid.UUID) -> Ticket | None:
-        row = await self._session.get(TicketModel, ticket_id)
+    async def get_by_id(self, ticket_id: TicketId) -> Ticket | None:
+        row = await self._session.get(TicketModel, ticket_id.value)
         return await self._to_domain(row) if row is not None else None
 
     async def list_for_author(
@@ -220,13 +222,13 @@ class TicketRepository:
     async def list_messages(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         limit: int,
         after: Cursor | None = None,
         before: Cursor | None = None,
     ) -> MessagePage:
         stmt = select(TicketMessageModel).where(
-            TicketMessageModel.ticket_id == ticket_id
+            TicketMessageModel.ticket_id == ticket_id.value
         )
         if before is not None:
             stmt = stmt.where(
@@ -257,9 +259,9 @@ class TicketRepository:
 
         return MessagePage(
             [
-                TicketMessage(
+                TicketMessage.reconstitute(
                     id=row.id,
-                    ticket_id=row.ticket_id,
+                    ticket_id=TicketId.create(row.ticket_id),
                     author_id=row.author_id,
                     body=row.body,
                     created_at=row.created_at,
@@ -338,15 +340,15 @@ class TicketRepository:
                 )
             ).all()
         )
-        return Ticket(
-            row.id,
+        return Ticket.reconstitute(
+            TicketId.create(row.id),
             author_id=row.author_id,
             subject=row.subject,
             status=TicketStatus(row.status),
             messages=[
-                TicketMessage(
+                TicketMessage.reconstitute(
                     id=message.id,
-                    ticket_id=message.ticket_id,
+                    ticket_id=TicketId.create(message.ticket_id),
                     author_id=message.author_id,
                     body=message.body,
                     created_at=message.created_at,
@@ -358,18 +360,20 @@ class TicketRepository:
             created_at=row.created_at,
         )
 
-    async def _load_for_update(self, ticket_id: uuid.UUID) -> TicketModel | None:
+    async def _load_for_update(self, ticket_id: TicketId) -> TicketModel | None:
         statement = (
-            select(TicketModel).where(TicketModel.id == ticket_id).with_for_update()
+            select(TicketModel)
+            .where(TicketModel.id == ticket_id.value)
+            .with_for_update()
         )
         return await self._session.scalar(statement)
 
     async def _load_message(
-        self, ticket_id: uuid.UUID, message_id: uuid.UUID
+        self, ticket_id: TicketId, message_id: uuid.UUID
     ) -> TicketMessageModel | None:
         result = await self._session.scalars(
             select(TicketMessageModel).where(
-                TicketMessageModel.ticket_id == ticket_id,
+                TicketMessageModel.ticket_id == ticket_id.value,
                 TicketMessageModel.id == message_id,
             )
         )
@@ -386,30 +390,30 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
 
     if isinstance(event, TicketCreated):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "author_id": str(event.author_id),
         }
     elif isinstance(event, TicketMessageAdded):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketMessageEdited):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketMessageDeleted):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketStatusChanged):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "previous_status": event.previous_status,
             "status": event.status,
             "actor_category": event.actor_category,
@@ -418,7 +422,7 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
         raise TypeError(f"unsupported ticket event: {type(event).__name__}")
     return OutboxMessage(
         aggregate_type="Ticket",
-        aggregate_id=event.ticket_id,
+        aggregate_id=event.ticket_id.value,
         event_type=event.event_type,
         payload=payload,
         occurred_at=event.occurred_on_utc,
@@ -431,7 +435,7 @@ SqlTicketRepository = TicketRepository
 def _to_message_model(message: TicketMessage) -> TicketMessageModel:
     return TicketMessageModel(
         id=message.id,
-        ticket_id=message.ticket_id,
+        ticket_id=message.ticket_id.value,
         author_id=message.author_id,
         body=message.body,
         created_at=message.created_at,

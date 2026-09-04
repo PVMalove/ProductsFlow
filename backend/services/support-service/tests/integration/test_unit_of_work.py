@@ -14,7 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from application.commands import CreateTicketCommand, CreateTicketCommandHandler
-from domain.ticket import Ticket, TicketClosedError, TicketStatus
+from domain.entities.ticket import Ticket, TicketClosedError
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 from infrastructure.db.entity_configurations.models import (
     TicketMessageModel,
     TicketModel,
@@ -44,9 +46,9 @@ async def test_two_mutating_calls_commit_as_one_atomic_transaction(
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     author_id = uuid.uuid4()
 
-    async def read_ticket(ticket_id: uuid.UUID) -> TicketModel | None:
+    async def read_ticket(ticket_id: TicketId) -> TicketModel | None:
         async with session_factory() as session:
-            return await session.get(TicketModel, ticket_id)
+            return await session.get(TicketModel, ticket_id.value)
 
     async with session_factory() as write_session:
         uow = SqlSupportUnitOfWork(write_session)
@@ -71,7 +73,7 @@ async def test_two_mutating_calls_commit_as_one_atomic_transaction(
             (
                 await session.scalars(
                     select(TicketMessageModel).where(
-                        TicketMessageModel.ticket_id == ticket.id
+                        TicketMessageModel.ticket_id == ticket.id.value
                     )
                 )
             ).all()
@@ -81,7 +83,7 @@ async def test_two_mutating_calls_commit_as_one_atomic_transaction(
             for row in (
                 await session.scalars(
                     select(OutboxMessage)
-                    .where(OutboxMessage.aggregate_id == ticket.id)
+                    .where(OutboxMessage.aggregate_id == ticket.id.value)
                     .order_by(OutboxMessage.id)
                 )
             ).all()
@@ -117,7 +119,7 @@ async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
             )
             await uow.commit()
 
-    new_ticket_id: uuid.UUID | None = None
+    new_ticket_id: TicketId | None = None
     async with uow:
         new_ticket = await uow.tickets.create(
             Ticket.create(
@@ -134,9 +136,10 @@ async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
             )
         # no explicit commit — rollback-by-default undoes the create() above too
 
-    assert await db_session.get(TicketModel, new_ticket_id) is None
+    assert new_ticket_id is not None
+    assert await db_session.get(TicketModel, new_ticket_id.value) is None
     outbox_for_new_ticket = await db_session.scalar(
-        select(OutboxMessage).where(OutboxMessage.aggregate_id == new_ticket_id)
+        select(OutboxMessage).where(OutboxMessage.aggregate_id == new_ticket_id.value)
     )
     assert outbox_for_new_ticket is None
 

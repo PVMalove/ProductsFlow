@@ -2,18 +2,35 @@ import uuid
 
 import pytest
 
+from domain.entities.ticket import (
+    InvalidStatusTransitionError,
+    Ticket,
+    TicketClosedError,
+)
 from domain.events.ticket_domain_event import (
     TicketCreated,
     TicketMessageAdded,
     TicketMessageDeleted,
     TicketMessageEdited,
 )
-from domain.ticket import (
-    InvalidStatusTransitionError,
-    Ticket,
-    TicketClosedError,
-    TicketStatus,
-)
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
+
+
+def test_ticket_id_new_id_returns_a_uuid() -> None:
+    ticket_id = TicketId.new_id()
+
+    assert isinstance(ticket_id.value, uuid.UUID)
+
+
+def test_ticket_id_direct_construction_raises_runtime_error() -> None:
+    with pytest.raises(RuntimeError):
+        TicketId(uuid.uuid4())
+
+
+def test_ticket_direct_construction_raises_runtime_error() -> None:
+    with pytest.raises(RuntimeError):
+        Ticket(TicketId.new_id(), author_id=uuid.uuid4(), subject="Subject")
 
 
 def test_ticket_creation_builds_open_ticket_and_first_message() -> None:
