@@ -45,6 +45,10 @@ test: _require-pkg ## Прогнать тесты пакета (make test pkg=<m
 	cd $(member_dir) && uv sync --all-packages
 	cd $(member_dir) && uv run pytest .
 
+coverage: _require-pkg ## Прогнать тесты пакета с coverage (make coverage pkg=<member>)
+	cd $(member_dir) && uv sync --all-packages
+	cd $(member_dir) && uv run pytest --cov=src --cov-report=term-missing .
+
 build: ## Пересобрать образы docker compose (make build service=identity-api)
 	docker compose build $(service)
 
@@ -98,3 +102,31 @@ help: ## Показать список команд с описанием
 	@echo Переменные (переопределяются так: make [команда] [переменная]=[значение]):
 	@echo   pkg     - имя члена workspace для check/format/lint/test/db-* (текущее: $(pkg))
 	@echo   service - имя compose-сервиса для build/up_dev/up_prod (текущее: $(service))
+
+# ---- Массовые операции по всем пакетам ----
+ALL_MEMBERS := $(notdir $(wildcard libs/* services/*))
+
+.PHONY: check_all $(addprefix check-,$(ALL_MEMBERS))
+check_all: $(addprefix check-,$(ALL_MEMBERS)) ## Прогнать линтеры на всех пакетах
+$(addprefix check-,$(ALL_MEMBERS)):
+	$(MAKE) check pkg=$(patsubst check-%,%,$@)
+
+.PHONY: format_all $(addprefix format-,$(ALL_MEMBERS))
+format_all: $(addprefix format-,$(ALL_MEMBERS)) ## Автоформатирование всех пакетах
+$(addprefix format-,$(ALL_MEMBERS)):
+	$(MAKE) format pkg=$(patsubst format-%,%,$@)
+
+.PHONY: lint_all $(addprefix lint-,$(ALL_MEMBERS))
+lint_all: $(addprefix lint-,$(ALL_MEMBERS)) ## Линтинг всех пакетов
+$(addprefix lint-,$(ALL_MEMBERS)):
+	$(MAKE) lint pkg=$(patsubst lint-%,%,$@)
+
+.PHONY: test_all $(addprefix test-,$(ALL_MEMBERS))
+test_all: $(addprefix test-,$(ALL_MEMBERS)) ## Прогнать тесты на всех пакетах
+$(addprefix test-,$(ALL_MEMBERS)):
+	$(MAKE) test pkg=$(patsubst test-%,%,$@)
+
+.PHONY: coverage_all $(addprefix coverage-,$(ALL_MEMBERS))
+coverage_all: $(addprefix coverage-,$(ALL_MEMBERS)) ## Прогнать тесты с покрытием на всех пакетах
+$(addprefix coverage-,$(ALL_MEMBERS)):
+	$(MAKE) coverage pkg=$(patsubst coverage-%,%,$@)

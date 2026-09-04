@@ -10,6 +10,7 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.0.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.uv.workspace]
@@ -54,6 +55,10 @@ ignore_missing_imports = true
 # @pytest.mark.asyncio на каждом.
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning"
+]
 
 [tool.vulture]
 exclude = [
