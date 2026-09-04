@@ -1,104 +1,102 @@
-# Architecture
+# Архитектура
 
-`api` owns external adapters and composition roots (`main.py` and `worker.py`),
-`application` owns use cases and ports, `domain` owns support rules, and
-`infrastructure` owns persistence and messaging adapters. The service is
-independently deployable, with its own `pyproject.toml`, `uv.lock`, and Alembic
-migrations.
+`api` владеет внешними адаптерами и корнями композиции (`main.py` и
+`worker.py`), `application` — юзкейсами и портами, `domain` — правилами
+support, `infrastructure` — персистентностью и messaging-адаптерами. Сервис
+независимо разворачиваем, со своим `pyproject.toml`, `uv.lock` и Alembic-миграциями.
 
-## CQRS application boundary
+## Граница CQRS на уровне application
 
-The command side exposes `CreateTicketCommand`, `AddTicketMessageCommand`,
-`ChangeTicketStatusCommand`, and `ProcessUserDeletionCommand` with handlers
-under `application/commands/`.
-Creation uses `TicketCommandPort`; mutations use the separate
-`TicketMutationPort`, whose repository adapter locks the ticket row, applies
-the domain rule, and commits the aggregate change and outbox rows as one
-transaction.
+Командная сторона выставляет `CreateTicketCommand`, `AddTicketMessageCommand`,
+`ChangeTicketStatusCommand`, `EditTicketMessageCommand`,
+`DeleteTicketMessageCommand` и `ProcessUserDeletionCommand` с handler'ами в
+`application/commands/`. Все они зависят от единого доменного контракта
+`domain/unit_of_work.py::SupportUnitOfWork`, который отдаёт полный
+`TicketRepository` (`domain/repositories.py`) — query-методы и сериализованные
+mutation-операции в одном порту (ADR 0006), а не раздельные command/query-порты.
+Реализация в `infrastructure/db/ticket_repository.py` блокирует строку тикета,
+применяет доменное правило и коммитит изменение агрегата и outbox-строки одной
+транзакцией.
 
-The query side exposes separate handlers in `application/queries/` for getting
-one Ticket, listing the caller's Tickets, listing all Tickets for an admin, and
-listing a Ticket's messages. They depend only on `TicketQueryPort`, return
-read results, and do not mutate aggregates or publish events. HTTP dependencies
-construct these handlers from the infrastructure repository while preserving
-the existing `api` adapter and routes.
+Query-сторона выставляет отдельные handler'ы в `application/queries/` — для
+получения одного Ticket'а, списка тикетов вызывающего, списка всех тикетов для
+администратора и списка сообщений тикета. Они зависят только от
+`TicketQueryPort` (`application/ports.py`), возвращают read-результаты и не
+мутируют агрегаты и не публикуют события.
 
-Unread counters, assignment of a staff member, and a local user read model are
-outside Phase 5. Request identity and roles come from a locally validated JWT;
-the identity-event consumer exists solely to anonymize retained tickets after a
-user deletion. `api.worker:main` is its runnable composition root; it declares
-the shared `user.*.v1` topology as `support-service.user-events` and uses the
-kernel retry ladder.
+Личность и роли запроса приходят из локально валидированного JWT через
+локальную проекцию пользователя, а не через синхронный вызов identity —
+event-консьюмер существует и для поддержания этой проекции, и для анонимизации
+удержанных тикетов после удаления пользователя. `api/worker.py::main` — его
+исполняемый корень композиции; он объявляет общую топологию `user.*.v1` как
+`support-service` и использует retry-лестницу kernel-platform.
 
-Ticket mutations and their domain events share one database transaction. The
-repository writes the existing `kernel_platform.outbox.OutboxMessage` rows;
-the installed kernel version has no `OutboxMixin`. The worker records each
-identity event in a local inbox in that same transaction, so an at-least-once
-RabbitMQ delivery cannot append duplicate system messages.
+## Transactional Outbox и локальная проекция пользователя (ADR 0012)
 
-Ordinary callers receive `404` for tickets they cannot access. All ticket
-mutations serialize on the ticket row, including the user-deletion workflow.
-Published ticket events contain identifiers, state and actor category, but no
-subject or message text.
+Мутации Ticket'а и его доменные события делят одну транзакцию БД: репозиторий
+пишет существующие строки `kernel_platform.outbox.OutboxMessage` — ORM-миксина
+для этого нет.
 
-The worker inserts the incoming outbox message id into the service-local
-`processed_messages` inbox before changing tickets. The receipt, nullable
-author links, closure, system message, and technical outbox rows commit as one
-transaction. Repeated delivery therefore produces no second system message;
-active tickets receive one immutable `[Пользователь удалён]` note, while already
-closed tickets are only anonymized.
+`api/worker.py` поддерживает полную локальную проекцию пользователя
+(`infrastructure/db/user_projection.py`), не только inbox удаления: он
+принимает все пять событий `user.*.v1` и применяет каждое идемпотентно и
+упорядоченно через `upsert_user_projection()` с guard'ом по
+`last_applied_outbox_id` — тем же принципом версионирования, что и
+`owner_read_model` в catalog (ADR 0011), независимо от отдельного message-id
+inbox, который по-прежнему защищает анонимизацию тикетов именно на
+`user.deleted.v1`: разделяя эти два инварианта на разные механизмы, вставка
+анонимизации не видит собственную уже вставленную строку и не пропускает себя.
+Удаление выставляет `deleted` (tombstone) и `is_active=False`; version-guard
+гарантирует, что устаревшее или повторно доставленное событие никогда не
+воскресит запись.
 
-The Ticket aggregate moves through `OPEN → IN_PROGRESS → RESOLVED → CLOSED`.
-A new author message reopens only a resolved Ticket to `IN_PROGRESS`; a closed
-Ticket is terminal. Ticket messages are plaintext: a subject has 1–200
-characters and a message body has 1–10,000 characters after trimming.
-Normal status commands can only move one step forward through the lifecycle.
-User message access is owner-scoped, while an admin may append to any
-non-closed Ticket and advance its status. The repository uses a `FOR UPDATE`
-ticket-row lock so concurrent mutations observe one serialized state.
+`infrastructure/security/auth.py::get_current_actor` строит
+`kernel_platform.security.Actor` из этой проекции, а не доверяет claim'ам JWT:
+сперва декодирует и валидирует JWT без обращения к БД (поэтому
+отсутствующий/невалидный токен никогда не открывает сессию БД), затем ищет
+вызывающего по `id` в проекции — отсутствующая строка отвечает `401`,
+неактивная или tombstone-строка — `403`. `RequiredActor`
+(`infrastructure/security/auth.py`) — единственная зависимость аутентификации
+support; отдельного `AdminActor` нет: доступ только для администратора — это
+бизнес-авторизация, не аутентификация, поэтому `ListAdminTicketsQueryHandler`
+и `ChangeTicketStatusCommandHandler` сами владеют этой проверкой и возвращают
+`Result.fail(Error(code="FORBIDDEN", ...))` (ADR 0006), а не отклоняют запрос
+на уровне route-зависимости до того, как handler вообще запустился.
 
-## BFF migration (ADR 0033)
+## Тонкие эндпоинты (ADR 0002)
 
-`api.worker` now maintains a full local user projection
-(`infrastructure/db/user_projection.py`), not just the deletion inbox: it
-consumes all five `user.*.v1` events and applies each one with the same
-`last_applied_outbox_id` version guard as catalog's `owner_read_model`
-(ADR 0019), independent of the separate `processed_messages` inbox that
-still guards ticket anonymization on `user.deleted.v1` specifically —
-sharing one inbox row across both concerns would make the anonymization
-insert see its own already-inserted row and skip. Deletion sets `deleted`
-(tombstone) and `is_active=False`; the version guard means a stale or
-replayed event can never revive it.
+`api/tickets.py` тонкий: модели запроса/зависимостей `api/schemas.py` строят
+команды и запросы через `to_command()`/`to_query()`, а
+`kernel_platform.http.match.match_result`/`match_created` оборачивают
+application-`Result` в общий `ApiResponse`-конверт напрямую — роутер никогда
+не конвертирует один тип `Result` в другой. Четыре mutation-command-handler'а
+(`add_ticket_message`, `change_ticket_status`, `edit_ticket_message`,
+`delete_ticket_message`) сами перехватывают доменные исключения агрегата
+`Ticket` и результат репозитория «`None` для не найден/не принадлежит» и сами
+строят `contracts.ticket.TicketView` (`delete_ticket_message` возвращает
+`Result[None]` напрямую) перед тем, как вернуть `Result` — роутеры больше не
+транслируют ошибки и не переформируют успешное значение handler'а.
+`CreateTicketCommandHandler` таким же образом строит более богатый
+`contracts.ticket.TicketDetailView` (тикет и его сообщения), поэтому `POST`
+тоже не требует маппинга на стороне роутера.
+`application/queries/get_ticket_detail.py` — единственный комбинированный
+запрос, который вызывает эндпоинт для `GET /{ticket_id}`: он загружает тикет и
+первую страницу его сообщений вместе, поэтому эндпоинт никогда не оркестрирует
+два вызова handler'а. Каждый `DELETE` возвращает `200` с `data: null`; пагинация
+списка и деталей живёт только в корневом `meta`, не вложена в `data`.
 
-`infrastructure/security/auth.py` builds `kernel_platform.security.Actor`
-from that projection instead of trusting JWT claims: `_verify_token` decodes
-and validates the JWT with no DB access (so a missing/invalid token never
-opens a database session), then `get_current_actor` looks up the caller by
-id — a missing row is `401`, an inactive or tombstoned one is `403`.
-`RequiredActor` replaces the old `RequiredAuth`/`AdminAuth` UUID-only
-dependencies. There is no `AdminActor`: admin-only access is business
-authorization, not authentication, so `ListAdminTicketsQueryHandler` and
-`ChangeTicketStatusCommandHandler` own that check themselves and return
-`Result.fail(Error(code="FORBIDDEN", ...))` (ADR 0033) rather than a route
-dependency rejecting the request before a handler ever runs.
+## Жизненный цикл и инварианты
 
-`api/tickets.py` is thin: `api/schemas.py` request/dependency models build
-commands and queries via `to_command()`/`to_query()`, and
-`kernel_platform.http.match.match_result`/`match_created` wrap application
-`Result`s into the shared `ApiResponse` envelope directly — the router
-never converts one `Result` type into another. The four mutation command
-handlers (`add_ticket_message`, `change_ticket_status`,
-`edit_ticket_message`, `delete_ticket_message`) catch the `Ticket`
-aggregate's domain exceptions and the `None`-for-not-found/not-owned
-repository result themselves and build `contracts.ticket.TicketView`
-(`delete_ticket_message` returns `Result[None]` directly, matching
-catalog's `DeleteProductCommandHandler`) before returning `Result` — routers
-no longer translate errors or reshape a handler's success value.
-`CreateTicketCommandHandler` builds the richer `contracts.ticket.TicketDetailView`
-(ticket plus its messages) the same way, so `POST` also needs no router-side
-mapping. `application/queries/get_ticket_detail.py` is the single
-combined query the endpoint calls for `GET /{ticket_id}`: it loads the
-ticket and its first page of messages together, so the endpoint never
-orchestrates two handler calls. Every `DELETE` returns `200` with
-`data: null`; list and detail pagination live only in the root `meta`, not
-nested under `data`.
+Обычные вызывающие получают `404` на недоступные им тикеты. Все мутации
+тикета, включая обработку удаления пользователя, сериализуются на строке
+тикета через `FOR UPDATE`-блокировку в репозитории — конкурентные мутации
+видят одно последовательное состояние. Опубликованные события тикета несут
+идентификаторы, состояние и категорию актора, но не тему и не текст сообщения.
+
+Агрегат Ticket проходит через `OPEN → IN_PROGRESS → RESOLVED → CLOSED`. Новое
+сообщение автора переоткрывает только `RESOLVED`-тикет в `IN_PROGRESS`;
+`CLOSED` — терминальный статус. Обычные команды смены статуса могут двигать
+жизненный цикл только на один шаг вперёд. Сообщения тикета — обрезанный
+plaintext: тема — 1–200 символов, тело — 1–10 000 символов после обрезки
+пробелов. Доступ к сообщениям пользователя ограничен владением; администратор
+может добавлять сообщения в любой незакрытый тикет и продвигать его статус.

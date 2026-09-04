@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from kernel_domain.value_object import ValueObject
 
-from domain.value_objects import _PRIVATE_MARKER
+from domain.value_objects import PRIVATE_MARKER
 
 _MISSING = object()
 
@@ -19,7 +19,7 @@ class TicketId(ValueObject):
     def __init__(
         self, marker: object = _MISSING, value: uuid.UUID = cast("uuid.UUID", _MISSING)
     ) -> None:
-        if marker is not _PRIVATE_MARKER:
+        if marker is not PRIVATE_MARKER:
             raise RuntimeError(
                 "TicketId instances must be created through "
                 "TicketId.new_id()/TicketId.create()"
@@ -28,11 +28,11 @@ class TicketId(ValueObject):
 
     @classmethod
     def new_id(cls) -> "TicketId":
-        return cls(_PRIVATE_MARKER, uuid.uuid4())
+        return cls(PRIVATE_MARKER, uuid.uuid4())
 
     @classmethod
     def create(cls, value: uuid.UUID) -> "TicketId":
-        return cls(_PRIVATE_MARKER, value)
+        return cls(PRIVATE_MARKER, value)
 
     def _equality_components(self) -> tuple[Any, ...]:
         return (self.value,)

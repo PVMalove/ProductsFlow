@@ -62,7 +62,8 @@ def _error_response(
 
 async def _http_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
     http_exc = cast(StarletteHTTPException, exc)
-    message = http_exc.detail if isinstance(http_exc.detail, str) else "Ошибка запроса"
+    detail = http_exc.detail
+    message = detail if isinstance(detail, str) else "Ошибка запроса"
     return _error_response(
         status_code=http_exc.status_code,
         code=_canonical_code(http_exc.status_code),

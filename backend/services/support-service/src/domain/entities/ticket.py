@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import cast
 
-from kernel_domain import _PRIVATE_MARKER
+from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
@@ -139,7 +139,7 @@ class Ticket(Entity[TicketId]):
                 )
             )
         ticket = cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             ticket_id,
             author_id=author_id,
             subject=subject,
@@ -161,7 +161,7 @@ class Ticket(Entity[TicketId]):
         created_at: datetime,
     ) -> "Ticket":
         return cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id,
             author_id=author_id,
             subject=subject,

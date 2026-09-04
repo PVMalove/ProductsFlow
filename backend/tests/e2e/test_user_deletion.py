@@ -2,7 +2,7 @@ import uuid
 
 import httpx
 import pytest
-from conftest import _login_seeded_admin, _wait_for_ticket_closed
+from tests.e2e.conftest import login_seeded_admin, wait_for_ticket_closed
 
 
 async def _register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
@@ -51,10 +51,10 @@ async def test_self_delete_anonymizes_and_closes_the_users_ticket(
     denied = await gateway_client.get("/api/v1/users/me", headers=user_headers)
     assert denied.status_code == 403, denied.text
 
-    admin_token = await _login_seeded_admin(gateway_client)
+    admin_token = await login_seeded_admin(gateway_client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-    closed_ticket = await _wait_for_ticket_closed(
+    closed_ticket = await wait_for_ticket_closed(
         gateway_client,
         url=f"/api/v1/tickets/admin/{ticket_id}",
         headers=admin_headers,

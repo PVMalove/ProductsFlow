@@ -44,7 +44,7 @@ def rabbitmq_amqp_url(rabbitmq_container: RabbitMqContainer) -> str:
         str: Строка подключения формата `amqp://user:pass@host:port/vhost`."""
     params = rabbitmq_container.get_connection_params()
     vhost = quote(params.virtual_host, safe="")
-    return f"amqp://{params.credentials.username}:{params.credentials.password}@{params.host}:{params.port}/{vhost}"
+    return f"amqp://{rabbitmq_container.username}:{rabbitmq_container.password}@{params.host}:{params.port}/{vhost}"
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="session")

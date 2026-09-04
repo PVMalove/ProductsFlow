@@ -1,30 +1,38 @@
 # API
 
-The service exposes RS256 JWKS at `/.well-known/jwks.json` and the identity
-contract under `/api/v1`.
+Сервис отдаёт RS256 JWKS на `GET /.well-known/jwks.json` (`api/endpoints/jwks.py`)
+и identity-контракт под префиксом `/api/v1`.
 
-## Authentication
+## Аутентификация (`api/endpoints/auth.py`)
 
-- `POST /auth/register` accepts `{email, password}` and returns the created
-  user with `201`.
-- `POST /auth/login` accepts OAuth2 form fields `username` (the email) and
-  `password`, returning a bearer access token with a UUID aggregate id in
-  `sub`.
+- `POST /api/v1/auth/register` принимает `{email, password}` и возвращает
+  созданного пользователя с кодом `201`.
+- `POST /api/v1/auth/login` принимает OAuth2-форму (`username` — email,
+  `password`) и возвращает bearer access-токен с UUID-идентификатором
+  агрегата в `sub`. Это единственный эндпоинт, который остаётся плоским
+  протокольным ответом ради `OAuth2PasswordBearer`/Swagger UI и не обёрнут
+  в BFF-конверт (ADR 0002).
 
-## Users
+## Пользователи (`api/endpoints/users.py`)
 
-`GET /users/me` and `PATCH /users/me/password` are available to the current
-active user. Every bearer request reloads the account from Postgres, so
-deactivation takes effect immediately for already-issued tokens.
+`GET /api/v1/users/me` и `PATCH /api/v1/users/me/password` доступны текущему
+активному пользователю. Каждый bearer-запрос перечитывает учётную запись из
+Postgres, поэтому деактивация вступает в силу немедленно даже для уже
+выданных токенов (ADR 0005).
 
-Administrators can use:
+`DELETE /api/v1/users/me` — необратимое самостоятельное удаление: учётная
+запись заменяется анонимизированным tombstone, а не удаляется физически
+(ADR 0007).
 
-- `GET /users/` for cursor pagination (`limit`, `after`, `before`);
-- `PATCH /users/{user_id}/activate` and `/deactivate`;
-- `GET /users/audit?page_index=&page_size=` for the global offset-paginated
-  audit feed;
-- `GET /users/{user_id}/audit` for a user's audit history.
+Администраторам доступны:
 
-The current user can read their own history at `GET /users/me/audit`. User
-audit entries are immutable and are written by ORM listeners in the same
-transaction as the user mutation.
+- `GET /api/v1/users/` — курсорная пагинация (`limit`, `after`, `before`);
+- `PATCH /api/v1/users/{user_id}/activate` и `/deactivate`;
+- `GET /api/v1/users/audit?page_index=&page_size=` — глобальная,
+  offset-пагинированная audit-лента по всем пользователям;
+- `GET /api/v1/users/{user_id}/audit` — audit-история конкретного
+  пользователя.
+
+Текущий пользователь может прочитать собственную историю на
+`GET /api/v1/users/me/audit`. Audit-записи неизменяемы и пишутся ORM-слушателями
+в той же транзакции, что и сама мутация пользователя.

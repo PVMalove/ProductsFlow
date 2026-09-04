@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from kernel_domain import _PRIVATE_MARKER
+from kernel_domain import PRIVATE_MARKER
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.entity import Entity
 
@@ -43,7 +43,7 @@ class _RecordingSession:
 async def test_drain_events_to_outbox_maps_each_event_via_the_domain_event_contract() -> (
     None
 ):
-    widget = _Widget(_PRIVATE_MARKER, uuid.uuid4())
+    widget = _Widget(PRIVATE_MARKER, uuid.uuid4())
     widget.create("Widget")
     session = _RecordingSession()
 
@@ -60,7 +60,7 @@ async def test_drain_events_to_outbox_maps_each_event_via_the_domain_event_contr
 
 
 async def test_drain_events_to_outbox_drains_the_aggregate_event_queue() -> None:
-    widget = _Widget(_PRIVATE_MARKER, uuid.uuid4())
+    widget = _Widget(PRIVATE_MARKER, uuid.uuid4())
     widget.create("Widget")
     session = _RecordingSession()
 
@@ -72,7 +72,7 @@ async def test_drain_events_to_outbox_drains_the_aggregate_event_queue() -> None
 async def test_drain_events_to_outbox_adds_nothing_for_an_aggregate_without_events() -> (
     None
 ):
-    widget = _Widget(_PRIVATE_MARKER, uuid.uuid4())
+    widget = _Widget(PRIVATE_MARKER, uuid.uuid4())
     session = _RecordingSession()
 
     await drain_events_to_outbox(session, widget)  # type: ignore[arg-type]
@@ -83,7 +83,7 @@ async def test_drain_events_to_outbox_adds_nothing_for_an_aggregate_without_even
 async def test_drain_events_to_outbox_maps_every_event_when_several_were_raised() -> (
     None
 ):
-    widget = _Widget(_PRIVATE_MARKER, uuid.uuid4())
+    widget = _Widget(PRIVATE_MARKER, uuid.uuid4())
     widget.create("First")
     widget.add_domain_event(_WidgetCreated(widget_id=widget.id, name="Second"))
     session = _RecordingSession()

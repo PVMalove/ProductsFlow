@@ -13,14 +13,15 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.outbox.settings import (
+    BACKOFF_BASE_SECONDS,
+    BACKOFF_CEILING_SECONDS,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_PUBLISH_TIMEOUT_SECONDS,
+    MAX_BACKOFF_EXPONENT,
+)
 
 logger = logging.getLogger(__name__)
-EVENTS_EXCHANGE_NAME = "productsflow.events"
-DEFAULT_BATCH_SIZE = 50
-DEFAULT_PUBLISH_TIMEOUT_SECONDS = 5.0
-BACKOFF_BASE_SECONDS = 1.0
-BACKOFF_CEILING_SECONDS = 300.0
-_MAX_BACKOFF_EXPONENT = 64
 
 
 def compute_backoff(attempts: int) -> timedelta:
@@ -34,7 +35,7 @@ def compute_backoff(attempts: int) -> timedelta:
 
     Returns:
         timedelta: Рассчитанный интервал времени до следующей попытки."""
-    exponent = min(attempts - 1, _MAX_BACKOFF_EXPONENT)
+    exponent = min(attempts - 1, MAX_BACKOFF_EXPONENT)
     seconds = min(BACKOFF_BASE_SECONDS * 2**exponent, BACKOFF_CEILING_SECONDS)
     return timedelta(seconds=seconds)
 

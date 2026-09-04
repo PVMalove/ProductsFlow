@@ -1,15 +1,15 @@
 # API
 
-Product routes remain under `/api/v1/products`.
+Маршруты товаров живут под `/api/v1/products` (`api/endpoints/products.py`,
+`api/endpoints/product_images.py`).
 
-## BFF response-contract migration
+## BFF-конверт ответа (ADR 0002)
 
-The catalog service is migrating to the platform BFF response contract described
-in [the migration guide](../../../docs/architecture/bff_api_contract.md) and
-ADR 0031.
-
-Product command endpoints — create, update, activate, deactivate, and delete —
-and product GET-queries — read, list, and audit — return the success envelope.
-Product-image endpoints retain their current flat success payload until their
-dedicated migration. All catalog error responses use the structured BFF error
-shape immediately.
+Командные эндпоинты товара — создание, обновление, активация, деактивация,
+удаление — и query-эндпоинты — чтение, список, аудит — возвращают единый
+конверт успеха `{"data": ..., "meta": {}}` (ADR 0002). Эндпоинты картинки
+товара следуют тому же контракту: `POST .../image` возвращает `200`, если
+картинка заменена, и `201`, если создана впервые — статус выбирается по
+флагу `replaced` результата мутации, до построения ответного View. Все
+ошибки catalog используют единую структурированную BFF-форму ошибки
+(ADR 0003).

@@ -17,7 +17,7 @@ MessageHandler = Callable[[AbstractIncomingMessage], Awaitable[None]]
 _RETRY_STAGE_NAMES = tuple(RETRY_STAGE_TTL_MS)
 
 
-def _next_stage_index(headers: HeadersType, stage_queue_names: Sequence[str]) -> int:
+def next_stage_index(headers: HeadersType, stage_queue_names: Sequence[str]) -> int:
     """Определяет номер следующей ступени лестницы по заголовку `x-death`.
 
     Каждый переход между ступенями — manual-republish через default exchange, не `reject`, поэтому `x-death`,
@@ -79,21 +79,21 @@ async def consume(queue: AbstractQueue, handler: MessageHandler) -> ConsumerTag:
         try:
             await handler(message)
         except Exception:
-            next_stage_index = _next_stage_index(message.headers, stage_queue_names)
-            if next_stage_index >= len(stage_queue_names):
+            retry_stage_index = next_stage_index(message.headers, stage_queue_names)
+            if retry_stage_index >= len(stage_queue_names):
                 logger.exception(
                     "Consumer %s: ступени лестницы исчерпаны (попытка %d), сообщение %s уходит в DLQ",
                     queue.name,
-                    next_stage_index + 1,
+                    retry_stage_index + 1,
                     message.message_id,
                 )
                 await message.reject(requeue=False)
                 return
-            stage_queue_name = stage_queue_names[next_stage_index]
+            stage_queue_name = stage_queue_names[retry_stage_index]
             logger.warning(
                 "Consumer %s: обработчик бросил исключение (попытка %d), сообщение %s уходит в ступень %s",
                 queue.name,
-                next_stage_index + 1,
+                retry_stage_index + 1,
                 message.message_id,
                 stage_queue_name,
                 exc_info=True,

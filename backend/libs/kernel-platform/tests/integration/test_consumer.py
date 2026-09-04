@@ -6,7 +6,7 @@ import pytest
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, HeadersType
 
 from kernel_platform.consumer import consume
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
 
 # amqp_connection/channel/events_exchange_exists (conftest.py) —

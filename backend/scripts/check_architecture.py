@@ -125,6 +125,8 @@ def _cqrs_import_findings(path: Path) -> list[Finding]:
     findings: list[Finding] = []
     opposite = "queries" if side == "commands" else "commands"
     for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
         if opposite in _imported_cqrs_sides(node):
             findings.append(
                 Finding(

@@ -33,30 +33,30 @@ make db-revision pkg=catalog-service msg="add products table"
 ## Запуск
 
 ### Запуск через Docker (Production/Full Stack)
-Весь стек (БД, брокеры, S3, все сервисы и Gateway) поднимается единой командой из корня ackend/:
-``bash
+Весь стек (БД, брокеры, S3, все сервисы) поднимается единой командой из корня backend/:
+```bash
 make up_prod
-``
+```
 
 ### Локальный запуск (Разработка)
 Для локальной отладки без Docker необходима инфраструктура и запущенный identity-service, откуда Catalog скачивает JWKS публичные ключи при старте.
 
-1. Из корня ackend/ запустите PostgreSQL, RabbitMQ и MinIO:
-   ``bash
+1. Из корня backend/ запустите PostgreSQL, RabbitMQ и MinIO:
+   ```bash
    make up_dev
-   ``
+   ```
 2. Скопируйте .env.example в .env внутри директории catalog-service.
 3. **Важно:** измените адрес Identity в .env, чтобы локальный процесс мог скачать ключи (так как имя identity-api в локальной сети недоступно):
-   ``env
+   ```env
    CATALOG_IDENTITY_BASE_URL=http://localhost:8001
-   ``
+   ```
 4. Убедитесь, что identity-service уже запущен на порту 8001.
 5. Находясь в директории catalog-service, примените миграции базы данных:
-   ``bash
+   ```bash
    uv run alembic upgrade head
-   ``
+   ```
 6. Запустите сервис локально на порту 8002:
-   ``bash
+   ```bash
    uv run uvicorn src.api.main:app --port 8002 --reload
-   ``
+   ```
 Swagger сервиса будет доступен по адресу: [http://localhost:8002/docs](http://localhost:8002/docs)

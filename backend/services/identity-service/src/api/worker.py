@@ -3,7 +3,8 @@ import logging
 
 import aio_pika
 from kernel_platform.outbox.listener import OutboxListener, to_asyncpg_dsn
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME, OutboxPublisher
+from kernel_platform.outbox.publisher import OutboxPublisher
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.settings import settings

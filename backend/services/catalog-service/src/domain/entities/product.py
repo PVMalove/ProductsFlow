@@ -1,7 +1,7 @@
 import uuid
 from typing import cast
 
-from kernel_domain import _PRIVATE_MARKER
+from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
@@ -96,7 +96,7 @@ class Product(Entity[ProductId]):
             return Result[Product].fail(error)
 
         product = cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id,
             name=name,
             description=description,
@@ -129,7 +129,7 @@ class Product(Entity[ProductId]):
         is_active: bool,
     ) -> "Product":
         return cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id,
             name=name,
             description=description,

@@ -3,8 +3,8 @@ from typing import cast
 
 from kernel_domain.domain_event import DomainEvent
 
-_PRIVATE_MARKER = object()
-_MISSING_MARKER = object()
+PRIVATE_MARKER = object()
+MISSING_MARKER = object()
 
 
 class Entity[TId]:
@@ -15,18 +15,18 @@ class Entity[TId]:
 
     Конструктор вызывается только фабрикой `create()` для новой сущности или
     `reconstitute()` для гидратации из хранилища. Обе передают
-    `_PRIVATE_MARKER`; `reconstitute()` не повторяет бизнес-валидацию и не
+    `PRIVATE_MARKER`; `reconstitute()` не повторяет бизнес-валидацию и не
     вызывает `add_domain_event(...)`.
     """
 
     def __init__(
         self,
-        marker: object = _MISSING_MARKER,
-        id: TId = cast("TId", _MISSING_MARKER),
+        marker: object = MISSING_MARKER,
+        id: TId = cast("TId", MISSING_MARKER),
     ) -> None:
         """Инициализирует базовый инстанс энтити.
 
-        `marker` — закрытый токен `_PRIVATE_MARKER`: он не даёт вызвать
+        `marker` — закрытый токен `PRIVATE_MARKER`: он не даёт вызвать
         конструктор в обход доменной фабрики.
 
         Сразу проставляет переданный айдишник и подготавливает пустой массив под
@@ -36,11 +36,11 @@ class Entity[TId]:
         Args:
             marker: Закрытый токен конструктора.
             id (TId): Уникальный идентификатор сущности (обычно UUID или инт)."""
-        if marker is not _PRIVATE_MARKER:
+        if marker is not PRIVATE_MARKER:
             raise RuntimeError(
                 "Entity instances must be created through create() or reconstitute()"
             )
-        if id is _MISSING_MARKER:
+        if id is MISSING_MARKER:
             raise TypeError("Entity id is required")
 
         self.id = id

@@ -8,7 +8,7 @@ import pytest_asyncio
 from aio_pika.abc import AbstractChannel, AbstractRobustConnection
 from testcontainers.community.rabbitmq import RabbitMqContainer
 
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 
 # Заглушка вместо libs/test-support (issue #99) — этой библиотеки
 # ещё нет в дереве. Повторяет паттерн identity-service's

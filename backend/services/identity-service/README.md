@@ -32,30 +32,30 @@ make db-revision pkg=identity-service msg="add users table"
 ## Запуск
 
 ### Запуск через Docker (Production/Full Stack)
-Весь стек (БД, брокеры, S3, все сервисы и Gateway) поднимается единой командой из корня ackend/:
-``bash
+Весь стек (БД, брокеры, S3, все сервисы) поднимается единой командой из корня backend/:
+```bash
 make up_prod
-``
-Swagger будет доступен на порту API Gateway или самого сервиса.
+```
+Swagger будет доступен на порту самого сервиса (см. `docker-compose.yml`); production-стек Gateway не поднимает — он существует только для E2E-тестов (ADR 0004).
 
 ### Локальный запуск (Разработка)
 Для локальной отладки без Docker необходима запущенная инфраструктура.
 
-1. Из корня ackend/ запустите PostgreSQL, RabbitMQ и MinIO:
-   ``bash
+1. Из корня backend/ запустите PostgreSQL, RabbitMQ и MinIO:
+   ```bash
    make up_dev
-   ``
+   ```
 2. Сгенерируйте RSA-ключи (если они ещё не созданы), чтобы Identity мог подписывать JWT:
-   ``bash
+   ```bash
    make keys
-   ``
+   ```
 3. Скопируйте .env.example в .env внутри директории identity-service (порты в нём уже настроены под make up_dev).
 4. Находясь в директории identity-service, примените миграции базы данных:
-   ``bash
+   ```bash
    uv run alembic upgrade head
-   ``
+   ```
 5. Запустите сервис локально на порту 8001:
-   ``bash
+   ```bash
    uv run uvicorn src.api.main:app --port 8001 --reload
-   ``
+   ```
 Swagger сервиса будет доступен по адресу: [http://localhost:8001/docs](http://localhost:8001/docs)

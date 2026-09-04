@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 from aio_pika.abc import HeadersType
 
-from kernel_platform.consumer import _next_stage_index
+from kernel_platform.consumer import next_stage_index
 
 STAGE_QUEUE_NAMES = (
     "svc.user-events.retry.5s",
@@ -11,7 +11,7 @@ STAGE_QUEUE_NAMES = (
 
 
 def test_next_stage_index_is_zero_without_x_death() -> None:
-    assert _next_stage_index({}, STAGE_QUEUE_NAMES) == 0
+    assert next_stage_index({}, STAGE_QUEUE_NAMES) == 0
 
 
 def test_next_stage_index_advances_past_last_matched_stage() -> None:
@@ -20,7 +20,7 @@ def test_next_stage_index_advances_past_last_matched_stage() -> None:
             {"queue": "svc.user-events.retry.5s", "reason": "expired", "count": 1}
         ]
     }
-    assert _next_stage_index(headers, STAGE_QUEUE_NAMES) == 1
+    assert next_stage_index(headers, STAGE_QUEUE_NAMES) == 1
 
 
 def test_next_stage_index_saturates_after_last_stage() -> None:
@@ -29,7 +29,7 @@ def test_next_stage_index_saturates_after_last_stage() -> None:
             {"queue": "svc.user-events.retry.2m", "reason": "expired", "count": 1}
         ]
     }
-    assert _next_stage_index(headers, STAGE_QUEUE_NAMES) == 3
+    assert next_stage_index(headers, STAGE_QUEUE_NAMES) == 3
 
 
 def test_next_stage_index_ignores_entries_from_other_queues() -> None:
@@ -46,7 +46,7 @@ def test_next_stage_index_ignores_entries_from_other_queues() -> None:
             }
         ]
     }
-    assert _next_stage_index(headers, STAGE_QUEUE_NAMES) == 0
+    assert next_stage_index(headers, STAGE_QUEUE_NAMES) == 0
 
 
 def test_next_stage_index_uses_own_entry_and_ignores_foreign_one() -> None:
@@ -60,4 +60,4 @@ def test_next_stage_index_uses_own_entry_and_ignores_foreign_one() -> None:
             },
         ]
     }
-    assert _next_stage_index(headers, STAGE_QUEUE_NAMES) == 1
+    assert next_stage_index(headers, STAGE_QUEUE_NAMES) == 1

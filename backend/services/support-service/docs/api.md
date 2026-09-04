@@ -1,42 +1,39 @@
 # API
 
-The support HTTP surface is designed in the Phase 5 domain session.
-`api.main:app` is the service entrypoint.
+`api.main:app` — точка входа сервиса, `api/tickets.py` — единственный роутер.
 
-- `POST /api/v1/tickets` creates a Ticket and its required first message.
-- `GET /api/v1/tickets` lists the caller's Tickets with a keyset cursor.
-- `GET /api/v1/tickets/admin` lists every Ticket for an `admin` actor.
-- `POST /api/v1/tickets/{ticket_id}/messages` appends a message.
-- `GET /api/v1/tickets/{ticket_id}` returns an accessible Ticket and a
-  cursor-paginated message thread; a non-admin caller is denied `404` for a
-  Ticket that isn't theirs.
-- `GET /api/v1/tickets/admin/{ticket_id}` returns any Ticket's detail for an
-  `admin` actor; a non-admin caller is denied `403`.
-- `PATCH /api/v1/tickets/{ticket_id}/messages/{message_id}` edits the caller's
-  own non-deleted message before the Ticket is closed.
-- `DELETE /api/v1/tickets/{ticket_id}/messages/{message_id}` soft-deletes a
-  message; an `admin` may use it for moderation.
-- `PATCH /api/v1/tickets/{ticket_id}/status` changes a Ticket status.
+- `POST /api/v1/tickets` создаёт Ticket вместе с обязательным первым сообщением.
+- `GET /api/v1/tickets` — список Ticket'ов вызывающего с keyset-курсором.
+- `GET /api/v1/tickets/admin` — список всех Ticket'ов для актора-`admin`.
+- `POST /api/v1/tickets/{ticket_id}/messages` добавляет сообщение.
+- `GET /api/v1/tickets/{ticket_id}` возвращает доступный Ticket и
+  курсорно-пагинированную ленту сообщений; не-админу недоступный Ticket
+  отвечает `404`.
+- `GET /api/v1/tickets/admin/{ticket_id}` возвращает детали любого Ticket'а
+  актору-`admin`; не-админу — `403`.
+- `PATCH /api/v1/tickets/{ticket_id}/messages/{message_id}` редактирует
+  собственное неудалённое сообщение вызывающего до закрытия Ticket'а.
+- `DELETE /api/v1/tickets/{ticket_id}/messages/{message_id}` мягко удаляет
+  сообщение; `admin` может использовать это для модерации.
+- `PATCH /api/v1/tickets/{ticket_id}/status` меняет статус Ticket'а.
 
-Appending a message returns the updated Ticket with `201`. A normal caller may
-append only to their own non-closed Ticket; an administrator may append to any
-non-closed Ticket. Status changes require an administrator and return the
-updated Ticket with `200`. Invalid lifecycle transitions and attempts to
-mutate a closed Ticket return `409`; an inaccessible Ticket is reported as
-`404`. An administrator may still soft-delete a message in a closed Ticket for
-moderation.
+Добавление сообщения возвращает обновлённый Ticket с кодом `201`. Обычный
+вызывающий может добавлять сообщения только в свой незакрытый Ticket;
+администратор — в любой незакрытый. Смена статуса требует администратора и
+возвращает обновлённый Ticket с кодом `200`. Недопустимые переходы жизненного
+цикла и попытки смутировать закрытый Ticket отвечают `409`; недоступный
+Ticket — `404`. Администратор всё ещё может мягко удалить сообщение в
+закрытом Ticket'е ради модерации.
 
-Tickets themselves are neither edited nor deleted in Phase 5. Message editing
-and deletion are separate operations whose authorization and retention rules
-are defined above. Message edits and soft deletions publish
-`ticket.message_edited.v1` and `ticket.message_deleted.v1` without text.
-Message responses expose `is_deleted`; a deleted message keeps its identifier,
-author, timestamp, and thread position while returning the deletion marker as
-its body.
+Сами Ticket'ы не редактируются и не удаляются. Редактирование и удаление
+сообщения — отдельные операции с правилами авторизации и хранения, описанными
+выше. Правка и мягкое удаление сообщения публикуют `ticket.message_edited.v1`
+и `ticket.message_deleted.v1` без текста (ADR 0012). Ответ сообщения содержит
+`is_deleted`; удалённое сообщение сохраняет идентификатор, автора, время и
+позицию в ленте, возвращая маркер удаления вместо тела.
 
-All text is trimmed plaintext: subjects contain 1–200 characters and message
-bodies contain 1–10,000; invalid input returns `422`. A system message cannot
-be edited or deleted. An inaccessible Ticket is reported as `404` to an
-ordinary caller. Ticket lists are newest-first by `(created_at, id)` and
-message threads oldest-first by the same composite key; their opaque cursors
-encode both values.
+Весь текст — обрезанный от пробелов plaintext: тема — 1–200 символов, тело
+сообщения — 1–10 000; невалидный ввод отвечает `422`. Системное сообщение не
+может быть отредактировано или удалено. Списки Ticket'ов сортированы по
+`(created_at, id)` от новых к старым, ленты сообщений — по тому же составному
+ключу от старых к новым; их непрозрачные курсоры кодируют оба значения.

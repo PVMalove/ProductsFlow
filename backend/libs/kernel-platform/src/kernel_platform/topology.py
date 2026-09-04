@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractQueue
 
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 
 DLX_EXCHANGE_NAME = "productsflow.dlx"
 RETRY_STAGE_TTL_MS = {"retry.5s": 5000, "retry.30s": 30000, "retry.2m": 120000}

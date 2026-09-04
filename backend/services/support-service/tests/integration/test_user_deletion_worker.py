@@ -11,7 +11,7 @@ from aio_pika.abc import AbstractChannel
 from kernel_domain.result import Result
 from kernel_platform.consumer import consume
 from kernel_platform.outbox.models import Base, OutboxMessage
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker

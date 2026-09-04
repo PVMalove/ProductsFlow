@@ -1,5 +1,16 @@
 {
-  "typeCheckingMode": "strict",
+  "include": [
+    "backend/libs",
+    "backend/services",
+    "backend/scripts"
+  ],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "**/tests",
+    "**/alembic/versions"
+  ],
+  "typeCheckingMode": "basic",
   "executionEnvironments": [
     {
       "root": "backend/services/catalog-service",

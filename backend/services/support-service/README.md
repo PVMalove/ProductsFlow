@@ -33,25 +33,25 @@ make db-revision pkg=support-service msg="add tickets table"
 ## Запуск
 
 ### Запуск через Docker (Production/Full Stack)
-Весь стек (БД, брокеры, S3, все сервисы и Gateway) поднимается единой командой из корня ackend/:
-``bash
+Весь стек (БД, брокеры, S3, все сервисы) поднимается единой командой из корня backend/:
+```bash
 make up_prod
-``
+```
 
 ### Локальный запуск (Разработка)
 Для локальной отладки без Docker необходима запущенная инфраструктура.
 
-1. Из корня ackend/ запустите PostgreSQL и RabbitMQ:
-   ``bash
+1. Из корня backend/ запустите PostgreSQL и RabbitMQ:
+   ```bash
    make up_dev
-   ``
+   ```
 2. Скопируйте .env.example в .env внутри директории support-service.
 3. Находясь в директории support-service, примените миграции базы данных:
-   ``bash
+   ```bash
    uv run alembic upgrade head
-   ``
+   ```
 4. Запустите сервис локально на порту 8003:
-   ``bash
+   ```bash
    uv run uvicorn src.api.main:app --port 8003 --reload
-   ``
+   ```
 Swagger сервиса будет доступен по адресу: [http://localhost:8003/docs](http://localhost:8003/docs)

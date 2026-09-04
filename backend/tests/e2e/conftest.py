@@ -93,7 +93,7 @@ async def _wait_for_response(
         delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
 
 
-async def _wait_for_ticket_closed(
+async def wait_for_ticket_closed(
     client: httpx.AsyncClient, *, url: str, headers: dict[str, str]
 ) -> dict[str, object]:
     """Опрашивает ответ детали тикета, пока async-консьюмер удаления
@@ -125,7 +125,7 @@ async def _wait_for_ticket_closed(
         delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
 
 
-async def _login_seeded_admin(client: httpx.AsyncClient) -> str:
+async def login_seeded_admin(client: httpx.AsyncClient) -> str:
     response = await client.post(
         "/api/v1/auth/login",
         data={"username": _ADMIN_EMAIL, "password": _ADMIN_PASSWORD},
@@ -155,7 +155,7 @@ async def gateway_client() -> AsyncIterator[httpx.AsyncClient]:
                 url="/.well-known/jwks.json",
                 expected_status=200,
             )
-            admin_token = await _login_seeded_admin(client)
+            admin_token = await login_seeded_admin(client)
             await _wait_for_response(
                 client,
                 method="GET",

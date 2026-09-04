@@ -4,7 +4,7 @@ import pytest
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel
 
-from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import (
     DLX_EXCHANGE_NAME,
     RETRY_STAGE_TTL_MS,

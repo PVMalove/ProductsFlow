@@ -1,66 +1,78 @@
-# Architecture
+# Архитектура
 
-`api` owns HTTP and worker entrypoints, `application` owns use cases,
-`domain` owns identity business concepts, `infrastructure` owns persistence,
-and `core` owns service-local security and configuration policy.
+`api` владеет HTTP- и worker-точками входа, `application` — юзкейсами,
+`domain` — бизнес-понятиями identity, `infrastructure` — персистентностью,
+а `core` — локальными для сервиса политиками безопасности и конфигурации.
 
-## CQRS application boundary
+## Граница CQRS на уровне application
 
-Identity writes are defined in `application/commands/`, with one module per
-related operation and immutable command DTOs plus dedicated command handlers.
-The package `__init__.py` is the public command-side facade. Handlers depend on the domain-owned
-`IdentityUnitOfWork` contract and `PasswordHasher`; concrete persistence and
-hashing adapters stay outside the application layer. The UoW exposes the
-domain-owned `UserRepository`, shares the request-scoped session, rolls back
-unless a handler explicitly commits on its successful path, and keeps command
-mutations and their outbox rows atomic.
+Мутации identity описаны в `application/commands/` — один модуль на операцию,
+неизменяемые command-DTO и выделенный handler на каждую. `__init__.py` пакета —
+публичный command-side фасад. Handler'ы зависят от доменного контракта
+`IdentityUnitOfWork` (`domain/unit_of_work.py`) и порта `PasswordHasher`;
+конкретные адаптеры персистентности и хеширования остаются вне application-слоя.
+UoW отдаёт доменный `UserRepository`, разделяет request-scoped сессию, по
+умолчанию откатывает транзакцию, если handler явно не закоммитил её на
+успешном пути, и держит мутацию агрегата и её outbox-строки атомарными
+(ADR 0006).
 
-Identity reads use immutable DTOs in `application/queries/`, with one module per
-query and a package-level public facade. `GetUserQueryHandler` accepts only
-`UserQueryPort`. The query port has
-no `add` or `save` operation, so a query handler cannot accidentally mutate the
-aggregate through its declared dependency. The old per-operation module paths
-remain thin re-export adapters for callers during the migration.
+Чтения identity используют неизменяемые DTO в `application/queries/` — один
+модуль на запрос и публичный фасад на уровне пакета. `GetUserQueryHandler`
+принимает только `UserQueryPort`: у этого порта нет операций `add`/`save`,
+поэтому query-handler не может случайно смутировать агрегат через объявленную
+зависимость.
 
-`ListUsersQueryHandler` reads an administrator's cursor-paginated `UserPage`
-through `UserListQueryPort`, using the shared `kernel_platform.pagination`
-contract. `GetUserAuditQueryHandler` uses `UserAuditQueryPort`: a missing
-`user_id` selects the global offset-paginated `UserAuditPage` with
-`page_index`/`page_size` and `total_pages`, while a supplied `user_id` selects
-the complete, unpaginated personal history. Authorization and the distinction
-between the caller's own id and an administrator's target id belong to the API
-boundary.
+`ListUsersQueryHandler` читает курсорно-пагинированную `UserPage` администратора
+через `UserListQueryPort`, используя общий контракт `kernel_platform.pagination`.
+`GetUserAuditQueryHandler` использует `UserAuditQueryPort`: отсутствующий
+`user_id` выбирает глобальную, offset-пагинированную `UserAuditPage`
+(`page_index`/`page_size`/`total_pages`), а переданный `user_id` — полную,
+непагинированную личную историю. Авторизация и различение «свой ли это `id`
+вызывающего или целевой `id`, заданный администратором» — забота HTTP-границы,
+не query-порта.
 
-`infrastructure.db.user_repository.UserRepository` maps the aggregate to the
-SQLAlchemy `UserModel`. Every mutating method drains domain events through the
-shared kernel-platform outbox operation, while
-`infrastructure.db.unit_of_work.SqlIdentityUnitOfWork` owns the single commit;
-the user row and its outbox rows therefore share one transaction. ORM listeners in `infrastructure.db.audit`
-write the immutable user audit trail and resolve the actor from the shared
-request `ContextVar` (falling back to the affected user's id outside HTTP).
-`SqlUserQueryRepository` and `SqlUserAuditReader` provide the corresponding
-read-side SQL adapters without exposing password hashes.
+## Персистентность и outbox
 
-## BFF migration (ADR 0033)
+`infrastructure/db/user_repository.py::UserRepository` маппит агрегат на
+SQLAlchemy-модель `UserModel`. Каждый мутирующий метод сливает доменные
+события через общую outbox-операцию `kernel-platform` явным вызовом
+(не через ORM-миксин), а `infrastructure/db/unit_of_work.py::SqlIdentityUnitOfWork`
+владеет единственным commit — строка пользователя и её outbox-строки поэтому
+делят одну транзакцию. ORM-слушатели в `infrastructure/db/audit.py` пишут
+неизменяемый audit-трейл пользователя и разрешают актора из общего
+request-scoped `ContextVar` (вне HTTP — из `id` затронутого пользователя).
+`SqlUserQueryRepository` и `SqlUserAuditReader` — соответствующие read-side
+SQL-адаптеры, не раскрывающие хеши паролей.
 
-`api/users.py` and `/api/v1/auth/register` are thin: `api/schemas.py`
-dependency models turn the request into a command/query via
-`to_command()`/`to_query()`, and `kernel_platform.http.match.match_result`/
-`match_created` wrap the application `Result` into the shared `ApiResponse`
-envelope directly — the router never converts one `Result` type into
-another. `RegisterUserCommandHandler`, `ChangePasswordCommandHandler`,
-`ActivateUserCommandHandler`, and `DeactivateUserCommandHandler` each build
-`contracts.user.UserView` themselves before returning
-`Result[UserView]`, matching how catalog's product command handlers already
-return `Result[ProductView]` (ADR 0031). `api/security.py` decodes the bearer JWT, reloads the caller
-through `UserQueryPort` and returns a `kernel_platform.security.Actor` — the
-same reload also enforces `is_active` for every authenticated identity
-endpoint, not only `/users/me`. `GetCurrentUserHandler`
-(`application/queries/get_current_user.py`) is the dedicated `/users/me`
-read path: it reloads the caller's row again and returns
-`contracts.user.UserView`, so the response never trusts JWT claims.
-`GetUserAuditQueryHandler` now takes both `UserAuditQueryPort` and
-`UserQueryPort`, returning `Result` and failing `NOT_FOUND` for an unknown
-target user instead of leaving that check to the router. `/api/v1/auth/login`
-keeps its flat OAuth2 password-grant response — the ADR excludes it from the
-envelope so `OAuth2PasswordBearer`/Swagger UI keep working unchanged.
+## BFF-конверт и безопасность (ADR 0002, ADR 0005)
+
+`api/endpoints/users.py` и `api/endpoints/auth.py` — тонкие: модели
+`api/schemas.py` превращают запрос в command/query через
+`to_command()`/`to_query()`, а `kernel_platform.http.match.match_result`/
+`match_created` оборачивают application-`Result` в общий `ApiResponse`-конверт
+напрямую — роутер никогда не конвертирует один тип `Result` в другой. Каждый
+из `RegisterUserCommandHandler`, `ChangePasswordCommandHandler`,
+`ActivateUserCommandHandler`, `DeactivateUserCommandHandler` сам строит
+`contracts.user.UserView` перед тем, как вернуть `Result[UserView]` — так же,
+как command-handler'ы `Product` в catalog возвращают `Result[ProductView]`
+(ADR 0002).
+
+`api/security.py::get_current_actor` декодирует bearer JWT, перечитывает
+вызывающего через `UserQueryRepositoryDI` и возвращает
+`kernel_platform.security.Actor` — та же перезагрузка обеспечивает проверку
+`is_active` для каждого аутентифицированного identity-эндпоинта, не только для
+`/users/me` (ADR 0005). `AdminActor` (`require_admin_actor` + `require_admin`
+из `kernel_platform.security`) — отдельная зависимость для admin-only
+маршрутов.
+
+`GetCurrentUserHandler` (`application/queries/get_current_user.py`) —
+выделенный read-путь для `/users/me`: он заново перечитывает строку
+вызывающего и возвращает `contracts.user.UserView`, поэтому ответ никогда не
+доверяет claim'ам JWT напрямую. `GetUserAuditQueryHandler` принимает и
+`UserAuditQueryPort`, и `UserQueryPort`, возвращает `Result` и сам завершает
+запрос ошибкой `NOT_FOUND` для неизвестного целевого пользователя, не
+перекладывая эту проверку на роутер.
+
+`POST /api/v1/auth/login` сохраняет плоский OAuth2 password-grant ответ —
+ADR 0002 явно исключает его из BFF-конверта, чтобы `OAuth2PasswordBearer` и
+Swagger UI продолжали работать без изменений.

@@ -1,6 +1,6 @@
 from typing import cast
 
-from kernel_domain import _PRIVATE_MARKER
+from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
@@ -53,7 +53,7 @@ class User(Entity[UserId]):
     @classmethod
     def register(cls, email: Email, password_hash: str) -> Result["User"]:
         user = cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             UserId.new_id(),
             email=email,
             password_hash=password_hash,
@@ -75,7 +75,7 @@ class User(Entity[UserId]):
         is_deleted: bool = False,
     ) -> "User":
         return cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id,
             email=email,
             password_hash=password_hash,

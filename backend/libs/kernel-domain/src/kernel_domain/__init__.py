@@ -1,1 +1,1 @@
-from kernel_domain.entity import _PRIVATE_MARKER as _PRIVATE_MARKER
+from kernel_domain.entity import PRIVATE_MARKER as PRIVATE_MARKER

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from domain.value_objects import _PRIVATE_MARKER
+from domain.value_objects import PRIVATE_MARKER
 from domain.value_objects.ticket_id import TicketId
 
 DELETED_MESSAGE_MARKER = "[Сообщение удалено]"
@@ -44,7 +44,7 @@ class TicketMessage:
         is_system: bool = False,
         is_deleted: bool = False,
     ) -> None:
-        if marker is not _PRIVATE_MARKER:
+        if marker is not PRIVATE_MARKER:
             raise RuntimeError(
                 "TicketMessage instances must be created through "
                 "TicketMessage.create()/reconstitute()"
@@ -68,7 +68,7 @@ class TicketMessage:
         is_system: bool = False,
     ) -> "TicketMessage":
         return cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id=id,
             ticket_id=ticket_id,
             author_id=author_id,
@@ -89,7 +89,7 @@ class TicketMessage:
         is_deleted: bool,
     ) -> "TicketMessage":
         return cls(
-            _PRIVATE_MARKER,
+            PRIVATE_MARKER,
             id=id,
             ticket_id=ticket_id,
             author_id=author_id,

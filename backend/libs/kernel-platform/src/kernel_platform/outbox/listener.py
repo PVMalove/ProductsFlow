@@ -50,8 +50,9 @@ class OutboxListener:
         """Поднимает коннект к постгре и вешает подписку на pg-канал.
 
         Мутирует внутренний стейт, сохраняя инстанс `asyncpg.Connection`."""
-        self._connection = await asyncpg.connect(self._dsn)
-        await self._connection.add_listener(self._channel, self._handle_notify)
+        connection = await asyncpg.connect(self._dsn)
+        self._connection = connection
+        await connection.add_listener(self._channel, self._handle_notify)
 
     async def stop(self) -> None:
         """Гасит коннект и снимает подписку с pg-канала.

@@ -6,7 +6,7 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_domain.value_object import ValueObject
 
-from domain.value_objects import _PRIVATE_MARKER
+from domain.value_objects import PRIVATE_MARKER
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -23,7 +23,7 @@ class Email(ValueObject):
     def __init__(
         self, marker: object = _MISSING, value: str = cast("str", _MISSING)
     ) -> None:
-        if marker is not _PRIVATE_MARKER:
+        if marker is not PRIVATE_MARKER:
             raise RuntimeError("Email instances must be created through Email.create()")
         object.__setattr__(self, "value", value)
 
@@ -37,7 +37,7 @@ class Email(ValueObject):
                     type=ErrorType.VALIDATION,
                 )
             )
-        return Result[Email].ok(cls(_PRIVATE_MARKER, value))
+        return Result[Email].ok(cls(PRIVATE_MARKER, value))
 
     def _equality_components(self) -> tuple[Any, ...]:
         return (self.value,)
