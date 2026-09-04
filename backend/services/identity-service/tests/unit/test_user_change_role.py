@@ -1,20 +1,18 @@
 from kernel_domain.errors import ErrorType
 
-from domain.email import Email
+from domain.entities.user import User
 from domain.events import RoleChanged
 from domain.role import Role
-from domain.user import User
-from domain.user_id import UserId
+from domain.value_objects.email import Email
 
 
 def _user(*, role: Role) -> User:
-    return User(
-        UserId.generate(),
-        email=Email("user@example.com"),
-        password_hash="some-hash",
-        role=role,
-        is_active=True,
-    )
+    user = User.register(Email.create("user@example.com").value, "some-hash").value
+    user.pull_events()
+    if role != Role.USER:
+        user.change_role(role)
+        user.pull_events()
+    return user
 
 
 def test_change_role_updates_the_role_and_pulls_a_role_changed_event() -> None:

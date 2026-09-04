@@ -16,7 +16,7 @@ from application.ports import (
     ProductQueryPort,
 )
 from application.queries.get_product import GetProductQuery, GetProductQueryHandler
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class GetProductImageQueryHandler:
         if result.is_err:
             raise ProductNotFoundError
         product = result.value
-        image = await self._repository.get_product_image(ProductId(product.id))
+        image = await self._repository.get_product_image(ProductId.create(product.id))
         if image is None:
             raise ProductImageNotFoundError
         return Result[ProductImageView].ok(

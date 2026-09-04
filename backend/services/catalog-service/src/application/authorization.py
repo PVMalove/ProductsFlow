@@ -3,7 +3,7 @@ from kernel_platform.security import ActorRole
 
 from application.errors import ProductAccessDeniedError
 from application.ports import Actor, IdentityGateway, IdentityUser
-from domain.product import Product
+from domain.entities.product import Product
 
 
 class ProductAuthorizer:

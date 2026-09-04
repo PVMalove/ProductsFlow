@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)

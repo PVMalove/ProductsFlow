@@ -10,11 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from application.pagination import decode_cursor
-from domain.ticket import (
+from domain.entities.ticket import (
     Ticket,
     TicketMessageImmutableError,
-    TicketStatus,
 )
+from domain.ticket_status import TicketStatus
 from infrastructure.db.entity_configurations.models import (
     TicketMessageModel,
     TicketModel,
@@ -41,16 +41,18 @@ async def test_ticket_and_outbox_are_persisted_together(
 ) -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="Message"
-    )
+    ).value
 
     await SqlTicketRepository(db_session).create(ticket)
 
-    stored_ticket = await db_session.get(TicketModel, ticket.id)
+    stored_ticket = await db_session.get(TicketModel, ticket.id.value)
     stored_message = await db_session.scalar(
-        select(TicketMessageModel).where(TicketMessageModel.ticket_id == ticket.id)
+        select(TicketMessageModel).where(
+            TicketMessageModel.ticket_id == ticket.id.value
+        )
     )
     outbox = await db_session.scalar(
-        select(OutboxMessage).where(OutboxMessage.aggregate_id == ticket.id)
+        select(OutboxMessage).where(OutboxMessage.aggregate_id == ticket.id.value)
     )
     assert stored_ticket is not None
     assert stored_message is not None
@@ -117,7 +119,7 @@ async def test_ticket_mutations_persist_messages_statuses_and_text_free_events(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
 
@@ -153,7 +155,7 @@ async def test_ticket_mutations_persist_messages_statuses_and_text_free_events(
         (
             await db_session.scalars(
                 select(OutboxMessage)
-                .where(OutboxMessage.aggregate_id == ticket.id)
+                .where(OutboxMessage.aggregate_id == ticket.id.value)
                 .order_by(OutboxMessage.id)
             )
         ).all()
@@ -175,7 +177,7 @@ async def test_non_owner_message_is_not_persisted(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
 
@@ -191,7 +193,7 @@ async def test_non_owner_message_is_not_persisted(
         (
             await db_session.scalars(
                 select(TicketMessageModel).where(
-                    TicketMessageModel.ticket_id == ticket.id
+                    TicketMessageModel.ticket_id == ticket.id.value
                 )
             )
         ).all()
@@ -205,7 +207,7 @@ async def test_concurrent_admin_messages_are_serialized(
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     async with session_factory() as session:
         uow = SqlSupportUnitOfWork(session)
         async with uow:
@@ -234,7 +236,7 @@ async def test_concurrent_admin_messages_are_serialized(
             (
                 await session.scalars(
                     select(TicketMessageModel).where(
-                        TicketMessageModel.ticket_id == ticket.id
+                        TicketMessageModel.ticket_id == ticket.id.value
                     )
                 )
             ).all()
@@ -252,7 +254,7 @@ async def test_message_edit_and_admin_moderation_are_transactional(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="Original message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     message_id = ticket.messages[0].id
@@ -275,7 +277,7 @@ async def test_message_edit_and_admin_moderation_are_transactional(
         (
             await db_session.scalars(
                 select(OutboxMessage)
-                .where(OutboxMessage.aggregate_id == ticket.id)
+                .where(OutboxMessage.aggregate_id == ticket.id.value)
                 .order_by(OutboxMessage.id)
             )
         ).all()
@@ -299,7 +301,7 @@ async def test_author_can_edit_and_soft_delete_their_own_message(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="Original message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     message_id = ticket.messages[0].id
@@ -332,7 +334,7 @@ async def test_admin_can_edit_their_own_message_in_a_foreign_ticket(
     admin_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     admin_message = await repository.add_message(
@@ -362,7 +364,7 @@ async def test_message_moderation_rejects_closed_and_system_messages(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     await repository.change_status(
@@ -385,12 +387,12 @@ async def test_message_moderation_rejects_closed_and_system_messages(
 
     system_ticket = Ticket.create(
         author_id=author_id, subject="System subject", first_message="First message"
-    )
+    ).value
     await repository.create(system_ticket)
     system_message_id = uuid.uuid4()
     system_message = TicketMessageModel(
         id=system_message_id,
-        ticket_id=system_ticket.id,
+        ticket_id=system_ticket.id.value,
         author_id=uuid.uuid4(),
         body="System message",
         created_at=datetime.now(UTC),

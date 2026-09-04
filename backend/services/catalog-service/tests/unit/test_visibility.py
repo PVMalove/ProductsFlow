@@ -1,7 +1,7 @@
 import uuid
 
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
+from domain.value_objects.product_id import ProductId
 from domain.viewer import Viewer
 from domain.visibility import ProductVisibilityPolicy
 
@@ -11,7 +11,7 @@ OTHER_ID = uuid.uuid4()
 
 def _product(*, is_active: bool) -> Product:
     result = Product.create(
-        ProductId.generate(),
+        ProductId.new_id(),
         name="Название товара",
         description="Описание",
         price=10.0,

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from api.main import app
 from core.settings import settings
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 from infrastructure.db import audit as _audit  # noqa: F401
 from infrastructure.db.session import get_db_session
 from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
@@ -113,7 +113,7 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
     )
     assert admin_registration.status_code == 201
     admin_id = UUID(admin_registration.json()["data"]["id"])
-    admin = await UserRepository(db_session).get_by_id(UserId(admin_id))
+    admin = await UserRepository(db_session).get_by_id(UserId.create(admin_id))
     assert admin is not None
     admin.role = Role.ADMIN
     uow = SqlIdentityUnitOfWork(db_session)

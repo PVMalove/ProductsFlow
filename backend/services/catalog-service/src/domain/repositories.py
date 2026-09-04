@@ -5,9 +5,9 @@ from typing import Protocol, runtime_checkable
 from kernel_domain.result import Result
 from kernel_platform.pagination import Cursor, PageInfo
 
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
 from domain.product_image import ProductImage
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)

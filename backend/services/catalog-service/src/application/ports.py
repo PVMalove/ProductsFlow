@@ -7,10 +7,10 @@ from typing import Protocol
 
 from kernel_domain.result import Result
 
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import Cursor, ProductPage
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)

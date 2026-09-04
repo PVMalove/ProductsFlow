@@ -6,15 +6,16 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketView
-from domain.ticket import TicketClosedError
+from domain.entities.ticket import TicketClosedError
 from domain.unit_of_work import SupportUnitOfWork
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
 class AddTicketMessageCommand:
     """DTO для добавления сообщения в тикет."""
 
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     actor_id: uuid.UUID
     body: str
     is_admin: bool = False

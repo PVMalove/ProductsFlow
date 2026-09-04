@@ -9,8 +9,8 @@ from observability.context import actor_id_var
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from application.ports import UserAuditAction
-from domain.email import Email
-from domain.user import User
+from domain.entities.user import User
+from domain.value_objects.email import Email
 from infrastructure.db.audit import SqlUserAuditReader
 from infrastructure.db.user_repository import SqlUserQueryRepository, UserRepository
 
@@ -29,7 +29,7 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
 
 
 async def _create_user(repository: UserRepository, email: str) -> User:
-    result = User.register(Email(email), "hashed-password")
+    result = User.register(Email.create(email).value, "hashed-password")
     assert result.is_ok
     await repository.add(result.value)
     return result.value

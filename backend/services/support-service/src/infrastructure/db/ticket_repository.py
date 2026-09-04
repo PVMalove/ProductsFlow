@@ -1,25 +1,53 @@
 import uuid
+from typing import NoReturn
 
 from kernel_domain.domain_event import DomainEvent
+from kernel_domain.errors import Error
 from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domain.entities.ticket import (
+    InvalidStatusTransitionError,
+    Ticket,
+    TicketClosedError,
+    TicketMessageAlreadyDeletedError,
+    TicketMessageImmutableError,
+    TicketMessageNotFoundError,
+)
+from domain.entities.ticket_message import TicketMessage
 from domain.events import (
     TicketMessageAdded,
     TicketMessageDeleted,
     TicketMessageEdited,
     TicketStatusChanged,
 )
-from domain.message import TicketMessage
 from domain.repositories import Cursor, MessagePage, PageInfo, TicketPage
-from domain.ticket import Ticket, TicketStatus
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 from infrastructure.db.entity_configurations.models import (
     ProcessedMessage,
     TicketMessageModel,
     TicketModel,
 )
+
+
+def _raise_for_error(error: Error) -> NoReturn:
+    """Трансляционный шов (issue #253): переводит `Result.fail` доменных
+    методов `Ticket` обратно в те же типизированные исключения, что они
+    бросали раньше напрямую, — внешний HTTP-контракт не меняется."""
+    if error.code == "ticket_closed":
+        raise TicketClosedError(error.description)
+    if error.code == "invalid_status_transition":
+        raise InvalidStatusTransitionError(error.description)
+    if error.code == "message_not_found":
+        raise TicketMessageNotFoundError(error.description)
+    if error.code == "message_immutable":
+        raise TicketMessageImmutableError(error.description)
+    if error.code == "message_already_deleted":
+        raise TicketMessageAlreadyDeletedError(error.description)
+    raise ValueError(error.description)
 
 
 class TicketRepository:
@@ -29,7 +57,7 @@ class TicketRepository:
     async def create(self, ticket: Ticket) -> Ticket:
         self._session.add(
             TicketModel(
-                id=ticket.id,
+                id=ticket.id.value,
                 author_id=ticket.author_id,
                 subject=ticket.subject,
                 status=ticket.status.value,
@@ -73,7 +101,7 @@ class TicketRepository:
                 (
                     await self._session.scalars(
                         select(TicketMessageModel).where(
-                            TicketMessageModel.ticket_id == ticket.id
+                            TicketMessageModel.ticket_id == ticket.id.value
                         )
                     )
                 ).all()
@@ -91,7 +119,7 @@ class TicketRepository:
     async def add_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         actor_id: uuid.UUID,
         body: str,
         is_admin: bool,
@@ -101,25 +129,31 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(row)
-        message = ticket.add_message(
+        result = ticket.add_message(
             author_id=actor_id,
             body=body,
             actor_category="admin" if is_admin else "user",
         )
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
         row.status = ticket.status.value
-        self._session.add(_to_message_model(message))
+        self._session.add(_to_message_model(result.value))
         await self._drain_outbox(ticket)
         return ticket
 
     async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None:
         row = await self._load_for_update(ticket_id)
         if row is None:
             return None
 
         ticket = await self._to_domain(row)
-        ticket.change_status(status, actor_category="admin")
+        result = ticket.change_status(status, actor_category="admin")
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
         row.status = ticket.status.value
         await self._drain_outbox(ticket)
         return ticket
@@ -127,7 +161,7 @@ class TicketRepository:
     async def edit_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         body: str,
@@ -141,20 +175,23 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(ticket_row)
-        message = ticket.edit_message(
+        result = ticket.edit_message(
             message_id=message_id,
             author_id=actor_id,
             body=body,
             actor_category="admin" if is_admin else "user",
         )
-        message_row.body = message.body
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
+        message_row.body = result.value.body
         await self._drain_outbox(ticket)
         return ticket
 
     async def delete_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         is_admin: bool,
@@ -167,28 +204,31 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(ticket_row)
-        message = ticket.delete_message(
+        result = ticket.delete_message(
             message_id=message_id,
             actor_id=actor_id,
             actor_category="admin" if is_admin else "user",
         )
-        message_row.body = message.body
-        message_row.is_deleted = message.is_deleted
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
+        message_row.body = result.value.body
+        message_row.is_deleted = result.value.is_deleted
         await self._drain_outbox(ticket)
         return ticket
 
     async def get_for_author(
-        self, ticket_id: uuid.UUID, author_id: uuid.UUID
+        self, ticket_id: TicketId, author_id: uuid.UUID
     ) -> Ticket | None:
         row = await self._session.scalar(
             select(TicketModel).where(
-                TicketModel.id == ticket_id, TicketModel.author_id == author_id
+                TicketModel.id == ticket_id.value, TicketModel.author_id == author_id
             )
         )
         return await self._to_domain(row) if row is not None else None
 
-    async def get_by_id(self, ticket_id: uuid.UUID) -> Ticket | None:
-        row = await self._session.get(TicketModel, ticket_id)
+    async def get_by_id(self, ticket_id: TicketId) -> Ticket | None:
+        row = await self._session.get(TicketModel, ticket_id.value)
         return await self._to_domain(row) if row is not None else None
 
     async def list_for_author(
@@ -220,13 +260,13 @@ class TicketRepository:
     async def list_messages(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         limit: int,
         after: Cursor | None = None,
         before: Cursor | None = None,
     ) -> MessagePage:
         stmt = select(TicketMessageModel).where(
-            TicketMessageModel.ticket_id == ticket_id
+            TicketMessageModel.ticket_id == ticket_id.value
         )
         if before is not None:
             stmt = stmt.where(
@@ -257,9 +297,9 @@ class TicketRepository:
 
         return MessagePage(
             [
-                TicketMessage(
+                TicketMessage.reconstitute(
                     id=row.id,
-                    ticket_id=row.ticket_id,
+                    ticket_id=TicketId.create(row.ticket_id),
                     author_id=row.author_id,
                     body=row.body,
                     created_at=row.created_at,
@@ -338,15 +378,15 @@ class TicketRepository:
                 )
             ).all()
         )
-        return Ticket(
-            row.id,
+        return Ticket.reconstitute(
+            TicketId.create(row.id),
             author_id=row.author_id,
             subject=row.subject,
             status=TicketStatus(row.status),
             messages=[
-                TicketMessage(
+                TicketMessage.reconstitute(
                     id=message.id,
-                    ticket_id=message.ticket_id,
+                    ticket_id=TicketId.create(message.ticket_id),
                     author_id=message.author_id,
                     body=message.body,
                     created_at=message.created_at,
@@ -358,18 +398,20 @@ class TicketRepository:
             created_at=row.created_at,
         )
 
-    async def _load_for_update(self, ticket_id: uuid.UUID) -> TicketModel | None:
+    async def _load_for_update(self, ticket_id: TicketId) -> TicketModel | None:
         statement = (
-            select(TicketModel).where(TicketModel.id == ticket_id).with_for_update()
+            select(TicketModel)
+            .where(TicketModel.id == ticket_id.value)
+            .with_for_update()
         )
         return await self._session.scalar(statement)
 
     async def _load_message(
-        self, ticket_id: uuid.UUID, message_id: uuid.UUID
+        self, ticket_id: TicketId, message_id: uuid.UUID
     ) -> TicketMessageModel | None:
         result = await self._session.scalars(
             select(TicketMessageModel).where(
-                TicketMessageModel.ticket_id == ticket_id,
+                TicketMessageModel.ticket_id == ticket_id.value,
                 TicketMessageModel.id == message_id,
             )
         )
@@ -386,30 +428,30 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
 
     if isinstance(event, TicketCreated):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "author_id": str(event.author_id),
         }
     elif isinstance(event, TicketMessageAdded):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketMessageEdited):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketMessageDeleted):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "message_id": str(event.message_id),
             "actor_category": event.actor_category,
         }
     elif isinstance(event, TicketStatusChanged):
         payload = {
-            "ticket_id": str(event.ticket_id),
+            "ticket_id": str(event.ticket_id.value),
             "previous_status": event.previous_status,
             "status": event.status,
             "actor_category": event.actor_category,
@@ -418,7 +460,7 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
         raise TypeError(f"unsupported ticket event: {type(event).__name__}")
     return OutboxMessage(
         aggregate_type="Ticket",
-        aggregate_id=event.ticket_id,
+        aggregate_id=event.ticket_id.value,
         event_type=event.event_type,
         payload=payload,
         occurred_at=event.occurred_on_utc,
@@ -431,7 +473,7 @@ SqlTicketRepository = TicketRepository
 def _to_message_model(message: TicketMessage) -> TicketMessageModel:
     return TicketMessageModel(
         id=message.id,
-        ticket_id=message.ticket_id,
+        ticket_id=message.ticket_id.value,
         author_id=message.author_id,
         body=message.body,
         created_at=message.created_at,

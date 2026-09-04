@@ -14,7 +14,9 @@ from application.commands import (
     EditTicketMessageCommandHandler,
 )
 from contracts.ticket import TicketView
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 
 
 class FakeMutationRepository:
@@ -22,17 +24,17 @@ class FakeMutationRepository:
         self.ticket = ticket
         self.message_calls: list[tuple[uuid.UUID, bool]] = []
         self.status_calls: list[tuple[uuid.UUID, TicketStatus]] = []
-        self.edit_calls: list[tuple[uuid.UUID, uuid.UUID, str, bool]] = []
-        self.delete_calls: list[tuple[uuid.UUID, uuid.UUID, bool]] = []
+        self.edit_calls: list[tuple[TicketId, uuid.UUID, str, bool]] = []
+        self.delete_calls: list[tuple[TicketId, uuid.UUID, bool]] = []
 
     async def add_message(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, body: str, is_admin: bool
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, body: str, is_admin: bool
     ) -> Ticket | None:
         self.message_calls.append((actor_id, is_admin))
         return self.ticket
 
     async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None:
         self.status_calls.append((actor_id, status))
         return self.ticket
@@ -40,7 +42,7 @@ class FakeMutationRepository:
     async def edit_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         body: str,
@@ -52,7 +54,7 @@ class FakeMutationRepository:
     async def delete_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         is_admin: bool,
@@ -65,7 +67,7 @@ class FakeMutationRepository:
 async def test_add_message_command_passes_actor_category_to_repository() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
@@ -89,7 +91,7 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
 async def test_change_status_command_passes_requested_status_to_repository() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
@@ -113,7 +115,7 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
 async def test_change_status_command_forbids_a_non_admin_actor() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
 
@@ -136,7 +138,7 @@ async def test_change_status_command_forbids_a_non_admin_actor() -> None:
 async def test_edit_message_command_passes_message_and_new_body() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id
@@ -162,7 +164,7 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
 async def test_delete_message_command_passes_admin_moderation_context() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id

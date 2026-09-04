@@ -5,7 +5,7 @@ from api.schemas import (
     TicketMessageCreateRequest,
     TicketStatusChangeRequest,
 )
-from domain.ticket import TicketStatus
+from domain.ticket_status import TicketStatus
 
 
 def test_ticket_create_request_trims_plaintext() -> None:

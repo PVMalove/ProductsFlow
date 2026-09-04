@@ -8,7 +8,7 @@ from api.dependencies import get_create_ticket_handler
 from api.main import app
 from application.commands import CreateTicketCommand
 from contracts.ticket import TicketDetailView
-from domain.ticket import Ticket
+from domain.entities.ticket import Ticket
 from infrastructure.security.auth import get_current_actor
 
 
@@ -45,7 +45,7 @@ def test_create_ticket_returns_created_resource() -> None:
                 author_id=command.author_id,
                 subject=command.subject,
                 first_message=command.first_message,
-            )
+            ).value
             return Result[TicketDetailView].ok(
                 TicketDetailView.from_domain(ticket, ticket.messages)
             )

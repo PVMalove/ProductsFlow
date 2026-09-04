@@ -10,9 +10,9 @@ from application.commands import (
     RegisterUserCommandHandler,
 )
 from core.settings import settings
-from domain.email import Email
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 from infrastructure.security.password_hasher import BcryptPasswordHasher
 
@@ -32,7 +32,13 @@ async def seed_admin_user(
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
         uow = SqlIdentityUnitOfWork(session)
-        email = Email(admin_email)
+        email_result = Email.create(admin_email)
+        if email_result.is_err:
+            raise RuntimeError(
+                f"identity-bootstrap: invalid admin email: "
+                f"{email_result.error.description}"
+            )
+        email = email_result.value
 
         existing = await uow.users.get_by_email(email)
         if existing is not None and existing.role == Role.ADMIN:
@@ -48,7 +54,7 @@ async def seed_admin_user(
                     f"identity-bootstrap: failed to register admin user: "
                     f"{register_result.error.description}"
                 )
-            target_user_id = UserId(register_result.value.id)
+            target_user_id = UserId.create(register_result.value.id)
         else:
             target_user_id = existing.id
 

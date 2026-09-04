@@ -5,8 +5,9 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from domain.message import TicketMessage
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.entities.ticket_message import TicketMessage
+from domain.ticket_status import TicketStatus
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class TicketView:
     @classmethod
     def from_domain(cls, ticket: Ticket) -> "TicketView":
         return cls(
-            id=ticket.id,
+            id=ticket.id.value,
             author_id=ticket.author_id,
             subject=ticket.subject,
             status=ticket.status,
@@ -66,7 +67,7 @@ class TicketDetailView:
         cls, ticket: Ticket, messages: list[TicketMessage]
     ) -> "TicketDetailView":
         return cls(
-            id=ticket.id,
+            id=ticket.id.value,
             author_id=ticket.author_id,
             subject=ticket.subject,
             status=ticket.status,

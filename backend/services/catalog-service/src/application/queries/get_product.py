@@ -15,7 +15,7 @@ from application.ports import (
     ProductQueryPort,
 )
 from contracts.product import ProductView
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 from domain.viewer import Viewer
 from domain.visibility import ProductVisibilityPolicy
 
@@ -71,7 +71,7 @@ class GetProductQueryHandler:
         @return — Транспортно-независимый контракт товара (Result[ProductView]).
         @raises ProductNotFoundError — если товар не найден или недоступен для текущего пользователя.
         """
-        product = await self._repository.get_by_id(ProductId(query.product_id))
+        product = await self._repository.get_by_id(ProductId.create(query.product_id))
         if product is None:
             raise ProductNotFoundError
 

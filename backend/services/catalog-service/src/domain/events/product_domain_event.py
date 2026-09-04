@@ -4,7 +4,7 @@ from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
 
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,8 +1,10 @@
+from typing import cast
+
+from kernel_domain import _PRIVATE_MARKER
 from kernel_domain.entity import Entity
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
-from domain.email import Email
 from domain.events.user_domain_event import (
     Activated,
     Deactivated,
@@ -11,7 +13,10 @@ from domain.events.user_domain_event import (
     UserRegistered,
 )
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
+
+_MISSING = object()
 
 
 class User(Entity[UserId]):
@@ -20,18 +25,23 @@ class User(Entity[UserId]):
     от вызывающего слоя (`PasswordHasher`-порт). Стойкость исходного пароля
     проверяется раньше, доменным VO `RawPassword`, не здесь — `password_hash`
     как таковой не несёт признаков, по которым эту стойкость можно было бы
-    осмысленно перепроверить."""
+    осмысленно перепроверить.
+
+    Конструктор вызывается только через `register()` (новый пользователь) или
+    `reconstitute()` (гидратация из БД) — маркер приватности проверяется
+    централизованно в `Entity.__init__`."""
 
     def __init__(
         self,
-        id: UserId,
+        marker: object = _MISSING,
+        id: UserId = cast("UserId", _MISSING),
         *,
         email: Email,
         password_hash: str,
         role: Role,
         is_active: bool,
     ) -> None:
-        super().__init__(id)
+        super().__init__(marker, id=id)
         self.email = email
         self.password_hash = password_hash
         self.role = role
@@ -40,7 +50,8 @@ class User(Entity[UserId]):
     @classmethod
     def register(cls, email: Email, password_hash: str) -> Result["User"]:
         user = cls(
-            UserId.generate(),
+            _PRIVATE_MARKER,
+            UserId.new_id(),
             email=email,
             password_hash=password_hash,
             role=Role.USER,
@@ -48,6 +59,25 @@ class User(Entity[UserId]):
         )
         user.add_domain_event(UserRegistered(user_id=user.id, email=email))
         return Result[User].ok(user)
+
+    @classmethod
+    def reconstitute(
+        cls,
+        id: UserId,
+        *,
+        email: Email,
+        password_hash: str,
+        role: Role,
+        is_active: bool,
+    ) -> "User":
+        return cls(
+            _PRIVATE_MARKER,
+            id,
+            email=email,
+            password_hash=password_hash,
+            role=role,
+            is_active=is_active,
+        )
 
     def change_password(self, new_password_hash: str) -> Result[None]:
         if not self.is_active:

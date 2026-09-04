@@ -1,25 +1,30 @@
+import pytest
 from kernel_domain.errors import ErrorType
 
-from domain.raw_password import RawPassword
+from domain.value_objects.raw_password import RawPassword
+
+
+def _password(value: str) -> RawPassword:
+    return RawPassword.create(value).value
 
 
 def test_raw_passwords_with_the_same_value_are_equal() -> None:
-    assert RawPassword("password1") == RawPassword("password1")
+    assert _password("password1") == _password("password1")
 
 
 def test_raw_passwords_with_the_same_value_hash_the_same() -> None:
-    assert hash(RawPassword("password1")) == hash(RawPassword("password1"))
+    assert hash(_password("password1")) == hash(_password("password1"))
 
 
 def test_raw_passwords_with_different_values_are_not_equal() -> None:
-    assert RawPassword("password1") != RawPassword("password2")
+    assert _password("password1") != _password("password2")
 
 
 def test_create_succeeds_with_a_strong_password() -> None:
     result = RawPassword.create("password1")
 
     assert result.is_ok
-    assert result.value == RawPassword("password1")
+    assert result.value == _password("password1")
 
 
 def test_create_rejects_a_password_shorter_than_eight_characters() -> None:
@@ -44,3 +49,8 @@ def test_create_rejects_a_password_without_a_digit() -> None:
     assert result.is_err
     assert result.error.type == ErrorType.VALIDATION
     assert result.error.code == "password_missing_digit"
+
+
+def test_direct_construction_raises_runtime_error() -> None:
+    with pytest.raises(RuntimeError):
+        RawPassword("password1")

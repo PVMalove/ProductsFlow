@@ -5,7 +5,7 @@ from application.commands.activate_user import (
 from application.ports import UserReadModel
 from application.queries.get_user import GetUserQuery, GetUserQueryHandler
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
@@ -36,7 +36,7 @@ async def test_get_user_query_reads_through_a_read_handler() -> None:
     )
 
     result = await GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
-        GetUserQuery(UserId(registered.value.id))
+        GetUserQuery(UserId.create(registered.value.id))
     )
 
     assert result.is_ok
@@ -50,7 +50,7 @@ async def test_get_user_query_returns_not_found_without_mutating_the_repository(
     repository = FakeUserRepository()
 
     result = await GetUserQueryHandler(ReadOnlyUserProjection(repository)).execute(
-        GetUserQuery(UserId.generate())
+        GetUserQuery(UserId.new_id())
     )
 
     assert result.is_err

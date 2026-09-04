@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketDetailView
-from domain.ticket import Ticket
+from domain.entities.ticket import Ticket
 from domain.unit_of_work import SupportUnitOfWork
 
 
@@ -25,13 +25,16 @@ class CreateTicketCommandHandler:
         self._uow = uow
 
     async def execute(self, command: CreateTicketCommand) -> Result[TicketDetailView]:
-        ticket = Ticket.create(
+        result = Ticket.create(
             author_id=command.author_id,
             subject=command.subject,
             first_message=command.first_message,
         )
+        if result.is_err:
+            return Result[TicketDetailView].fail(result.error)
+
         async with self._uow:
-            created = await self._uow.tickets.create(ticket)
+            created = await self._uow.tickets.create(result.value)
             await self._uow.commit()
         return Result[TicketDetailView].ok(
             TicketDetailView.from_domain(created, created.messages)

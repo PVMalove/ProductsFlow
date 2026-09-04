@@ -1,27 +1,38 @@
 import pytest
 
-from domain.email import Email
+from domain.value_objects.email import Email
+
+
+def _email(value: str) -> Email:
+    return Email.create(value).value
 
 
 def test_emails_with_the_same_value_are_equal() -> None:
-    assert Email("user@example.com") == Email("user@example.com")
+    assert _email("user@example.com") == _email("user@example.com")
 
 
 def test_emails_with_the_same_value_hash_the_same() -> None:
-    assert hash(Email("user@example.com")) == hash(Email("user@example.com"))
+    assert hash(_email("user@example.com")) == hash(_email("user@example.com"))
 
 
 def test_emails_with_different_values_are_not_equal() -> None:
-    assert Email("a@example.com") != Email("b@example.com")
+    assert _email("a@example.com") != _email("b@example.com")
 
 
 def test_an_email_is_not_equal_to_a_bare_string() -> None:
-    assert Email("user@example.com") != "user@example.com"
+    assert _email("user@example.com") != "user@example.com"
 
 
 @pytest.mark.parametrize(
     "value", ["not-an-email", "missing-domain@", "@missing-local.com", ""]
 )
 def test_an_invalid_email_is_rejected(value: str) -> None:
-    with pytest.raises(ValueError):
-        Email(value)
+    result = Email.create(value)
+
+    assert result.is_err
+    assert result.error.code == "invalid_email"
+
+
+def test_direct_construction_raises_runtime_error() -> None:
+    with pytest.raises(RuntimeError):
+        Email("user@example.com")

@@ -4,8 +4,8 @@ from api.schemas import ProductCreateRequest
 from application.commands import CreateProductCommand
 from application.ports import Actor
 from contracts.product import ProductView
-from domain.product import Product
-from domain.product_id import ProductId
+from domain.entities.product import Product
+from domain.value_objects.product_id import ProductId
 
 
 def test_product_create_request_to_command_carries_the_actor_and_body_fields() -> None:
@@ -28,7 +28,7 @@ def test_product_create_request_to_command_carries_the_actor_and_body_fields() -
 def test_product_view_from_domain_mirrors_the_product_fields() -> None:
     user_id = uuid.uuid4()
     result = Product.create(
-        ProductId.generate(),
+        ProductId.new_id(),
         name="Товар",
         description="Описание",
         price=9.99,
