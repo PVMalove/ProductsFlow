@@ -8,6 +8,7 @@ from kernel_domain.result import Result
 from domain.events.user_domain_event import (
     Activated,
     Deactivated,
+    Deleted,
     PasswordChanged,
     RoleChanged,
     UserRegistered,
@@ -40,12 +41,14 @@ class User(Entity[UserId]):
         password_hash: str,
         role: Role,
         is_active: bool,
+        is_deleted: bool = False,
     ) -> None:
         super().__init__(marker, id=id)
         self.email = email
         self.password_hash = password_hash
         self.role = role
         self.is_active = is_active
+        self.is_deleted = is_deleted
 
     @classmethod
     def register(cls, email: Email, password_hash: str) -> Result["User"]:
@@ -69,6 +72,7 @@ class User(Entity[UserId]):
         password_hash: str,
         role: Role,
         is_active: bool,
+        is_deleted: bool = False,
     ) -> "User":
         return cls(
             _PRIVATE_MARKER,
@@ -77,6 +81,7 @@ class User(Entity[UserId]):
             password_hash=password_hash,
             role=role,
             is_active=is_active,
+            is_deleted=is_deleted,
         )
 
     def change_password(self, new_password_hash: str) -> Result[None]:
@@ -108,6 +113,14 @@ class User(Entity[UserId]):
         return Result[None].ok(None)
 
     def activate(self) -> Result[None]:
+        if self.is_deleted:
+            return Result[None].fail(
+                Error(
+                    code="user_deleted",
+                    description="Удалённая учётная запись не может быть активирована",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
         if self.is_active:
             return Result[None].fail(
                 Error(
@@ -119,6 +132,29 @@ class User(Entity[UserId]):
 
         self.is_active = True
         self.add_domain_event(Activated(user_id=self.id))
+        return Result[None].ok(None)
+
+    def delete(self) -> Result[None]:
+        """Replace this account with an anonymized, terminal tombstone
+        (ADR 0035). The old email frees up for a fresh registration —
+        deletion is a legal identity-domain outcome, not a masked
+        deactivation — while `is_deleted` blocks reactivation forever."""
+        if self.is_deleted:
+            return Result[None].fail(
+                Error(
+                    code="already_deleted",
+                    description="Учётная запись уже удалена",
+                    type=ErrorType.CONFLICT,
+                )
+            )
+
+        anonymized_email = Email.create(f"deleted-{self.id.value}@tombstone.invalid")
+        assert anonymized_email.is_ok, "generated tombstone email must be valid"
+        self.email = anonymized_email.value
+        self.password_hash = "!deleted-account!"
+        self.is_active = False
+        self.is_deleted = True
+        self.add_domain_event(Deleted(user_id=self.id))
         return Result[None].ok(None)
 
     def change_role(self, role: Role) -> Result[None]:

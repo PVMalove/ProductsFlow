@@ -43,6 +43,11 @@ class Deactivated(UserEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Deleted(UserEvent):
+    event_type: str = "user.deleted.v1"
+
+
+@dataclass(frozen=True, kw_only=True)
 class Activated(UserEvent):
     event_type: str = "user.activated.v1"
 

@@ -194,6 +194,18 @@ async def test_support_http_flow_covers_tickets_and_actor_states(
     assert forbidden_admin_route.status_code == 403
     assert forbidden_admin_route.json()["error"]["code"] == "FORBIDDEN"
 
+    admin_detail = await client.get(
+        f"/api/v1/tickets/admin/{ticket_id}", headers=admin_headers
+    )
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["data"]["id"] == ticket_id
+
+    forbidden_admin_detail = await client.get(
+        f"/api/v1/tickets/admin/{ticket_id}", headers=user_headers
+    )
+    assert forbidden_admin_detail.status_code == 403
+    assert forbidden_admin_detail.json()["error"]["code"] == "FORBIDDEN"
+
     row = await db_session.get(UserProjectionRow, user_id)
     assert row is not None
     row.is_active = False

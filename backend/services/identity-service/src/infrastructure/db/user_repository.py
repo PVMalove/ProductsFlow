@@ -33,6 +33,7 @@ def _to_domain(row: UserModel) -> User:
         password_hash=row.password_hash,
         role=Role(row.role),
         is_active=row.is_active,
+        is_deleted=row.is_deleted,
     )
 
 
@@ -71,6 +72,7 @@ class UserRepository:
         row.password_hash = user.password_hash
         row.role = user.role.value
         row.is_active = user.is_active
+        row.is_deleted = user.is_deleted
         await drain_events_to_outbox(self.session, user)
 
 
@@ -81,6 +83,7 @@ def _to_model(user: User) -> UserModel:
         password_hash=user.password_hash,
         role=user.role.value,
         is_active=user.is_active,
+        is_deleted=user.is_deleted,
     )
 
 

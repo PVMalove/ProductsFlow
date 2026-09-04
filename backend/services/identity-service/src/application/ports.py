@@ -56,6 +56,7 @@ class UserAuditAction(enum.StrEnum):
     ACTIVATED = "activated"
     DEACTIVATED = "deactivated"
     ROLE_CHANGED = "role_changed"
+    DELETED = "deleted"
 
 
 @dataclass(frozen=True)
