@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketDetailView
-from domain.ticket import Ticket
+from domain.entities.ticket import Ticket
 from domain.unit_of_work import SupportUnitOfWork
 
 

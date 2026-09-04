@@ -6,18 +6,19 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketView
-from domain.ticket import (
+from domain.entities.ticket import (
     TicketClosedError,
     TicketMessageAlreadyDeletedError,
     TicketMessageImmutableError,
     TicketMessageNotFoundError,
 )
 from domain.unit_of_work import SupportUnitOfWork
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
 class EditTicketMessageCommand:
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     message_id: uuid.UUID
     actor_id: uuid.UUID
     body: str

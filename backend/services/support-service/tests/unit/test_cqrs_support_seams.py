@@ -16,9 +16,10 @@ from application.queries import (
     ListTicketsQueryHandler,
 )
 from contracts.ticket import TicketDetailView
+from domain.entities.ticket import Ticket
 from domain.repositories import MessagePage, PageInfo, TicketPage
-from domain.ticket import Ticket
 from domain.unit_of_work import SupportUnitOfWork
+from domain.value_objects.ticket_id import TicketId
 
 
 class FakeTicketRepository:
@@ -33,13 +34,13 @@ class FakeTicketRepository:
         return ticket
 
     async def get_for_author(
-        self, ticket_id: uuid.UUID, author_id: uuid.UUID
+        self, ticket_id: TicketId, author_id: uuid.UUID
     ) -> Ticket | None:
         if self.ticket is not None and self.ticket.id == ticket_id:
             return self.ticket if self.ticket.author_id == author_id else None
         return None
 
-    async def get_by_id(self, ticket_id: uuid.UUID) -> Ticket | None:
+    async def get_by_id(self, ticket_id: TicketId) -> Ticket | None:
         return (
             self.ticket
             if self.ticket is not None and self.ticket.id == ticket_id
@@ -68,7 +69,7 @@ class FakeTicketRepository:
     async def list_messages(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         limit: int,
         after: object = None,
         before: object = None,

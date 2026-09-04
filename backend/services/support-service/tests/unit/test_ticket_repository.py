@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
 
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 from infrastructure.db.entity_configurations.models import (
     TicketMessageModel,
     TicketModel,
@@ -86,7 +88,7 @@ async def test_add_message_writes_only_technical_outbox_data_without_committing(
     session = MutationSession(row, first_message)
 
     result = await SqlTicketRepository(session).add_message(  # type: ignore[arg-type]
-        ticket_id=row.id,
+        ticket_id=TicketId.create(row.id),
         actor_id=uuid.uuid4(),
         body="Reply text",
         is_admin=True,
@@ -107,7 +109,7 @@ async def test_edit_message_updates_body_and_writes_technical_outbox_event() -> 
     session = MutationSession(row, message)
 
     result = await SqlTicketRepository(session).edit_message(  # type: ignore[arg-type]
-        ticket_id=row.id,
+        ticket_id=TicketId.create(row.id),
         message_id=message.id,
         actor_id=author_id,
         body="Corrected text",
@@ -128,7 +130,7 @@ async def test_admin_delete_soft_deletes_message_and_writes_technical_event() ->
     session = MutationSession(row, message)
 
     result = await SqlTicketRepository(session).delete_message(  # type: ignore[arg-type]
-        ticket_id=row.id,
+        ticket_id=TicketId.create(row.id),
         message_id=message.id,
         actor_id=uuid.uuid4(),
         is_admin=True,
@@ -150,7 +152,7 @@ async def test_editing_message_on_another_ticket_owner_is_hidden() -> None:
     session = MutationSession(row, message)
 
     result = await SqlTicketRepository(session).edit_message(  # type: ignore[arg-type]
-        ticket_id=row.id,
+        ticket_id=TicketId.create(row.id),
         message_id=message.id,
         actor_id=uuid.uuid4(),
         body="Should not be visible",
@@ -169,7 +171,7 @@ async def test_rejected_status_change_raises_without_mutating_session() -> None:
 
     with pytest.raises(ValueError):
         await SqlTicketRepository(session).change_status(  # type: ignore[arg-type]
-            ticket_id=row.id,
+            ticket_id=TicketId.create(row.id),
             actor_id=uuid.uuid4(),
             status=TicketStatus.RESOLVED,
         )

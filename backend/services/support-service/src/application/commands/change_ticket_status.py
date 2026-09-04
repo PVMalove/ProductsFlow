@@ -6,19 +6,20 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketView
-from domain.ticket import (
+from domain.entities.ticket import (
     InvalidStatusTransitionError,
     TicketClosedError,
-    TicketStatus,
 )
+from domain.ticket_status import TicketStatus
 from domain.unit_of_work import SupportUnitOfWork
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
 class ChangeTicketStatusCommand:
     """DTO для изменения статуса тикета."""
 
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     actor_id: uuid.UUID
     status: TicketStatus
     is_admin: bool = False

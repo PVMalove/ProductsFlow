@@ -16,7 +16,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from api.worker import build_user_event_handler
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.ticket_status import TicketStatus
 from infrastructure.db.entity_configurations.models import (
     ProcessedMessage,
     TicketMessageModel,
@@ -97,12 +98,12 @@ async def test_user_deletion_is_atomic_and_idempotent(
     await handler(message)  # type: ignore[arg-type]
 
     async with session_factory() as session:
-        stored_ticket = await session.get(TicketModel, ticket.id)
+        stored_ticket = await session.get(TicketModel, ticket.id.value)
         messages = list(
             (
                 await session.scalars(
                     select(TicketMessageModel)
-                    .where(TicketMessageModel.ticket_id == ticket.id)
+                    .where(TicketMessageModel.ticket_id == ticket.id.value)
                     .order_by(TicketMessageModel.created_at, TicketMessageModel.id)
                 )
             ).all()
@@ -111,7 +112,7 @@ async def test_user_deletion_is_atomic_and_idempotent(
             (
                 await session.scalars(
                     select(OutboxMessage)
-                    .where(OutboxMessage.aggregate_id == ticket.id)
+                    .where(OutboxMessage.aggregate_id == ticket.id.value)
                     .order_by(OutboxMessage.id)
                 )
             ).all()
@@ -171,7 +172,7 @@ async def test_rabbitmq_contract_consumes_support_queue_idempotently(
             select(func.count())
             .select_from(TicketMessageModel)
             .where(
-                TicketMessageModel.ticket_id == ticket.id,
+                TicketMessageModel.ticket_id == ticket.id.value,
                 TicketMessageModel.is_system.is_(True),
             )
         )
@@ -220,12 +221,12 @@ async def test_user_deletion_serializes_with_concurrent_ticket_message(
     await asyncio.gather(delete_user(), append_message())
 
     async with session_factory() as session:
-        stored_ticket = await session.get(TicketModel, ticket.id)
+        stored_ticket = await session.get(TicketModel, ticket.id.value)
         messages = list(
             (
                 await session.scalars(
                     select(TicketMessageModel).where(
-                        TicketMessageModel.ticket_id == ticket.id
+                        TicketMessageModel.ticket_id == ticket.id.value
                     )
                 )
             ).all()
@@ -285,12 +286,12 @@ async def test_transaction_failure_rolls_back_inbox_and_retry_completes(
     await _wait_for_processed(session_factory, 9004)
 
     async with session_factory() as session:
-        stored_ticket = await session.get(TicketModel, ticket.id)
+        stored_ticket = await session.get(TicketModel, ticket.id.value)
         system_count = await session.scalar(
             select(func.count())
             .select_from(TicketMessageModel)
             .where(
-                TicketMessageModel.ticket_id == ticket.id,
+                TicketMessageModel.ticket_id == ticket.id.value,
                 TicketMessageModel.is_system.is_(True),
             )
         )

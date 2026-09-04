@@ -1,18 +1,18 @@
 # ruff: noqa: E501
 """List-ticket-messages query and handler."""
 
-import uuid
 from dataclasses import dataclass
 
 from application.ports import TicketQueryPort
 from domain.repositories import Cursor, MessagePage
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
 class ListTicketMessagesQuery:
     """DTO для получения сообщений тикета."""
 
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     limit: int
     after: Cursor | None = None
     before: Cursor | None = None

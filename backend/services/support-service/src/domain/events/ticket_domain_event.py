@@ -4,19 +4,21 @@ from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
 
+from domain.value_objects.ticket_id import TicketId
+
 
 @dataclass(frozen=True, kw_only=True)
 class TicketEvent(DomainEvent):
     """Общий контракт событий агрегата Ticket для transactional outbox."""
 
     aggregate_type: str = "Ticket"
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
 
     def aggregate_id(self) -> uuid.UUID:
-        return self.ticket_id
+        return self.ticket_id.value
 
     def to_payload(self) -> dict[str, Any]:
-        return {"ticket_id": str(self.ticket_id)}
+        return {"ticket_id": str(self.ticket_id.value)}
 
 
 @dataclass(frozen=True, kw_only=True)

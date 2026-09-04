@@ -28,8 +28,9 @@ from application.queries import (
     TicketDetail,
 )
 from contracts.ticket import TicketDetailView, TicketView
+from domain.entities.ticket import Ticket
 from domain.repositories import PageInfo, TicketPage
-from domain.ticket import Ticket, TicketStatus
+from domain.ticket_status import TicketStatus
 from infrastructure.security.auth import get_current_actor
 
 
@@ -100,7 +101,7 @@ def test_ticket_detail_reads_messages_through_one_combined_query() -> None:
     app.dependency_overrides[get_ticket_detail_handler] = lambda: FakeHandler()
     try:
         with TestClient(app) as client:
-            response = client.get(f"/api/v1/tickets/{ticket.id}")
+            response = client.get(f"/api/v1/tickets/{ticket.id.value}")
     finally:
         app.dependency_overrides.clear()
 
@@ -176,7 +177,7 @@ def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
     try:
         with TestClient(app) as client:
             response = client.post(
-                f"/api/v1/tickets/{ticket.id}/messages", json={"body": "Reply"}
+                f"/api/v1/tickets/{ticket.id.value}/messages", json={"body": "Reply"}
             )
     finally:
         app.dependency_overrides.clear()
@@ -206,7 +207,7 @@ def test_admin_status_endpoint_passes_status_command() -> None:
     try:
         with TestClient(app) as client:
             response = client.patch(
-                f"/api/v1/tickets/{ticket.id}/status",
+                f"/api/v1/tickets/{ticket.id.value}/status",
                 json={"status": "IN_PROGRESS"},
             )
     finally:
@@ -238,7 +239,7 @@ def test_non_admin_status_change_is_forbidden() -> None:
     try:
         with TestClient(app) as client:
             response = client.patch(
-                f"/api/v1/tickets/{ticket.id}/status",
+                f"/api/v1/tickets/{ticket.id.value}/status",
                 json={"status": "IN_PROGRESS"},
             )
     finally:
@@ -269,7 +270,7 @@ def test_ticket_message_edit_endpoint_passes_message_command() -> None:
     try:
         with TestClient(app) as client:
             response = client.patch(
-                f"/api/v1/tickets/{ticket.id}/messages/{message_id}",
+                f"/api/v1/tickets/{ticket.id.value}/messages/{message_id}",
                 json={"body": "Corrected"},
             )
     finally:
@@ -298,7 +299,7 @@ def test_ticket_message_delete_endpoint_returns_null_data() -> None:
     try:
         with TestClient(app) as client:
             response = client.delete(
-                f"/api/v1/tickets/{ticket.id}/messages/{message_id}"
+                f"/api/v1/tickets/{ticket.id.value}/messages/{message_id}"
             )
     finally:
         app.dependency_overrides.clear()
@@ -329,7 +330,7 @@ def test_ticket_message_edit_maps_a_closed_ticket_to_conflict() -> None:
     try:
         with TestClient(app) as client:
             response = client.patch(
-                f"/api/v1/tickets/{ticket.id}/messages/{message_id}",
+                f"/api/v1/tickets/{ticket.id.value}/messages/{message_id}",
                 json={"body": "Corrected"},
             )
     finally:

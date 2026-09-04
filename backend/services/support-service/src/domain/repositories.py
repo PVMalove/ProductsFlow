@@ -3,8 +3,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from domain.message import TicketMessage
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.entities.ticket_message import TicketMessage
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 
 
 class TicketRepository(Protocol):
@@ -21,20 +23,20 @@ class TicketRepository(Protocol):
     async def add_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         actor_id: uuid.UUID,
         body: str,
         is_admin: bool,
     ) -> Ticket | None: ...
 
     async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None: ...
 
     async def edit_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         body: str,
@@ -44,17 +46,17 @@ class TicketRepository(Protocol):
     async def delete_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         is_admin: bool,
     ) -> Ticket | None: ...
 
     async def get_for_author(
-        self, ticket_id: uuid.UUID, author_id: uuid.UUID
+        self, ticket_id: TicketId, author_id: uuid.UUID
     ) -> Ticket | None: ...
 
-    async def get_by_id(self, ticket_id: uuid.UUID) -> Ticket | None: ...
+    async def get_by_id(self, ticket_id: TicketId) -> Ticket | None: ...
 
     async def list_for_author(
         self,
@@ -76,7 +78,7 @@ class TicketRepository(Protocol):
     async def list_messages(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         limit: int,
         after: "Cursor | None" = None,
         before: "Cursor | None" = None,

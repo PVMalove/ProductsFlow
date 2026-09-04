@@ -8,7 +8,7 @@ from api.dependencies import get_create_ticket_handler
 from api.main import app
 from application.commands import CreateTicketCommand
 from contracts.ticket import TicketDetailView
-from domain.ticket import Ticket
+from domain.entities.ticket import Ticket
 from infrastructure.security.auth import get_current_actor
 
 

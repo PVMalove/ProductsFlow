@@ -27,7 +27,8 @@ from application.queries import (
     ListAdminTicketsQuery,
     ListTicketsQuery,
 )
-from domain.ticket import TicketStatus
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 
 
 def _is_admin(actor: Actor) -> bool:
@@ -106,7 +107,7 @@ class TicketDetailRequest(BaseModel):
     def to_query(self, *, actor: Actor) -> GetTicketDetailQuery:
         after_cursor, before_cursor = _decode_cursors(self.after, self.before)
         return GetTicketDetailQuery(
-            ticket_id=self.ticket_id,
+            ticket_id=TicketId.create(self.ticket_id),
             actor_id=actor.id,
             is_admin=_is_admin(actor),
             limit=self.limit,
@@ -127,7 +128,7 @@ class TicketMessageCreateRequest(BaseModel):
         self, *, ticket_id: uuid.UUID, actor: Actor
     ) -> AddTicketMessageCommand:
         return AddTicketMessageCommand(
-            ticket_id=ticket_id,
+            ticket_id=TicketId.create(ticket_id),
             actor_id=actor.id,
             body=self.body,
             is_admin=_is_admin(actor),
@@ -137,7 +138,7 @@ class TicketMessageCreateRequest(BaseModel):
         self, *, ticket_id: uuid.UUID, message_id: uuid.UUID, actor: Actor
     ) -> EditTicketMessageCommand:
         return EditTicketMessageCommand(
-            ticket_id=ticket_id,
+            ticket_id=TicketId.create(ticket_id),
             message_id=message_id,
             actor_id=actor.id,
             body=self.body,
@@ -152,7 +153,7 @@ class TicketStatusChangeRequest(BaseModel):
         self, *, ticket_id: uuid.UUID, actor: Actor
     ) -> ChangeTicketStatusCommand:
         return ChangeTicketStatusCommand(
-            ticket_id=ticket_id,
+            ticket_id=TicketId.create(ticket_id),
             actor_id=actor.id,
             status=self.status,
             is_admin=_is_admin(actor),
@@ -167,7 +168,7 @@ class TicketMessageDeleteRequest(BaseModel):
 
     def to_command(self, *, actor: Actor) -> DeleteTicketMessageCommand:
         return DeleteTicketMessageCommand(
-            ticket_id=self.ticket_id,
+            ticket_id=TicketId.create(self.ticket_id),
             message_id=self.message_id,
             actor_id=actor.id,
             is_admin=_is_admin(actor),

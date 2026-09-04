@@ -12,11 +12,12 @@ from kernel_domain.result import Result
 from application.ports import TicketQueryPort
 from contracts.ticket import TicketDetailView
 from domain.repositories import Cursor, PageInfo
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
 class GetTicketDetailQuery:
-    ticket_id: uuid.UUID
+    ticket_id: TicketId
     actor_id: uuid.UUID
     is_admin: bool
     limit: int

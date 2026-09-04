@@ -5,8 +5,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
+from domain.entities.ticket import Ticket
 from domain.repositories import Cursor, MessagePage, TicketPage
-from domain.ticket import Ticket
+from domain.value_objects.ticket_id import TicketId
 
 
 @dataclass(frozen=True)
@@ -30,10 +31,10 @@ class TicketQueryPort(Protocol):
     """Read-only persistence operations used by query handlers."""
 
     async def get_for_author(
-        self, ticket_id: uuid.UUID, author_id: uuid.UUID
+        self, ticket_id: TicketId, author_id: uuid.UUID
     ) -> Ticket | None: ...
 
-    async def get_by_id(self, ticket_id: uuid.UUID) -> Ticket | None: ...
+    async def get_by_id(self, ticket_id: TicketId) -> Ticket | None: ...
 
     async def list_for_author(
         self,
@@ -55,7 +56,7 @@ class TicketQueryPort(Protocol):
     async def list_messages(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         limit: int,
         after: Cursor | None = None,
         before: Cursor | None = None,

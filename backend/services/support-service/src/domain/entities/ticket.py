@@ -1,18 +1,24 @@
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+from typing import cast
 
+from kernel_domain import _PRIVATE_MARKER
 from kernel_domain.entity import Entity
 
+from domain.entities.ticket_message import TicketMessage, validate_plaintext
 from domain.events.ticket_domain_event import (
     TicketCreated,
     TicketMessageAdded,
+    TicketMessageDeleted,
+    TicketMessageEdited,
     TicketStatusChanged,
 )
-from domain.message import DELETED_MESSAGE_MARKER, TicketMessage, validate_plaintext
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 
 USER_DELETED_MESSAGE = "[Пользователь удалён]"
+
+_MISSING = object()
 
 
 class TicketClosedError(ValueError):
@@ -35,13 +41,6 @@ class TicketMessageAlreadyDeletedError(ValueError):
     """Raised when a deleted message is mutated again."""
 
 
-class TicketStatus(StrEnum):
-    OPEN = "OPEN"
-    IN_PROGRESS = "IN_PROGRESS"
-    RESOLVED = "RESOLVED"
-    CLOSED = "CLOSED"
-
-
 _NEXT_STATUS = {
     TicketStatus.OPEN: TicketStatus.IN_PROGRESS,
     TicketStatus.IN_PROGRESS: TicketStatus.RESOLVED,
@@ -49,17 +48,19 @@ _NEXT_STATUS = {
 }
 
 
-@dataclass(slots=True)
-class Ticket(Entity[uuid.UUID]):
-    author_id: uuid.UUID | None
-    subject: str
-    status: TicketStatus
-    messages: list[TicketMessage]
-    created_at: datetime
+class Ticket(Entity[TicketId]):
+    """Агрегат Тикета поддержки (issue #252). Дочерние `TicketMessage`
+    мутируются через собственные `edit()`/`delete()` — `Ticket` разворачивает
+    их `Result.fail` в те же исключения, что бросал раньше напрямую.
+
+    Конструктор вызывается только через `create()` (новый тикет) или
+    `reconstitute()` (гидратация из БД) — маркер приватности проверяется
+    централизованно в `Entity.__init__`."""
 
     def __init__(
         self,
-        id: uuid.UUID,
+        marker: object = _MISSING,
+        id: TicketId = cast("TicketId", _MISSING),
         *,
         author_id: uuid.UUID | None,
         subject: str,
@@ -67,7 +68,7 @@ class Ticket(Entity[uuid.UUID]):
         messages: list[TicketMessage] | None = None,
         created_at: datetime | None = None,
     ) -> None:
-        Entity.__init__(self, id)
+        super().__init__(marker, id=id)
         self.author_id = author_id
         self.subject = validate_plaintext(subject, field_name="subject", maximum=200)
         self.status = status
@@ -85,25 +86,44 @@ class Ticket(Entity[uuid.UUID]):
     def create(
         cls, *, author_id: uuid.UUID, subject: str, first_message: str
     ) -> "Ticket":
-        ticket_id = uuid.uuid4()
-        ticket = object.__new__(cls)
-        Entity.__init__(ticket, ticket_id)
-        ticket.author_id = author_id
-        ticket.subject = validate_plaintext(subject, field_name="subject", maximum=200)
-        ticket.status = TicketStatus.OPEN
-        ticket.messages = [
-            TicketMessage(
-                id=uuid.uuid4(),
-                ticket_id=ticket_id,
-                author_id=author_id,
-                body=validate_plaintext(
-                    first_message, field_name="first_message", maximum=10_000
-                ),
-            )
-        ]
-        ticket.created_at = ticket.messages[0].created_at
+        ticket_id = TicketId.new_id()
+        message = TicketMessage.create(
+            id=uuid.uuid4(),
+            ticket_id=ticket_id,
+            author_id=author_id,
+            body=first_message,
+        )
+        ticket = cls(
+            _PRIVATE_MARKER,
+            ticket_id,
+            author_id=author_id,
+            subject=subject,
+            status=TicketStatus.OPEN,
+            messages=[message],
+        )
         ticket.add_domain_event(TicketCreated(ticket_id=ticket_id, author_id=author_id))
         return ticket
+
+    @classmethod
+    def reconstitute(
+        cls,
+        id: TicketId,
+        *,
+        author_id: uuid.UUID | None,
+        subject: str,
+        status: TicketStatus,
+        messages: list[TicketMessage],
+        created_at: datetime,
+    ) -> "Ticket":
+        return cls(
+            _PRIVATE_MARKER,
+            id,
+            author_id=author_id,
+            subject=subject,
+            status=status,
+            messages=messages,
+            created_at=created_at,
+        )
 
     def add_message(
         self,
@@ -116,7 +136,7 @@ class Ticket(Entity[uuid.UUID]):
         if self.status is TicketStatus.CLOSED:
             raise TicketClosedError("closed tickets cannot receive messages")
 
-        message = TicketMessage(
+        message = TicketMessage.create(
             id=uuid.uuid4(),
             ticket_id=self.id,
             author_id=author_id,
@@ -175,7 +195,7 @@ class Ticket(Entity[uuid.UUID]):
                 actor_category="system",
             )
         )
-        system_message = TicketMessage(
+        system_message = TicketMessage.create(
             id=uuid.uuid4(),
             ticket_id=self.id,
             author_id=None,
@@ -205,17 +225,12 @@ class Ticket(Entity[uuid.UUID]):
         message = self._message_by_id(message_id)
         if message.author_id != author_id:
             raise TicketMessageNotFoundError("message is owned by another author")
-        if message.is_system:
-            raise TicketMessageImmutableError("system messages cannot be edited")
-        if message.is_deleted:
-            raise TicketMessageAlreadyDeletedError("deleted messages cannot be edited")
 
-        object.__setattr__(
-            message,
-            "body",
-            validate_plaintext(body, field_name="body", maximum=10_000),
-        )
-        from domain.events.ticket_domain_event import TicketMessageEdited
+        result = message.edit(body)
+        if result.is_err:
+            if result.error.code == "message_immutable":
+                raise TicketMessageImmutableError("system messages cannot be edited")
+            raise TicketMessageAlreadyDeletedError("deleted messages cannot be edited")
 
         self.add_domain_event(
             TicketMessageEdited(
@@ -238,14 +253,12 @@ class Ticket(Entity[uuid.UUID]):
         message = self._message_by_id(message_id)
         if actor_category != "admin" and message.author_id != actor_id:
             raise TicketMessageNotFoundError("message is owned by another author")
-        if message.is_system:
-            raise TicketMessageImmutableError("system messages cannot be deleted")
-        if message.is_deleted:
-            raise TicketMessageAlreadyDeletedError("message is already deleted")
 
-        object.__setattr__(message, "body", DELETED_MESSAGE_MARKER)
-        object.__setattr__(message, "is_deleted", True)
-        from domain.events.ticket_domain_event import TicketMessageDeleted
+        result = message.delete()
+        if result.is_err:
+            if result.error.code == "message_immutable":
+                raise TicketMessageImmutableError("system messages cannot be deleted")
+            raise TicketMessageAlreadyDeletedError("message is already deleted")
 
         self.add_domain_event(
             TicketMessageDeleted(

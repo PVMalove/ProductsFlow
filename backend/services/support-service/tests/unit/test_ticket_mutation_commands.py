@@ -14,7 +14,9 @@ from application.commands import (
     EditTicketMessageCommandHandler,
 )
 from contracts.ticket import TicketView
-from domain.ticket import Ticket, TicketStatus
+from domain.entities.ticket import Ticket
+from domain.ticket_status import TicketStatus
+from domain.value_objects.ticket_id import TicketId
 
 
 class FakeMutationRepository:
@@ -22,17 +24,17 @@ class FakeMutationRepository:
         self.ticket = ticket
         self.message_calls: list[tuple[uuid.UUID, bool]] = []
         self.status_calls: list[tuple[uuid.UUID, TicketStatus]] = []
-        self.edit_calls: list[tuple[uuid.UUID, uuid.UUID, str, bool]] = []
-        self.delete_calls: list[tuple[uuid.UUID, uuid.UUID, bool]] = []
+        self.edit_calls: list[tuple[TicketId, uuid.UUID, str, bool]] = []
+        self.delete_calls: list[tuple[TicketId, uuid.UUID, bool]] = []
 
     async def add_message(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, body: str, is_admin: bool
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, body: str, is_admin: bool
     ) -> Ticket | None:
         self.message_calls.append((actor_id, is_admin))
         return self.ticket
 
     async def change_status(
-        self, *, ticket_id: uuid.UUID, actor_id: uuid.UUID, status: TicketStatus
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, status: TicketStatus
     ) -> Ticket | None:
         self.status_calls.append((actor_id, status))
         return self.ticket
@@ -40,7 +42,7 @@ class FakeMutationRepository:
     async def edit_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         body: str,
@@ -52,7 +54,7 @@ class FakeMutationRepository:
     async def delete_message(
         self,
         *,
-        ticket_id: uuid.UUID,
+        ticket_id: TicketId,
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         is_admin: bool,
