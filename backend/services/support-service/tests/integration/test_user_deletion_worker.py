@@ -17,7 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from api.worker import build_user_event_handler
 from domain.ticket import Ticket, TicketStatus
-from infrastructure.db.models import ProcessedMessage, TicketMessageModel, TicketModel
+from infrastructure.db.entity_configurations.models import (
+    ProcessedMessage,
+    TicketMessageModel,
+    TicketModel,
+)
 from infrastructure.db.ticket_repository import TicketRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

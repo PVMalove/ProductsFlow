@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
-from infrastructure.db.models import ProductModel
+from infrastructure.db.entity_configurations.models import ProductModel
 from infrastructure.db.owner_read_model import upsert_owner_read_model
 from infrastructure.db.product_repository import ProductRepository
 from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork

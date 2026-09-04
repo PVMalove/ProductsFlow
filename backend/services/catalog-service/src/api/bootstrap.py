@@ -29,7 +29,7 @@ from application.ports import (
     ProductImageStorage,
 )
 from core.settings import settings
-from infrastructure.db.models import ProductModel
+from infrastructure.db.entity_configurations.models import ProductModel
 from infrastructure.db.owner_read_model import SqlOwnerReadModel
 from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 from infrastructure.identity_gateway import IdentityGatewayAdapter

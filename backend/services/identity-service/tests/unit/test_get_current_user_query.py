@@ -10,6 +10,7 @@ from application.queries.get_current_user import (
 from contracts.user import UserView
 from domain.role import Role
 from domain.user_id import UserId
+from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository
 
@@ -32,7 +33,7 @@ class ReadOnlyUserProjection:
 async def test_get_current_user_reloads_state_and_returns_a_view() -> None:
     repository = FakeUserRepository()
     registered = await RegisterUserCommandHandler(
-        repository, FakePasswordHasher()
+        FakeIdentityUnitOfWork(repository), FakePasswordHasher()
     ).execute(RegisterUserCommand("user@example.com", "password1"))
 
     result = await GetCurrentUserHandler(ReadOnlyUserProjection(repository)).execute(

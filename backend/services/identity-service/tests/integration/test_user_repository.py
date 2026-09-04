@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from domain.email import Email
 from domain.user import User
 from infrastructure.db import audit as _audit  # noqa: F401
-from infrastructure.db import models as _models  # noqa: F401
 from infrastructure.db.audit import UserAuditAction, UserAuditLog
-from infrastructure.db.user_repository import UserRepository
+from infrastructure.db.entity_configurations.models import UserModel
+from infrastructure.db.unit_of_work import SqlIdentityUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -31,16 +31,35 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
             await connection.run_sync(Base.metadata.drop_all)
 
 
+class _CreateTwoUsersHandler:
+    """Integration seam for the command-side transaction boundary."""
+
+    def __init__(self, uow: SqlIdentityUnitOfWork) -> None:
+        self._uow = uow
+
+    async def execute(
+        self, first: User, second: User, *, fail_after_writes: bool = False
+    ) -> None:
+        async with self._uow:
+            await self._uow.users.add(first)
+            await self._uow.users.add(second)
+            if fail_after_writes:
+                raise RuntimeError("second mutation failed")
+            await self._uow.commit()
+
+
 async def test_add_persists_user_and_register_event_atomically(
     db_session: AsyncSession, _schema: None
 ) -> None:
     result = User.register(Email("user@example.com"), "hashed-password")
     assert result.is_ok
 
-    repository = UserRepository(db_session)
-    await repository.add(result.value)
+    uow = SqlIdentityUnitOfWork(db_session)
+    async with uow:
+        await uow.users.add(result.value)
+        await uow.commit()
 
-    stored = await repository.get_by_id(result.value.id)
+    stored = await uow.users.get_by_id(result.value.id)
     assert stored is not None
     assert stored.email == Email("user@example.com")
     assert stored.password_hash == "hashed-password"
@@ -54,10 +73,12 @@ async def test_add_persists_user_and_register_event_atomically(
     assert rows[0].payload["email"] == "user@example.com"
 
 
-async def _create_user(repository: UserRepository, email: str) -> User:
+async def _create_user(uow: SqlIdentityUnitOfWork, email: str) -> User:
     result = User.register(Email(email), "hashed-password")
     assert result.is_ok
-    await repository.add(result.value)
+    async with uow:
+        await uow.users.add(result.value)
+        await uow.commit()
     return result.value
 
 
@@ -82,15 +103,17 @@ async def _outbox_rows_for(
 async def test_save_writes_password_change_to_audit_and_outbox(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    repository = UserRepository(db_session)
-    user = await _create_user(repository, "password@example.com")
-    loaded = await repository.get_by_id(user.id)
+    uow = SqlIdentityUnitOfWork(db_session)
+    user = await _create_user(uow, "password@example.com")
+    loaded = await uow.users.get_by_id(user.id)
     assert loaded is not None
     loaded.pull_events()
 
     result = loaded.change_password("new-hashed-password")
     assert result.is_ok
-    await repository.save(loaded)
+    async with uow:
+        await uow.users.save(loaded)
+        await uow.commit()
 
     audit_rows = await _rows_for(db_session, UserAuditLog, user.id.value)
     assert [row.action for row in audit_rows] == [
@@ -107,18 +130,22 @@ async def test_save_writes_password_change_to_audit_and_outbox(
 async def test_save_audits_deactivation_and_activation(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    repository = UserRepository(db_session)
-    user = await _create_user(repository, "activation@example.com")
-    loaded = await repository.get_by_id(user.id)
+    uow = SqlIdentityUnitOfWork(db_session)
+    user = await _create_user(uow, "activation@example.com")
+    loaded = await uow.users.get_by_id(user.id)
     assert loaded is not None
     loaded.pull_events()
 
     assert loaded.deactivate().is_ok
-    await repository.save(loaded)
-    loaded = await repository.get_by_id(user.id)
+    async with uow:
+        await uow.users.save(loaded)
+        await uow.commit()
+    loaded = await uow.users.get_by_id(user.id)
     assert loaded is not None
     assert loaded.activate().is_ok
-    await repository.save(loaded)
+    async with uow:
+        await uow.users.save(loaded)
+        await uow.commit()
 
     audit_rows = await _rows_for(db_session, UserAuditLog, user.id.value)
     assert [row.action for row in audit_rows] == [
@@ -137,19 +164,60 @@ async def test_save_audits_deactivation_and_activation(
 async def test_audit_uses_current_actor_from_request_context(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    repository = UserRepository(db_session)
-    actor = await _create_user(repository, "actor@example.com")
-    target = await _create_user(repository, "target@example.com")
-    loaded = await repository.get_by_id(target.id)
+    uow = SqlIdentityUnitOfWork(db_session)
+    actor = await _create_user(uow, "actor@example.com")
+    target = await _create_user(uow, "target@example.com")
+    loaded = await uow.users.get_by_id(target.id)
     assert loaded is not None
     loaded.pull_events()
 
     token: Token[int | str | None] = actor_id_var.set(str(actor.id.value))
     try:
         assert loaded.deactivate().is_ok
-        await repository.save(loaded)
+        async with uow:
+            await uow.users.save(loaded)
+            await uow.commit()
     finally:
         actor_id_var.reset(token)
 
     audit_rows = await _rows_for(db_session, UserAuditLog, target.id.value)
     assert audit_rows[-1].actor_user_id == actor.id.value
+
+
+async def test_handler_rolls_back_multiple_user_writes_and_their_outbox_rows(
+    db_session: AsyncSession, _schema: None
+) -> None:
+    first = User.register(Email("first@example.com"), "hashed-password")
+    second = User.register(Email("second@example.com"), "hashed-password")
+    assert first.is_ok
+    assert second.is_ok
+
+    handler = _CreateTwoUsersHandler(SqlIdentityUnitOfWork(db_session))
+    with pytest.raises(RuntimeError, match="second mutation failed"):
+        await handler.execute(first.value, second.value, fail_after_writes=True)
+
+    db_session.expunge_all()
+    assert await db_session.scalar(select(UserModel.id)) is None
+    assert await db_session.scalar(select(OutboxMessage.id)) is None
+
+
+async def test_handler_commits_multiple_user_writes_with_outbox_rows(
+    db_session: AsyncSession, _schema: None
+) -> None:
+    first = User.register(Email("first@example.com"), "hashed-password")
+    second = User.register(Email("second@example.com"), "hashed-password")
+    assert first.is_ok
+    assert second.is_ok
+
+    await _CreateTwoUsersHandler(SqlIdentityUnitOfWork(db_session)).execute(
+        first.value, second.value
+    )
+
+    db_session.expunge_all()
+    users = list((await db_session.scalars(select(UserModel))).all())
+    outbox = list((await db_session.scalars(select(OutboxMessage))).all())
+    assert {user.email for user in users} == {"first@example.com", "second@example.com"}
+    assert [row.event_type for row in outbox] == [
+        "user.registered.v1",
+        "user.registered.v1",
+    ]

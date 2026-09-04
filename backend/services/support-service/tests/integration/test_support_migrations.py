@@ -9,8 +9,8 @@ from alembic.operations import Operations
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from infrastructure.db import models as _models  # noqa: F401 — registers ORM tables
 from infrastructure.db import user_projection as _user_projection  # noqa: F401
+from infrastructure.db.entity_configurations import models as _models
 
 asyncio_session_loop = pytest.mark.asyncio(loop_scope="session")
 

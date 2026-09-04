@@ -7,7 +7,10 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from api.bootstrap import seed_catalog_demo_data
-from infrastructure.db.models import ProductImageModel, ProductModel
+from infrastructure.db.entity_configurations.models import (
+    ProductImageModel,
+    ProductModel,
+)
 from infrastructure.db.owner_read_model import (
     OwnerReadModelRow,
     upsert_owner_read_model,

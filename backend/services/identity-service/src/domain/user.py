@@ -3,7 +3,7 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from domain.email import Email
-from domain.events import (
+from domain.events.user_domain_event import (
     Activated,
     Deactivated,
     PasswordChanged,
