@@ -34,9 +34,7 @@ class ActivateProductCommandHandler:
     Side Effects: Обновляется статус товара в репозитории на активный.
     """
 
-    def __init__(
-        self, uow: CatalogUnitOfWork, identity: IdentityGateway
-    ) -> None:
+    def __init__(self, uow: CatalogUnitOfWork, identity: IdentityGateway) -> None:
         self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
 

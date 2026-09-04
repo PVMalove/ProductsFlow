@@ -310,6 +310,7 @@ class ProductRepository:
         )
         return rows[:limit], len(rows) > limit
 
+
 # Static structural check: mypy verifies that the concrete implementation
 # satisfies every operation required by the domain repository contract.
 _product_repository_implementation: type[ProductRepositoryPort] = ProductRepository

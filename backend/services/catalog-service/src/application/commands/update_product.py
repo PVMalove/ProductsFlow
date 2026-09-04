@@ -38,9 +38,7 @@ class UpdateProductCommandHandler:
     Side Effects: Обновляются соответствующие поля товара в базе.
     """
 
-    def __init__(
-        self, uow: CatalogUnitOfWork, identity: IdentityGateway
-    ) -> None:
+    def __init__(self, uow: CatalogUnitOfWork, identity: IdentityGateway) -> None:
         self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
 

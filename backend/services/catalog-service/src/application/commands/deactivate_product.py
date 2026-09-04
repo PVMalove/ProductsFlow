@@ -34,9 +34,7 @@ class DeactivateProductCommandHandler:
     Side Effects: Статус товара в репозитории меняется на неактивный.
     """
 
-    def __init__(
-        self, uow: CatalogUnitOfWork, identity: IdentityGateway
-    ) -> None:
+    def __init__(self, uow: CatalogUnitOfWork, identity: IdentityGateway) -> None:
         self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
 
