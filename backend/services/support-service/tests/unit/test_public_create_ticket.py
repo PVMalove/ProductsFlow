@@ -45,7 +45,7 @@ def test_create_ticket_returns_created_resource() -> None:
                 author_id=command.author_id,
                 subject=command.subject,
                 first_message=command.first_message,
-            )
+            ).value
             return Result[TicketDetailView].ok(
                 TicketDetailView.from_domain(ticket, ticket.messages)
             )

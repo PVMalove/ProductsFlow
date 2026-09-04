@@ -4,6 +4,8 @@ from typing import cast
 
 from kernel_domain import _PRIVATE_MARKER
 from kernel_domain.entity import Entity
+from kernel_domain.errors import Error, ErrorType
+from kernel_domain.result import Result
 
 from domain.entities.ticket_message import TicketMessage, validate_plaintext
 from domain.events.ticket_domain_event import (
@@ -48,10 +50,32 @@ _NEXT_STATUS = {
 }
 
 
+def _ticket_closed_error(description: str) -> Error:
+    return Error(code="ticket_closed", description=description, type=ErrorType.CONFLICT)
+
+
+def _invalid_status_transition_error(description: str) -> Error:
+    return Error(
+        code="invalid_status_transition",
+        description=description,
+        type=ErrorType.CONFLICT,
+    )
+
+
+def _message_not_found_error(description: str) -> Error:
+    return Error(
+        code="message_not_found", description=description, type=ErrorType.NOT_FOUND
+    )
+
+
 class Ticket(Entity[TicketId]):
-    """Агрегат Тикета поддержки (issue #252). Дочерние `TicketMessage`
-    мутируются через собственные `edit()`/`delete()` — `Ticket` разворачивает
-    их `Result.fail` в те же исключения, что бросал раньше напрямую.
+    """Агрегат Тикета поддержки (issue #252, #253). Дочерние `TicketMessage`
+    мутируются через собственные `edit()`/`delete()` — `Ticket` пробрасывает
+    их `Result.fail` дальше как свой собственный. Мутирующие методы
+    (`add_message`, `change_status`, `edit_message`, `delete_message`,
+    `anonymize_deleted_user`) не бросают исключений на бизнес-условиях,
+    возвращают `Result`; трансляцию обратно в типизированные исключения
+    делает `TicketRepository` на границе с БД.
 
     Конструктор вызывается только через `create()` (новый тикет) или
     `reconstitute()` (гидратация из БД) — маркер приватности проверяется
@@ -85,7 +109,18 @@ class Ticket(Entity[TicketId]):
     @classmethod
     def create(
         cls, *, author_id: uuid.UUID, subject: str, first_message: str
-    ) -> "Ticket":
+    ) -> Result["Ticket"]:
+        try:
+            validate_plaintext(subject, field_name="subject", maximum=200)
+        except ValueError as exc:
+            return Result[Ticket].fail(
+                Error(
+                    code="invalid_subject",
+                    description=str(exc),
+                    type=ErrorType.VALIDATION,
+                )
+            )
+
         ticket_id = TicketId.new_id()
         message = TicketMessage.create(
             id=uuid.uuid4(),
@@ -102,7 +137,7 @@ class Ticket(Entity[TicketId]):
             messages=[message],
         )
         ticket.add_domain_event(TicketCreated(ticket_id=ticket_id, author_id=author_id))
-        return ticket
+        return Result[Ticket].ok(ticket)
 
     @classmethod
     def reconstitute(
@@ -132,9 +167,11 @@ class Ticket(Entity[TicketId]):
         body: str,
         actor_category: str,
         is_system: bool = False,
-    ) -> TicketMessage:
+    ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED:
-            raise TicketClosedError("closed tickets cannot receive messages")
+            return Result[TicketMessage].fail(
+                _ticket_closed_error("closed tickets cannot receive messages")
+            )
 
         message = TicketMessage.create(
             id=uuid.uuid4(),
@@ -162,12 +199,14 @@ class Ticket(Entity[TicketId]):
                 actor_category=actor_category,
                 allow_reopen=True,
             )
-        return message
+        return Result[TicketMessage].ok(message)
 
-    def change_status(self, status: TicketStatus, *, actor_category: str) -> None:
-        self._change_status(status, actor_category=actor_category)
+    def change_status(
+        self, status: TicketStatus, *, actor_category: str
+    ) -> Result[None]:
+        return self._change_status(status, actor_category=actor_category)
 
-    def anonymize_deleted_user(self, user_id: uuid.UUID) -> bool:
+    def anonymize_deleted_user(self, user_id: uuid.UUID) -> Result[bool]:
         """Remove a deleted user's identity and close their active ticket.
 
         The deletion event is recorded by the application inbox, so this
@@ -183,7 +222,7 @@ class Ticket(Entity[TicketId]):
                 object.__setattr__(message, "author_id", None)
 
         if not owns_ticket or self.status is TicketStatus.CLOSED:
-            return owns_ticket
+            return Result[bool].ok(owns_ticket)
 
         previous_status = self.status
         self.status = TicketStatus.CLOSED
@@ -210,7 +249,7 @@ class Ticket(Entity[TicketId]):
                 actor_category="system",
             )
         )
-        return True
+        return Result[bool].ok(True)
 
     def edit_message(
         self,
@@ -219,18 +258,24 @@ class Ticket(Entity[TicketId]):
         author_id: uuid.UUID,
         body: str,
         actor_category: str,
-    ) -> TicketMessage:
+    ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED:
-            raise TicketClosedError("closed tickets cannot edit messages")
+            return Result[TicketMessage].fail(
+                _ticket_closed_error("closed tickets cannot edit messages")
+            )
         message = self._message_by_id(message_id)
+        if message is None:
+            return Result[TicketMessage].fail(
+                _message_not_found_error("message does not belong to the ticket")
+            )
         if message.author_id != author_id:
-            raise TicketMessageNotFoundError("message is owned by another author")
+            return Result[TicketMessage].fail(
+                _message_not_found_error("message is owned by another author")
+            )
 
         result = message.edit(body)
         if result.is_err:
-            if result.error.code == "message_immutable":
-                raise TicketMessageImmutableError("system messages cannot be edited")
-            raise TicketMessageAlreadyDeletedError("deleted messages cannot be edited")
+            return Result[TicketMessage].fail(result.error)
 
         self.add_domain_event(
             TicketMessageEdited(
@@ -239,7 +284,7 @@ class Ticket(Entity[TicketId]):
                 actor_category=actor_category,
             )
         )
-        return message
+        return Result[TicketMessage].ok(message)
 
     def delete_message(
         self,
@@ -247,18 +292,24 @@ class Ticket(Entity[TicketId]):
         message_id: uuid.UUID,
         actor_id: uuid.UUID,
         actor_category: str,
-    ) -> TicketMessage:
+    ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED and actor_category != "admin":
-            raise TicketClosedError("closed tickets cannot delete messages")
+            return Result[TicketMessage].fail(
+                _ticket_closed_error("closed tickets cannot delete messages")
+            )
         message = self._message_by_id(message_id)
+        if message is None:
+            return Result[TicketMessage].fail(
+                _message_not_found_error("message does not belong to the ticket")
+            )
         if actor_category != "admin" and message.author_id != actor_id:
-            raise TicketMessageNotFoundError("message is owned by another author")
+            return Result[TicketMessage].fail(
+                _message_not_found_error("message is owned by another author")
+            )
 
         result = message.delete()
         if result.is_err:
-            if result.error.code == "message_immutable":
-                raise TicketMessageImmutableError("system messages cannot be deleted")
-            raise TicketMessageAlreadyDeletedError("message is already deleted")
+            return Result[TicketMessage].fail(result.error)
 
         self.add_domain_event(
             TicketMessageDeleted(
@@ -267,13 +318,13 @@ class Ticket(Entity[TicketId]):
                 actor_category=actor_category,
             )
         )
-        return message
+        return Result[TicketMessage].ok(message)
 
-    def _message_by_id(self, message_id: uuid.UUID) -> TicketMessage:
+    def _message_by_id(self, message_id: uuid.UUID) -> TicketMessage | None:
         for message in self.messages:
             if message.id == message_id:
                 return message
-        raise TicketMessageNotFoundError("message does not belong to the ticket")
+        return None
 
     def _change_status(
         self,
@@ -281,12 +332,16 @@ class Ticket(Entity[TicketId]):
         *,
         actor_category: str,
         allow_reopen: bool = False,
-    ) -> None:
+    ) -> Result[None]:
         if self.status is TicketStatus.CLOSED:
-            raise TicketClosedError("closed tickets have a terminal status")
+            return Result[None].fail(
+                _ticket_closed_error("closed tickets have a terminal status")
+            )
         if not allow_reopen and _NEXT_STATUS.get(self.status) is not status:
-            raise InvalidStatusTransitionError(
-                f"cannot change status from {self.status} to {status}"
+            return Result[None].fail(
+                _invalid_status_transition_error(
+                    f"cannot change status from {self.status} to {status}"
+                )
             )
 
         previous_status = self.status
@@ -299,3 +354,4 @@ class Ticket(Entity[TicketId]):
                 actor_category=actor_category,
             )
         )
+        return Result[None].ok(None)

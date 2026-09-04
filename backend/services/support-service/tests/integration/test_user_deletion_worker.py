@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel
+from kernel_domain.result import Result
 from kernel_platform.consumer import consume
 from kernel_platform.outbox.models import Base, OutboxMessage
 from kernel_platform.outbox.publisher import EVENTS_EXCHANGE_NAME
@@ -78,7 +79,7 @@ async def test_user_deletion_is_atomic_and_idempotent(
     user_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=user_id, subject="Subject", first_message="Private message"
-    )
+    ).value
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
         await session.commit()
@@ -154,7 +155,7 @@ async def test_rabbitmq_contract_consumes_support_queue_idempotently(
     user_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=user_id, subject="Subject", first_message="Private message"
-    )
+    ).value
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
         await session.commit()
@@ -187,7 +188,7 @@ async def test_user_deletion_serializes_with_concurrent_ticket_message(
     user_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=user_id, subject="Subject", first_message="Private message"
-    )
+    ).value
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
         await session.commit()
@@ -247,7 +248,7 @@ async def test_transaction_failure_rolls_back_inbox_and_retry_completes(
     user_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=user_id, subject="Subject", first_message="Private message"
-    )
+    ).value
     async with session_factory() as session:
         await TicketRepository(session).create(ticket)
         await session.commit()
@@ -255,7 +256,7 @@ async def test_transaction_failure_rolls_back_inbox_and_retry_completes(
     original = Ticket.anonymize_deleted_user
     failed = False
 
-    def fail_once(current: Ticket, deleted_user_id: uuid.UUID) -> bool:
+    def fail_once(current: Ticket, deleted_user_id: uuid.UUID) -> Result[bool]:
         nonlocal failed
         if not failed:
             failed = True

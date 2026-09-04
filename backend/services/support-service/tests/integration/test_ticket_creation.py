@@ -41,7 +41,7 @@ async def test_ticket_and_outbox_are_persisted_together(
 ) -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="Message"
-    )
+    ).value
 
     await SqlTicketRepository(db_session).create(ticket)
 
@@ -119,7 +119,7 @@ async def test_ticket_mutations_persist_messages_statuses_and_text_free_events(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
 
@@ -177,7 +177,7 @@ async def test_non_owner_message_is_not_persisted(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
 
@@ -207,7 +207,7 @@ async def test_concurrent_admin_messages_are_serialized(
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     async with session_factory() as session:
         uow = SqlSupportUnitOfWork(session)
         async with uow:
@@ -254,7 +254,7 @@ async def test_message_edit_and_admin_moderation_are_transactional(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="Original message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     message_id = ticket.messages[0].id
@@ -301,7 +301,7 @@ async def test_author_can_edit_and_soft_delete_their_own_message(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="Original message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     message_id = ticket.messages[0].id
@@ -334,7 +334,7 @@ async def test_admin_can_edit_their_own_message_in_a_foreign_ticket(
     admin_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     admin_message = await repository.add_message(
@@ -364,7 +364,7 @@ async def test_message_moderation_rejects_closed_and_system_messages(
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="First message"
-    )
+    ).value
     repository = SqlTicketRepository(db_session)
     await repository.create(ticket)
     await repository.change_status(
@@ -387,7 +387,7 @@ async def test_message_moderation_rejects_closed_and_system_messages(
 
     system_ticket = Ticket.create(
         author_id=author_id, subject="System subject", first_message="First message"
-    )
+    ).value
     await repository.create(system_ticket)
     system_message_id = uuid.uuid4()
     system_message = TicketMessageModel(

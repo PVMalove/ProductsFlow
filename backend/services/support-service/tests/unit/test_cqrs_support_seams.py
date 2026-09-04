@@ -106,7 +106,7 @@ async def test_ticket_queries_are_independent_handlers() -> None:
     author_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=author_id, subject="Subject", first_message="Message"
-    )
+    ).value
     repository.ticket = ticket
     repository.ticket_page = TicketPage([ticket], PageInfo(None, None, False, False))
 

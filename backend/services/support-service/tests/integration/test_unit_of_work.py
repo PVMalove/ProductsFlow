@@ -56,7 +56,7 @@ async def test_two_mutating_calls_commit_as_one_atomic_transaction(
             ticket = await uow.tickets.create(
                 Ticket.create(
                     author_id=author_id, subject="Subject", first_message="First"
-                )
+                ).value
             )
             assert await read_ticket(ticket.id) is None
 
@@ -103,7 +103,7 @@ async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
 
     closed_ticket = Ticket.create(
         author_id=author_id, subject="Closed subject", first_message="First"
-    )
+    ).value
     async with uow:
         await uow.tickets.create(closed_ticket)
         await uow.commit()
@@ -124,7 +124,7 @@ async def test_failure_mid_transaction_leaves_no_partial_state_or_outbox_row(
         new_ticket = await uow.tickets.create(
             Ticket.create(
                 author_id=author_id, subject="New subject", first_message="Hello"
-            )
+            ).value
         )
         new_ticket_id = new_ticket.id
         with pytest.raises(TicketClosedError):
