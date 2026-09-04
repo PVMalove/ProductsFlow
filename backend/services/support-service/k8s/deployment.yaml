@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: support-service
+spec:
+  selector:
+    matchLabels:
+      app: support-service
+  template:
+    metadata:
+      labels:
+        app: support-service
+    spec:
+      containers:
+        - name: support-service
+          image: productsflow/support-service:latest
+          ports:
+            - containerPort: 8000

@@ -1,0 +1,11 @@
+{
+  "include": ["src", "tests", "conftest.py"],
+  "exclude": ["**/.venv", "**/__pycache__", "src/infrastructure/db/alembic/versions"],
+  "extraPaths": [
+    "src",
+    "../../libs/kernel-domain/src",
+    "../../libs/kernel-platform/src",
+    "../../libs/observability/src"
+  ],
+  "typeCheckingMode": "strict"
+}

@@ -1,0 +1,158 @@
+name: productsflow-e2e
+
+x-catalog-environment: &catalog-environment
+  APP_ENV: e2e
+  CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
+  CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+  CATALOG_IDENTITY_BASE_URL: http://identity-api:8000
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_PUBLIC_ENDPOINT: http://gateway
+  MINIO_ROOT_USER: minio-admin
+  MINIO_ROOT_PASSWORD: minio-secret-key
+  MINIO_BUCKET_NAME_PRODUCT: product-chunks
+  MINIO_BUCKET_NAME_LOKI: loki-chunks
+  MINIO_BUCKET_NAME_TEMPO: tempo-traces
+
+services:
+  # The key pair is generated inside this project-scoped volume for every
+  # stack. No developer key or credential is ever mounted into E2E.
+  e2e-keys:
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    command:
+      - python
+      - -c
+      - |
+        from pathlib import Path
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        from core.secrets import generate_private_key_pem
+
+        directory = Path("/e2e-keys")
+        private_pem = generate_private_key_pem()
+        (directory / "identity-private.pem").write_bytes(private_pem)
+        private_key = load_pem_private_key(private_pem, password=None)
+        public_pem = private_key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        (directory / "identity-public.pem").write_bytes(public_pem)
+    volumes:
+      - e2e_jwt_keys:/e2e-keys
+
+  identity-bootstrap:
+    environment:
+      APP_ENV: e2e
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://admin:admin@identity-db:5432/identity
+      ADMIN_EMAIL: e2e-admin@example.test
+      ADMIN_PASSWORD: E2e-admin-password-123
+
+  identity-api:
+    environment:
+      APP_ENV: e2e
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://admin:admin@identity-db:5432/identity
+      IDENTITY_JWT_PRIVATE_KEY_PATH: /e2e-keys/identity-private.pem
+      IDENTITY_ACCESS_TOKEN_TTL_HOURS: 1
+    volumes:
+      - e2e_jwt_keys:/e2e-keys:ro
+    depends_on:
+      e2e-keys:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/.well-known/jwks.json')"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  identity-worker:
+    environment:
+      APP_ENV: e2e
+      IDENTITY_DATABASE_URL: postgresql+asyncpg://admin:admin@identity-db:5432/identity
+      IDENTITY_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  catalog-bootstrap:
+    environment:
+      <<: *catalog-environment
+      CATALOG_SEED_PLACEHOLDER_IMAGE_PATH: /srv/assets/placeholder.jpg
+
+  catalog-api:
+    environment:
+      <<: *catalog-environment
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/products')"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  catalog-worker:
+    environment:
+      APP_ENV: e2e
+      CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
+      CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  support-bootstrap:
+    environment:
+      APP_ENV: e2e
+      SUPPORT_DATABASE_URL: postgresql+asyncpg://admin:admin@support-db:5432/support
+
+  support-api:
+    environment:
+      APP_ENV: e2e
+      SUPPORT_DATABASE_URL: postgresql+asyncpg://admin:admin@support-db:5432/support
+      SUPPORT_JWT_PUBLIC_KEY_PATH: /e2e-keys/identity-public.pem
+    volumes:
+      - e2e_jwt_keys:/e2e-keys:ro
+    depends_on:
+      e2e-keys:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.error, urllib.request;\ntry:\n urllib.request.urlopen('http://localhost:8000/api/v1/tickets')\nexcept urllib.error.HTTPError as error:\n raise SystemExit(error.code != 401)"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  support-worker:
+    command:
+      [
+        "sh",
+        "-c",
+        "until python -m api.worker; do echo 'support-worker: topology unavailable, retrying in 1s'; sleep 1; done",
+      ]
+    environment:
+      APP_ENV: e2e
+      SUPPORT_DATABASE_URL: postgresql+asyncpg://admin:admin@support-db:5432/support
+      SUPPORT_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  gateway:
+    image: nginx:1.27-alpine
+    networks:
+      - backend-network
+    ports:
+      - "${E2E_GATEWAY_PORT:-18080}:80"
+    volumes:
+      - ./tests/e2e/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      identity-api:
+        condition: service_healthy
+      catalog-api:
+        condition: service_healthy
+      support-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/.well-known/jwks.json"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  e2e_jwt_keys:

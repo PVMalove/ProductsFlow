@@ -1,0 +1,64 @@
+{
+  "include": [
+    "backend/libs",
+    "backend/services",
+    "backend/scripts"
+  ],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "**/tests",
+    "**/alembic/versions"
+  ],
+  "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {
+      "root": "backend/services/catalog-service",
+      "extraPaths": [
+        "backend/services/catalog-service/src"
+      ]
+    },
+    {
+      "root": "backend/services/identity-service",
+      "extraPaths": [
+        "backend/services/identity-service/src"
+      ]
+    },
+    {
+      "root": "backend/services/support-service",
+      "extraPaths": [
+        "backend/services/support-service/src"
+      ]
+    },
+    {
+      "root": "backend/libs/kernel-domain",
+      "extraPaths": [
+        "backend/libs/kernel-domain/src"
+      ]
+    },
+    {
+      "root": "backend/libs/kernel-platform",
+      "extraPaths": [
+        "backend/libs/kernel-platform/src"
+      ]
+    },
+    {
+      "root": "backend/libs/observability",
+      "extraPaths": [
+        "backend/libs/observability/src"
+      ]
+    },
+    {
+      "root": "backend/libs/test-support",
+      "extraPaths": [
+        "backend/libs/test-support/src"
+      ]
+    },
+    {
+      "root": "backend/scripts",
+      "extraPaths": [
+        "backend/services/identity-service/src"
+      ]
+    }
+  ]
+}

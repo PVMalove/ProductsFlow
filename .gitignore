@@ -159,6 +159,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Локальные dev-ключи identity (make keys, ADR 0011) — не для git
+backend/secrets/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -227,7 +230,5 @@ __marimo__/
 .harness
 
 skills-lock.json
-/AGENTS.md
 /SPEC.md
-/docs/*
-!/docs/adr/
+/docs/tasks/

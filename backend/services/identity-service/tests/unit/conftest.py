@@ -1,0 +1,43 @@
+from collections.abc import AsyncIterator
+from pathlib import Path
+
+import httpx
+import pytest
+
+from api.main import app as identity_app
+from core.settings import settings
+from tests.unit.counting_transport import CountingTransport
+from tests.unit.keygen import write_rsa_key_file
+
+
+@pytest.fixture(autouse=True)
+def configured_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Даёт lifespan-based юнит-тестам парсируемый DB URL без подключения."""
+    monkeypatch.setattr(
+        settings,
+        "identity_database_url",
+        "postgresql+asyncpg://identity:identity@localhost/identity",
+    )
+
+
+@pytest.fixture
+def configured_key_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    key_path = tmp_path / "identity_jwt_private_key.pem"
+    write_rsa_key_file(key_path)
+    monkeypatch.setattr(settings, "identity_jwt_private_key_path", str(key_path))
+    return key_path
+
+
+@pytest.fixture
+def identity_transport(configured_key_path: Path) -> CountingTransport:
+    return CountingTransport(httpx.ASGITransport(app=identity_app))
+
+
+@pytest.fixture
+async def identity_http_client(
+    identity_transport: CountingTransport,
+) -> AsyncIterator[httpx.AsyncClient]:
+    async with httpx.AsyncClient(
+        transport=identity_transport, base_url="http://identity"
+    ) as client:
+        yield client

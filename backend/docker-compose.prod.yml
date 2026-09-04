@@ -1,0 +1,33 @@
+services:
+  identity-api:
+    environment:
+      APP_ENV: prod
+    ports:
+      - "9013:8000"
+    restart: unless-stopped
+
+  identity-worker:
+    environment:
+      APP_ENV: prod
+    restart: unless-stopped
+
+  catalog-api:
+    environment:
+      APP_ENV: prod
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9004
+    ports:
+      - "9014:8000"
+    restart: unless-stopped
+
+  support-api:
+    environment:
+      APP_ENV: prod
+    ports:
+      - "9015:8000"
+    restart: unless-stopped
+
+  minio:
+    ports:
+      - "9004:9000"
+      - "9001:9001"

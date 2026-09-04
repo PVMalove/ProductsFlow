@@ -1,0 +1,53 @@
+[project]
+name = "support-service"
+version = "0.1.0"
+description = "support-service (TD-01, Фаза 5) — пустой каркас, наполняется начиная с Фазы 5."
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.19.1",
+    "fastapi>=0.141.1",
+    "cryptography>=50.0.0",
+    "kernel-domain",
+    "kernel-platform",
+    "pydantic-settings>=2.0.0",
+    "pyjwt>=2.13.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "uvicorn>=0.35.0",
+]
+
+[tool.uv.sources]
+kernel-domain = { workspace = true }
+kernel-platform = { workspace = true }
+test-support = { workspace = true }
+
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "test-support",
+    "ruff>=0.16.1",
+    "vulture>=2.14",
+]
+
+# Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
+# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.mypy]
+mypy_path = ["src"]
+exclude = ["^whitelist\\.py$", "^\\.venv/"]
+
+# Секция обязательна: без неё pytest не считает этот pyproject.toml
+# конфиг-файлом и продолжает подниматься вверх по дереву каталогов в поисках
+# другого. Нет async-тестов — asyncio_mode здесь не нужен.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.vulture]
+exclude = [".venv/"]
+min_confidence = 80

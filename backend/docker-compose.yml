@@ -1,0 +1,292 @@
+name: product_flow-backend
+
+services:
+  identity-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: identity
+    volumes:
+      - identity_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d identity"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  identity-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #207): alembic upgrade head,
+    # then seeding the super-admin user through the real RegisterUser/
+    # ChangeUserRole command handlers — no direct repository writes.
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      IDENTITY_JWT_PRIVATE_KEY_PATH: ${IDENTITY_JWT_PRIVATE_KEY_PATH}
+      IDENTITY_ACCESS_TOKEN_TTL_HOURS: ${IDENTITY_ACCESS_TOKEN_TTL_HOURS}
+    depends_on:
+      identity-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  identity-worker:
+    # Outbox Publisher (ADR 0010, issue #100) — вторая точка входа
+    # identity-service, не HTTP-процесс: тот же образ, другой CMD. Никогда
+    # не делит процесс с identity-api: краш/рестарт паблишера не задевает
+    # обработку запросов.
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      IDENTITY_AMQP_URL: ${IDENTITY_AMQP_URL}
+    depends_on:
+      identity-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  catalog-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: catalog
+    volumes:
+      - catalog_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d catalog"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  catalog-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #208): alembic upgrade head,
+    # then ensure_minio_buckets, then a bounded wait for catalog-worker to
+    # project identity's admin user into OwnerReadModel before seeding 360
+    # demo products through the real CreateProductCommand/
+    # UpsertProductImageCommand handlers. Deliberately NOT a dependency of
+    # catalog-worker (see below) — catalog-worker is what performs that
+    # projection, and gating it behind this step would deadlock the wait.
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9002}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
+      MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
+      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
+      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
+      # Дефолт в Settings резолвится относительно файла самого
+      # установленного пакета (site-packages в этом образе) —
+      # переопределяем туда, куда Dockerfile реально копирует ассет
+      # (WORKDIR /srv).
+      CATALOG_SEED_PLACEHOLDER_IMAGE_PATH: /srv/assets/placeholder.jpg
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9002}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
+      MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
+      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
+      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
+    depends_on:
+      catalog-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  catalog-worker:
+    # User-event projection worker (ADR 0010/0011) — тот же образ catalog,
+    # отдельный процесс и CMD, что и catalog-api. Зависит только от
+    # catalog-db (issue #208): поллинг admin-discovery в catalog-bootstrap
+    # полагается именно на ЭТОТ сервис, проецирующий события identity в
+    # OwnerReadModel, поэтому он должен уметь стартовать независимо от
+    # catalog-bootstrap, не будучи заблокированным им. Он может обогнать шаг
+    # "alembic upgrade head" в catalog-bootstrap на холодном старте; retry-
+    # цикл ниже переживает это окно с фиксированным backoff 3с.
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "for i in 1 2 3 4 5; do python -m api.worker && exit 0; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_AMQP_URL: ${CATALOG_AMQP_URL}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
+      MINIO_PROMETHEUS_AUTH_TYPE: "public"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  rabbitmq:
+    # Брокер для публикации outbox-событий и топологии (обе — ADR 0010) —
+    # identity/catalog/support объявляют свои exchange/очереди на старте
+    # (идемпотентно), это только сам брокер. Quorum-очередям нужен
+    # RabbitMQ 4.x (дефолты x-delivery-limit появились в 4.0).
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  support-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: support
+    volumes:
+      - support_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d support"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  support-bootstrap:
+    # One-off bootstrap step (ADR 0001): alembic upgrade head, then a DB
+    # connectivity check. support has no bucket-ensure and no seed stage —
+    # an empty ticket table is a legitimate starting state.
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+    depends_on:
+      support-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  support-api:
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+    depends_on:
+      support-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  support-worker:
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+      SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL}
+    depends_on:
+      support-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+networks:
+  backend-network:
+    driver: bridge
+
+volumes:
+  minio_data:
+  identity_db_data:
+  catalog_db_data:
+  support_db_data:

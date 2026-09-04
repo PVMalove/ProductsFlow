@@ -1,0 +1,19 @@
+services:
+  support-api:
+    build:
+      context: ../..
+      dockerfile: services/support-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL:-}
+      SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL:-amqp://guest:guest@localhost:5672/}
+
+  support-worker:
+    build:
+      context: ../..
+      dockerfile: services/support-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL:-}
+      SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL:-amqp://guest:guest@localhost:5672/}

@@ -1,0 +1,29 @@
+services:
+  identity-api:
+    environment:
+      APP_ENV: dev
+    ports:
+      - "9010:8000"
+
+  identity-worker:
+    environment:
+      APP_ENV: dev
+
+  catalog-api:
+    environment:
+      APP_ENV: dev
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9002
+    ports:
+      - "9011:8000"
+
+  support-api:
+    environment:
+      APP_ENV: dev
+    ports:
+      - "9012:8000"
+
+  minio:
+    ports:
+      - "9002:9000"
+      - "9003:9001"

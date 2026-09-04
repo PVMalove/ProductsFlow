@@ -1,0 +1,68 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "ProductsFlow backend workspace"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+# Автосгенерированные alembic-ревизии не проходят через линт/форматтер.
+# whitelist.py — файл-whitelist для vulture, а не исполняемый/типизируемый код.
+extend-exclude = ["*/alembic/versions", "whitelist.py"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+exclude = ["^whitelist\\.py$"]
+
+[[tool.mypy.overrides]]
+# pika (RabbitMQ smoke-test fixture, issue #99) ships no stubs/py.typed —
+# same treatment monolith's root pyproject.toml gives aioboto3.
+module = ["pika.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# asyncpg (OutboxListener's dedicated LISTEN connection, ADR 0014/issue #102)
+# ships no stubs/py.typed either — same treatment as pika above.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+# Секция обязательна: без неё pytest не считает backend/pyproject.toml
+# конфиг-файлом и продолжает подниматься вверх по дереву каталогов, пока не
+# найдёт корневой pyproject.toml монолита — и подхватывает его pytest-настройки
+# (testpaths/asyncio_mode), которые к backend/ не относятся.
+# asyncio_mode = "auto" — общий дефолт для пакетов без своего
+# [tool.pytest.ini_options]: async def test_* запускаются сами, без ручных
+# @pytest.mark.asyncio на каждом.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning"
+]
+
+[tool.vulture]
+exclude = [
+    ".venv/",
+    "*/alembic/versions/",
+]
+min_confidence = 80

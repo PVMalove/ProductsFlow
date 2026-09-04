@@ -1,0 +1,20 @@
+services:
+  identity-api:
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      IDENTITY_JWT_PRIVATE_KEY_PATH: ${IDENTITY_JWT_PRIVATE_KEY_PATH:-}
+      IDENTITY_ACCESS_TOKEN_TTL_HOURS: ${IDENTITY_ACCESS_TOKEN_TTL_HOURS:-1}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:-}
+  identity-worker:
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:-}
+      IDENTITY_AMQP_URL: ${IDENTITY_AMQP_URL:-amqp://guest:guest@localhost:5672/}
+      IDENTITY_OUTBOX_POLL_INTERVAL_SECONDS: ${IDENTITY_OUTBOX_POLL_INTERVAL_SECONDS:-5}

@@ -1,0 +1,70 @@
+[project]
+name = "kernel-platform"
+version = "0.1.0"
+description = "Инфраструктурные примитивы ProductsFlow (IdentityClient/Outbox-Inbox/consumer/BFF HTTP-контракт) — httpx/SQLAlchemy/FastAPI допустимы ."
+requires-python = ">=3.14"
+dependencies = [
+    "aio-pika>=10.0.1",
+    # aiormq/pamqp — импортируются напрямую в outbox/publisher.py
+    # (DeliveryError, Basic.Ack), не только транзитивно через aio-pika.
+    "aiormq>=7.0.0",
+    # LISTEN/NOTIFY (outbox/listener.py) — dedicated raw connection,
+    # выделенное соединение не через SQLAlchemy-пул.
+    "asyncpg>=0.31.0",
+    "cryptography>=50.0.0",
+    # ADR 0031 — generic BFF response envelope + platform exception handlers
+    # (kernel_platform.http.*).
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "kernel-domain",
+    "pamqp>=4.0.1",
+    "pyjwt>=2.13.0",
+    "sqlalchemy[asyncio]>=2.0",
+]
+
+# path-зависимость на соседний пакет монорепо (ADR 0020) — editable в
+# dev-окружении, --no-editable при сборке production-образа.
+[tool.uv.sources]
+kernel-domain = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kernel_platform"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.16.1",
+    # tests/integration/conftest.py: RabbitMQ-фикстура для test_consumer.py/
+    # test_topology.py (issue #99-style заглушка вместо libs/test-support,
+    # ).
+    "testcontainers[rabbitmq]>=4.15.0",
+    "vulture>=2.14",
+]
+
+# Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
+#  — этот пакет наследует его через extend, а не дублирует.
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.mypy]
+exclude = ["^whitelist\\.py$"]
+
+[[tool.mypy.overrides]]
+# asyncpg (OutboxListener's dedicated LISTEN connection, /issue #102)
+# ships no stubs/py.typed — same treatment as monolith's aioboto3.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.vulture]
+exclude = [".venv/"]
+min_confidence = 80

@@ -1,0 +1,7 @@
+# Заглушка: изначально место под one-off bootstrap-сервисы (*-bootstrap —
+# alembic upgrade + bucket-ensure + сид, см. ADR 0001). Устарела: bootstrap-
+# сервисы (identity/catalog/support-bootstrap) реализованы напрямую в
+# `docker-compose.yml`, не через этот файл — он больше ничего не подключает
+# (services: {}) и, похоже, orphaned; см. ADR 0001, раздел «Безопасный старт».
+
+services: {}

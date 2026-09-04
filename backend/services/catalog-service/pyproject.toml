@@ -1,0 +1,65 @@
+[project]
+name = "catalog-service"
+version = "0.1.0"
+description = "catalog-service — домен Product, персистентность, outbox-запись мутаций (ADR 0013/0020/0021, issue #148)."
+requires-python = ">=3.14"
+dependencies = [
+    "aioboto3>=15.5.0",
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "botocore>=1.40.61",
+    "faker>=40.37.0",
+    "fastapi>=0.141.1",
+    "kernel-domain",
+    "kernel-platform",
+    "observability",
+    "pydantic-settings>=2.0.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy[asyncio]>=2.0",
+    "uvicorn>=0.35.0",
+]
+
+[tool.uv.sources]
+kernel-domain = { workspace = true }
+kernel-platform = { workspace = true }
+observability = { workspace = true }
+test-support = { workspace = true }
+
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.16.1",
+    "test-support",
+    "types-aioboto3[s3]>=13.2.0.post3",
+    "vulture>=2.14",
+]
+
+# Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
+# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.mypy]
+mypy_path = ["src"]
+exclude = ["^whitelist\\.py$"]
+
+[[tool.mypy.overrides]]
+module = ["aioboto3.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# asyncpg ships no stubs/py.typed — same treatment identity-service/kernel-platform give it.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.vulture]
+exclude = [".venv/", "*/alembic/versions/"]
+min_confidence = 80

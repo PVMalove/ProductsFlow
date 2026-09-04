@@ -6,38 +6,70 @@ on:
     branches: [master]
 
 permissions:
-  contents: read       # нужно для checkout
-  checks: write        # нужно для публикации отчёта о тестах (test-reporter)
-  pull-requests: write # нужно, чтобы отчёт был виден в проверках PR
+  contents: read
+  pull-requests: read
 
 jobs:
-  lint:
+  changes:
+    name: Detect affected backend packages
     runs-on: ubuntu-latest
+    outputs:
+      members: ${{ steps.matrix.outputs.members }}
+      services: ${{ steps.matrix.outputs.services }}
+      has_backend_changes: ${{ steps.matrix.outputs.has_backend_changes }}
     steps:
       - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          list-files: json
+          filters: |
+            changed:
+              - '**'
+
+      - id: matrix
+        name: Expand dependency graph
+        env:
+          CHANGED_FILES: ${{ steps.filter.outputs.changed_files }}
+        run: python backend/scripts/ci_matrix.py --github-output "$GITHUB_OUTPUT"
+
+  backend-architecture:
+    name: Architecture boundaries
+    needs: changes
+    if: needs.changes.outputs.has_backend_changes == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
-      - run: uv sync
+      - run: python scripts/check_architecture.py --strict
+      - run: uv run --project services/identity-service pytest tests/unit/test_architecture_check.py tests/unit/test_ci_matrix.py -q
 
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy --explicit-package-bases app
-
-  test:
+  backend-e2e:
+    name: E2E (black-box через Gateway)
+    needs: changes
+    if: needs.changes.outputs.has_backend_changes == 'true'
     runs-on: ubuntu-latest
-    # DATABASE_URL нужен просто как синтаксически валидный URL: app/db.py
-    # строит движок из settings.database_url при импорте модуля (ещё до
-    # того, как testcontainers поднимет собственный Postgres для тестов),
-    # и без него create_async_engine() падает прямо на сборе тестов —
-    # реального подключения по этому URL никогда не происходит.
-    # SECRET_KEY, в отличие от него, используется по-настоящему: unit-тесты
-    # в tests/unit/test_security.py подписывают и проверяют JWT этим ключом.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    defaults:
+      run:
+        working-directory: backend
     env:
-      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
-      SECRET_KEY: ci-test-only-secret-key-do-not-use-in-production
+      PYTEST_ADDOPTS: --junitxml=${{ github.workspace }}/backend/e2e-test-results.xml
     steps:
       - uses: actions/checkout@v7
 
@@ -45,27 +77,101 @@ jobs:
         with:
           enable-cache: true
 
-      - run: uv sync
-
-      # Postgres не поднимается отдельным services-блоком: testcontainers
-      # сам стартует и гасит контейнер на Docker-демоне раннера.
-      # continue-on-error даёт шагу с отчётом выполниться, даже если тесты упали.
-      - name: Run tests
-        continue-on-error: true
-        run: uv run pytest --junitxml=test-results.xml
+      # Стек (identity/catalog/support + RabbitMQ/MinIO/Postgres + Nginx
+      # Gateway) поднимается и уничтожается самой фикстурой tests/e2e/conftest.py
+      # через `docker compose`, уже доступный на раннере — своих секретов не
+      # требует, JWT-ключи генерирует в project-scoped volume.
+      - run: uv run pytest tests/e2e -q
 
       - name: Publish Test Report
         uses: dorny/test-reporter@v3
-        if: always() # выполняется всегда, чтобы отчёт был виден и при падении тестов
+        if: always()
         with:
-          name: Test Results
-          path: test-results.xml
-          reporter: python-xunit # формат отчёта, который генерирует pytest --junitxml
+          name: Test Results (e2e)
+          path: backend/e2e-test-results.xml
+          reporter: python-xunit
           fail-on-error: 'true'
 
       - name: Upload test results artifact
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results
-          path: test-results.xml
+          name: test-results-e2e
+          path: backend/e2e-test-results.xml
+
+  backend-lint:
+    name: Lint (${{ matrix.member }})
+    needs: changes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        member: ${{ fromJSON(needs.changes.outputs.members) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - run: make check pkg=${{ matrix.member }}
+
+  backend-test:
+    name: Test (${{ matrix.member }})
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        member: ${{ fromJSON(needs.changes.outputs.members) }}
+    env:
+      PYTEST_ADDOPTS: --junitxml=${{ github.workspace }}/backend/test-results.xml
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - run: make test pkg=${{ matrix.member }}
+
+      - name: Publish Test Report
+        uses: dorny/test-reporter@v3
+        if: always()
+        with:
+          name: Test Results (${{ matrix.member }})
+          path: backend/test-results.xml
+          reporter: python-xunit
+          fail-on-error: 'true'
+
+      - name: Upload test results artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ matrix.member }}
+          path: backend/test-results.xml
+
+  backend-build:
+    name: Build (${{ matrix.service }})
+    needs: changes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: docker build --file services/${{ matrix.service }}/Dockerfile --tag productsflow/${{ matrix.service }}:ci .

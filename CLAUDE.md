@@ -4,56 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Package/dependency management is via `uv` (see `uv.lock`). Requires Python 3.14 (`.python-version`).
+### backend/ (per-package dependency declarations, shared workspace lock — see `docs/architecture/backend_architecture.md` §2)
 
-- Install deps: `uv sync`
-- Run the API locally: `uv run uvicorn app.main:app --reload` (needs a reachable Postgres — see `make up_dev` below; DB URL comes from `.env` / `DATABASE_URL`)
-- Test: `make test` (= `uv run pytest`)
-  - Single test: `uv run pytest tests/unit/test_schemas.py::test_name`
-  - Integration tests (`tests/integration/`) spin up a real Postgres via `testcontainers` (session-scoped, see root `conftest.py`) — Docker must be running. Unit tests (`tests/unit/`) don't need Docker.
-- Coverage: `make coverage` (`service=app` by default)
-- Format: `make format` (ruff format + ruff check --fix)
-- Lint/typecheck: `make check` (ruff check, `mypy --explicit-package-bases`, ruff format --check, `vulture ./whitelist.py`). `whitelist.py` at the repo root suppresses vulture false positives (currently just the unused `cls` in `app/schemas.py`'s `@field_validator` classmethods) — regenerate entries with `uv run vulture --make-whitelist .` if new false positives show up. `whitelist.py` is excluded from ruff/mypy (`[tool.ruff] extend-exclude`, `[tool.mypy] exclude`) since it's not meant to be valid/typed Python.
-- `make lint` = format then check.
-- Scope check/format/lint to a path: `make check path=app`.
+Five packages, each a flat directory with its own `pyproject.toml` declaring its own dependencies: libs `kernel-domain`, `kernel-platform` (`backend/libs/<name>`); services `identity-service`, `catalog-service`, `support-service` (`backend/services/<name>`). `backend/pyproject.toml` declares `[tool.uv.workspace] members = ["libs/*", "services/*"]` and resolves into one shared `backend/uv.lock`/`backend/.venv` — reintroduced (Integration/e2e work) specifically so `backend/tests/e2e/` (which isn't inside any single package) has a coherent environment to run against. There is no per-package `uv.lock` anymore.
 
-### Database migrations (Alembic)
-
-- Local (uses the `DATABASE_URL` in `.env` directly): `make db-revision msg="..."`, `make db-upgrade`, `make db-downgrade`, `make db-current`, `make db-history`.
-- Dockerized (via a one-off `*_migrations` compose service): `make make_migration message="..."`, `make migrate`, `make downgrade`.
-- The app also runs migrations itself on every startup (see Architecture below) — for local dev you generally don't need to run `db-upgrade` manually before `uvicorn`.
-
-### Docker Compose
-
-- `make up_dev` — Postgres only (profile `dev`, port `7600`), for running the API locally against it.
-- `make up_prod` — Postgres + the API, both dockerized (profile `prod`, API on port `9000`).
-- `make down_dev` / `make down_prod`, `make shell service=app`, `make logs service=app`, `make build`.
+- Install/sync deps for one package: `uv sync --all-packages` from inside `backend/libs/<name>` or `backend/services/<name>` (that's what `make check`/`test`/`format` do) — this resolves the whole shared workspace lock, `cd` just scopes which package's lint/tests actually run.
+- Lint/typecheck one package: `make check pkg=<member>` (from the repo root; ruff check, `mypy --explicit-package-bases`, ruff format --check, `vulture whitelist.py`), scoped to `libs/<member>` or `services/<member>` and running inside that package's own environment.
+- Format one package: `make format pkg=<member>` (ruff format + ruff check --fix). `make lint pkg=<member>` = format then check.
+- Test one package: `make test pkg=<member>` (`uv run pytest` inside the package directory), scoped to the same package directory.
+- Generate a local RS256 dev key pair for identity: `make keys` — writes `backend/secrets/identity_jwt_private_key.pem` (git-ignored); point `IDENTITY_JWT_PRIVATE_KEY_PATH` in `.env` at it.
+- Build service images: `make build service=<compose-service>` (`identity-api`/`catalog-api`/`support-api`), or `docker compose build` directly.
+- Dev stack: `make up_dev service=<compose-service>` — base `docker-compose.yml` + `docker-compose.dev.yml` override (host ports 9010–9012, `APP_ENV=dev`).
+- Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (host ports 9013–9015, `APP_ENV=prod`, `restart: unless-stopped`).
+- Each service container gets only its own `*_DATABASE_URL` via `environment:` (not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_PRIVATE_KEY_PATH`, `IDENTITY_ACCESS_TOKEN_TTL_HOURS`, `CATALOG_DATABASE_URL`, `CATALOG_IDENTITY_BASE_URL`, `SUPPORT_DATABASE_URL`).
+- Migrations/seeding run through one-off `*-bootstrap` Compose services (`api/bootstrap.py` per service), never in FastAPI's `lifespan`; `make setup` runs migrations for all three, `make demo` adds seeding.
+- CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per package; `backend-test` runs `make test pkg=<member>` as a matrix job over the packages; `backend-build` runs `docker compose build`.
 
 ## Architecture
 
-Single-service FastAPI app (`app/`), layered `router → repository → SQLAlchemy model`, with Pydantic schemas (`app/schemas.py`) as the response/validation boundary.
+`backend/` is where all work happens — a set of isolated microservices (`identity-service`, `catalog-service`, `support-service`) and shared libraries (`kernel-domain`, `kernel-platform`, `observability`, `test-support`). No production API Gateway exists; each service is reached on its own port. Full decision record: `docs/adr/` (start at `docs/adr/README.md`); diagrams and prose: `docs/architecture/backend_architecture.md`.
 
-- **Routers** (`app/router/auth.py`, `products.py`, `users.py`) depend on repositories and on the `CurrentUser` / `AdminUser` typed dependencies from `app/security.py` for auth gating; they raise `HTTPException` directly for domain errors (not-found, forbidden).
-- **Config** (`app/settings.py`) is `pydantic-settings` reading `.env`; see `.env.example` for the full variable list (`DATABASE_URL`, `SECRET_KEY`, `ACCESS_TOKEN_TTL_HOURS`, `ADMIN_PASSWORD`, Postgres compose vars).
+- Services communicate asynchronously via the transactional outbox pattern (`kernel-platform`'s `drain_events_to_outbox()` + `identity-worker`/`catalog-worker`/`support-worker`). `identity-service` is the only event producer.
+- Synchronous interactions are the exception, not symmetric across services: `catalog-service` verifies JWTs via `IdentityClient`'s JWKS cache and makes a synchronous call to identity on a read-model cache miss or admin action; `support-service` verifies JWTs with a statically configured public key and never calls identity synchronously (deny-by-default instead). See `docs/adr/0005-security-auth-actor-contract.md`.
 
-Everything else architecture-specific lives in `.claude/rules/architecture/*.md` and lazy-loads by path (YAML `paths:` frontmatter) instead of always sitting in this file:
+Everything else architecture-specific lives in `.claude/architecture/*.md` and lazy-loads by path:
 
 | Rule | Triggers on |
 |---|---|
-| [repository.md](.claude/rules/architecture/repository.md) | `app/repository.py` |
-| [auth.md](.claude/rules/architecture/auth.md) | `app/security.py`, `app/router/auth.py` |
-| [audit.md](.claude/rules/architecture/audit.md) | `app/audit.py`, `app/models.py`, `app/main.py` |
-| [errors.md](.claude/rules/architecture/errors.md) | `app/errors.py` |
-| [startup.md](.claude/rules/architecture/startup.md) | `app/main.py`, `app/db.py` |
-| [testing.md](.claude/rules/architecture/testing.md) | `tests/**`, `conftest.py` |
+| [repository.md](.claude/architecture/repository.md) | `backend/services/*/src/domain/repositories.py`, `backend/services/*/src/infrastructure/db/*_repository.py` |
+| [auth.md](.claude/architecture/auth.md) | `backend/services/*/src/infrastructure/security/auth.py`, `backend/services/identity-service/src/core/security/*.py` |
+| [audit.md](.claude/architecture/audit.md) | `backend/services/{identity,catalog}-service/src/infrastructure/db/audit.py` |
+| [errors.md](.claude/architecture/errors.md) | `backend/libs/kernel-platform/src/kernel_platform/http/*.py` |
+| [startup.md](.claude/architecture/startup.md) | `backend/services/*/src/api/main.py`, `backend/services/*/src/api/bootstrap.py` |
+| [testing.md](.claude/architecture/testing.md) | `backend/services/*/tests/**`, `backend/tests/e2e/**` |
 
-[.claude/rules/karpathy-guidelines.md](.claude/rules/karpathy-guidelines.md) is unscoped (no `paths:`) — general coding behavior, loads every session like this file.
+[.claude/rules/karpathy-guidelines.md](.claude/rules/karpathy-guidelines.md) is unscoped — general coding behavior, loads every session like this file.
 
-Domain-doc consumer rules (read `CONTEXT.md`/`docs/adr/` before touching source) similarly lazy-load from [.claude/rules/domain/domain.md](.claude/rules/domain/domain.md) (`app/**`, `tests/**`) — same content as `docs/agents/domain.md`, kept in sync manually.
+Domain-doc consumer rules lazy-load from [.claude/domain/domain.md](.claude/domain/domain.md) (`backend/**`, `tests/**`).
 
 ## Agent skills
 
-Full command/skill reference (all 25 `.harness/` skills + project-specific `qa-gate`/`pr-composer`, the 6 locally-customized skills, hooks): `docs/agents/harness-guide.md`.
+Full command/skill reference: `docs/agents/harness-guide.md`.
 
 ### Issue tracker
 
@@ -61,19 +52,19 @@ Issues live in GitHub Issues (`github.com/PVMalove/ProductsFlow`), via the `gh` 
 
 ### Triage labels
 
-Custom namespaced taxonomy (`hitl`/`afk` execution mode + `type::*` + `workflow::*` + context labels) — not the upstream canonical five-role set. See `docs/agents/triage-labels.md`.
+Custom namespaced taxonomy — not the upstream canonical five-role set. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `.claude/domain/domain.md`.
 
 ### Git workflow
 
-Ticket implementation always goes on `feature/<ticket-id>` + PR, never straight to `master`; after the PR is open, the agent pauses for the developer's review-or-changes decision and never merges it itself. See `docs/agents/git-workflow.md`.
+Ticket implementation always goes on `feature/<ticket-id>` + PR. Open PR only after explicit developer confirmation. See `docs/agents/git-workflow.md`.
 
 ### Parallel work (worktrees)
 
-Only when explicitly asked: use the native `EnterWorktree`/`ExitWorktree` tools (or `isolation: "worktree"` on a subagent), not manual `git worktree` + `tmux`. See `docs/agents/worktrees.md`.
+Only when explicitly asked: use the native `EnterWorktree`/`ExitWorktree` tools, not manual `git worktree` + `tmux`. See `docs/agents/worktrees.md`.
 
 ### Communication language
 

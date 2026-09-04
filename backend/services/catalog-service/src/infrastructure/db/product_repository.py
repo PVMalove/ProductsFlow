@@ -1,0 +1,322 @@
+import uuid
+
+from kernel_domain.result import Result
+from kernel_platform.outbox.drain import drain_events_to_outbox
+from kernel_platform.pagination import encode_cursor
+from sqlalchemy import Select, delete, func, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from application.ports import (
+    ProductAuditAction,
+    ProductCommandPort,
+    ProductQueryPort,
+)
+from domain.entities.product import Product
+from domain.product_image import ProductImage
+from domain.repositories import (
+    Cursor,
+    PageInfo,
+    ProductPage,
+)
+from domain.repositories import (
+    ProductRepository as ProductRepositoryPort,
+)
+from domain.value_objects.product_id import ProductId
+from infrastructure.db.audit import ProductAuditLog
+from infrastructure.db.entity_configurations.models import (
+    ProductImageModel,
+    ProductModel,
+)
+from infrastructure.db.owner_read_model import OwnerReadModelRow
+
+# Алиас, а не `list[ProductModel]` напрямую в аннотациях адаптера:
+# метод `list` (AC issue #148) одноимённый с builtin'ом внутри той же
+# области видимости класса — mypy резолвит голый `list[...]` в аннотациях
+# методов этого класса в сам метод, а не в builtin (известная особенность
+# self-referencing имён в теле класса).
+_ProductRows = list[ProductModel]
+
+
+def _to_domain(row: ProductModel) -> Product:
+    return Product.reconstitute(
+        ProductId.create(row.id),
+        name=row.name,
+        description=row.description,
+        price=row.price,
+        category=row.category,
+        user_id=row.user_id,
+        is_active=row.is_active,
+    )
+
+
+def _to_image_domain(row: ProductImageModel) -> ProductImage:
+    return ProductImage(
+        product_id=ProductId.create(row.product_id),
+        s3_key=row.s3_key,
+        content_type=row.content_type,
+        size_bytes=row.size_bytes,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+class ProductRepository:
+    """CRUD + keyset-пагинация для `Product` (issue #148).
+
+    Мутирующие методы добавляют ORM-изменения и дренируют доменные события в
+    outbox в точке мутации. Фиксация транзакции принадлежит CatalogUnitOfWork
+    (ADR 0006), поэтому этот адаптер никогда не коммитит самостоятельно.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        name: str,
+        description: str,
+        price: float,
+        category: str,
+        user_id: uuid.UUID,
+    ) -> Result[Product]:
+        result = Product.create(
+            ProductId.new_id(),
+            name=name,
+            description=description,
+            price=price,
+            category=category,
+            user_id=user_id,
+        )
+        if result.is_err:
+            return result
+
+        product = result.value
+        self.session.add(
+            ProductModel(
+                id=product.id.value,
+                name=product.name,
+                description=product.description,
+                price=product.price,
+                category=product.category,
+                user_id=product.user_id,
+                is_active=product.is_active,
+            )
+        )
+        await drain_events_to_outbox(self.session, product)
+        return result
+
+    async def get_by_id(self, product_id: ProductId) -> Product | None:
+        row = await self.session.get(ProductModel, product_id.value)
+        return _to_domain(row) if row is not None else None
+
+    async def update(
+        self,
+        product_id: ProductId,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        price: float | None = None,
+        category: str | None = None,
+    ) -> Result[Product] | None:
+        loaded = await self._load(product_id)
+        if loaded is None:
+            return None
+        row, product = loaded
+
+        result = product.update(
+            name=name, description=description, price=price, category=category
+        )
+        if result.is_err:
+            return Result[Product].fail(result.error)
+
+        row.name = product.name
+        row.description = product.description
+        row.price = product.price
+        row.category = product.category
+        await drain_events_to_outbox(self.session, product)
+        return Result[Product].ok(product)
+
+    async def activate(self, product_id: ProductId) -> Result[Product] | None:
+        return await self._toggle_active(product_id, activate=True)
+
+    async def deactivate(self, product_id: ProductId) -> Result[Product] | None:
+        return await self._toggle_active(product_id, activate=False)
+
+    async def _toggle_active(
+        self, product_id: ProductId, *, activate: bool
+    ) -> Result[Product] | None:
+        loaded = await self._load(product_id)
+        if loaded is None:
+            return None
+        row, product = loaded
+
+        result = product.activate() if activate else product.deactivate()
+        if result.is_err:
+            return Result[Product].fail(result.error)
+
+        row.is_active = product.is_active
+        await drain_events_to_outbox(self.session, product)
+        return Result[Product].ok(product)
+
+    async def delete(self, product_id: ProductId) -> Product | None:
+        loaded = await self._load(product_id)
+        if loaded is None:
+            return None
+        row, product = loaded
+
+        product.mark_deleted()
+        await drain_events_to_outbox(self.session, product)
+        await self.session.delete(row)
+        return product
+
+    async def get_product_image(self, product_id: ProductId) -> ProductImage | None:
+        row = await self.session.scalar(
+            select(ProductImageModel).where(
+                ProductImageModel.product_id == product_id.value
+            )
+        )
+        return _to_image_domain(row) if row is not None else None
+
+    async def upsert_product_image(
+        self,
+        product_id: ProductId,
+        *,
+        s3_key: str,
+        content_type: str,
+        size_bytes: int,
+        actor_user_id: uuid.UUID,
+    ) -> ProductImage:
+        insert_stmt = pg_insert(ProductImageModel).values(
+            product_id=product_id.value,
+            s3_key=s3_key,
+            content_type=content_type,
+            size_bytes=size_bytes,
+        )
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[ProductImageModel.product_id],
+            set_={
+                "s3_key": insert_stmt.excluded.s3_key,
+                "content_type": insert_stmt.excluded.content_type,
+                "size_bytes": insert_stmt.excluded.size_bytes,
+                "updated_at": func.now(),
+            },
+        ).returning(ProductImageModel)
+        row = (await self.session.execute(upsert_stmt)).scalar_one()
+        image = _to_image_domain(row)
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_UPDATED,
+                product_id=product_id.value,
+                actor_user_id=str(actor_user_id),
+                description=(
+                    f"Загружена картинка товара (content_type={content_type}, "
+                    f"size_bytes={size_bytes})"
+                ),
+            )
+        )
+        return image
+
+    async def delete_product_image(
+        self, product_id: ProductId, *, actor_user_id: uuid.UUID
+    ) -> None:
+        await self.session.execute(
+            delete(ProductImageModel).where(
+                ProductImageModel.product_id == product_id.value
+            )
+        )
+        self.session.add(
+            ProductAuditLog(
+                action=ProductAuditAction.IMAGE_DELETED,
+                product_id=product_id.value,
+                actor_user_id=str(actor_user_id),
+                description="Удалена картинка товара",
+            )
+        )
+
+    async def list(
+        self,
+        *,
+        limit: int,
+        after: Cursor | None = None,
+        before: Cursor | None = None,
+    ) -> ProductPage:
+        # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
+        # — деактивированный Товар и Товар деактивированного (или ещё не
+        # добранного, issue #149) Владельца одинаково скрыты из выдачи для
+        # всех, включая самого Владельца. INNER JOIN: Товар, чей Владелец ещё
+        # не появился в owner_read_model (ни событием, ни синхронным
+        # добором), из списков тоже не виден — тот же осторожный дефолт, что
+        # и на прямом обращении по id.
+        base_stmt = (
+            select(ProductModel)
+            .join(OwnerReadModelRow, OwnerReadModelRow.user_id == ProductModel.user_id)
+            .where(
+                ProductModel.is_active.is_(True), OwnerReadModelRow.is_active.is_(True)
+            )
+        )
+        if before is not None:
+            stmt = base_stmt.where(
+                tuple_(ProductModel.created_at, ProductModel.id)
+                > (before.created_at, before.id)
+            ).order_by(ProductModel.created_at.asc(), ProductModel.id.asc())
+            page, has_prev = await self._overfetch(stmt, limit)
+            page.reverse()
+            has_more = True
+        else:
+            stmt = base_stmt
+            if after is not None:
+                stmt = stmt.where(
+                    tuple_(ProductModel.created_at, ProductModel.id)
+                    < (after.created_at, after.id)
+                )
+            stmt = stmt.order_by(ProductModel.created_at.desc(), ProductModel.id.desc())
+            page, has_more = await self._overfetch(stmt, limit)
+            has_prev = after is not None
+
+        if not page:
+            return ProductPage(
+                items=[],
+                page_info=PageInfo(
+                    next_cursor=None, prev_cursor=None, has_more=False, has_prev=False
+                ),
+            )
+
+        return ProductPage(
+            items=[_to_domain(row) for row in page],
+            page_info=PageInfo(
+                next_cursor=(
+                    encode_cursor(page[-1].created_at, page[-1].id)
+                    if has_more
+                    else None
+                ),
+                prev_cursor=(
+                    encode_cursor(page[0].created_at, page[0].id) if has_prev else None
+                ),
+                has_more=has_more,
+                has_prev=has_prev,
+            ),
+        )
+
+    async def _load(self, product_id: ProductId) -> tuple[ProductModel, Product] | None:
+        row = await self.session.get(ProductModel, product_id.value)
+        if row is None:
+            return None
+        return row, _to_domain(row)
+
+    async def _overfetch(
+        self, stmt: Select[tuple[ProductModel]], limit: int
+    ) -> tuple[_ProductRows, bool]:
+        rows: _ProductRows = list(
+            (await self.session.scalars(stmt.limit(limit + 1))).all()
+        )
+        return rows[:limit], len(rows) > limit
+
+
+# Статическая структурная проверка: mypy убеждается, что конкретная
+# реализация удовлетворяет каждую операцию, требуемую доменным контрактом
+# репозитория.
+_product_repository_implementation: type[ProductRepositoryPort] = ProductRepository
+_product_command_port_implementation: type[ProductCommandPort] = ProductRepository
+_product_query_port_implementation: type[ProductQueryPort] = ProductRepository
