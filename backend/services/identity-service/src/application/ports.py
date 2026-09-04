@@ -7,9 +7,9 @@ from typing import Protocol
 
 from kernel_platform.pagination import Cursor, PageInfo
 
-from domain.email import Email
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

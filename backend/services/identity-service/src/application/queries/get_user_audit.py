@@ -12,7 +12,7 @@ from application.ports import (
     UserAuditQueryPort,
     UserQueryPort,
 )
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

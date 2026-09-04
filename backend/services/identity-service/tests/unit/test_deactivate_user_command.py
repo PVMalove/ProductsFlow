@@ -5,8 +5,8 @@ from application.deactivate_user import (
     DeactivateUserCommandHandler,
 )
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
+from domain.entities.user import User
 from domain.events import Deactivated
-from domain.user import User
 from tests.unit.fake_identity_unit_of_work import FakeIdentityUnitOfWork
 from tests.unit.fake_password_hasher import FakePasswordHasher
 from tests.unit.fake_user_repository import FakeUserRepository

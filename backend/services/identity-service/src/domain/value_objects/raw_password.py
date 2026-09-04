@@ -1,11 +1,15 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_domain.value_object import ValueObject
 
+from domain.value_objects import _PRIVATE_MARKER
+
 _MIN_LENGTH = 8
+
+_MISSING = object()
 
 
 @dataclass(frozen=True, eq=False)
@@ -18,12 +22,21 @@ class RawPassword(ValueObject):
 
     value: str
 
+    def __init__(
+        self, marker: object = _MISSING, value: str = cast("str", _MISSING)
+    ) -> None:
+        if marker is not _PRIVATE_MARKER:
+            raise RuntimeError(
+                "RawPassword instances must be created through RawPassword.create()"
+            )
+        object.__setattr__(self, "value", value)
+
     @classmethod
     def create(cls, value: str) -> Result["RawPassword"]:
         error = _validate(value)
         if error is not None:
             return Result[RawPassword].fail(error)
-        return Result[RawPassword].ok(cls(value))
+        return Result[RawPassword].ok(cls(_PRIVATE_MARKER, value))
 
     def _equality_components(self) -> tuple[Any, ...]:
         return (self.value,)

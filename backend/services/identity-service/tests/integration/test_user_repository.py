@@ -10,8 +10,8 @@ from observability.context import actor_id_var
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from domain.email import Email
-from domain.user import User
+from domain.entities.user import User
+from domain.value_objects.email import Email
 from infrastructure.db import audit as _audit  # noqa: F401
 from infrastructure.db.audit import UserAuditAction, UserAuditLog
 from infrastructure.db.entity_configurations.models import UserModel
@@ -51,7 +51,7 @@ class _CreateTwoUsersHandler:
 async def test_add_persists_user_and_register_event_atomically(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    result = User.register(Email("user@example.com"), "hashed-password")
+    result = User.register(Email.create("user@example.com").value, "hashed-password")
     assert result.is_ok
 
     uow = SqlIdentityUnitOfWork(db_session)
@@ -61,7 +61,7 @@ async def test_add_persists_user_and_register_event_atomically(
 
     stored = await uow.users.get_by_id(result.value.id)
     assert stored is not None
-    assert stored.email == Email("user@example.com")
+    assert stored.email == Email.create("user@example.com").value
     assert stored.password_hash == "hashed-password"
 
     outbox_rows = await db_session.scalars(
@@ -74,7 +74,7 @@ async def test_add_persists_user_and_register_event_atomically(
 
 
 async def _create_user(uow: SqlIdentityUnitOfWork, email: str) -> User:
-    result = User.register(Email(email), "hashed-password")
+    result = User.register(Email.create(email).value, "hashed-password")
     assert result.is_ok
     async with uow:
         await uow.users.add(result.value)
@@ -187,8 +187,8 @@ async def test_audit_uses_current_actor_from_request_context(
 async def test_handler_rolls_back_multiple_user_writes_and_their_outbox_rows(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    first = User.register(Email("first@example.com"), "hashed-password")
-    second = User.register(Email("second@example.com"), "hashed-password")
+    first = User.register(Email.create("first@example.com").value, "hashed-password")
+    second = User.register(Email.create("second@example.com").value, "hashed-password")
     assert first.is_ok
     assert second.is_ok
 
@@ -204,8 +204,8 @@ async def test_handler_rolls_back_multiple_user_writes_and_their_outbox_rows(
 async def test_handler_commits_multiple_user_writes_with_outbox_rows(
     db_session: AsyncSession, _schema: None
 ) -> None:
-    first = User.register(Email("first@example.com"), "hashed-password")
-    second = User.register(Email("second@example.com"), "hashed-password")
+    first = User.register(Email.create("first@example.com").value, "hashed-password")
+    second = User.register(Email.create("second@example.com").value, "hashed-password")
     assert first.is_ok
     assert second.is_ok
 

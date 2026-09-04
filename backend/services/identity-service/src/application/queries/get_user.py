@@ -6,7 +6,7 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import UserQueryPort, UserReadModel
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 
 @dataclass(frozen=True)

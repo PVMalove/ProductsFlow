@@ -9,7 +9,7 @@ from kernel_platform.security import Actor, ActorRole, require_admin
 
 from api.dependencies import UserQueryRepositoryDI
 from core.security.tokens import decode_access_token
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -30,7 +30,7 @@ async def get_current_actor(
     carry no role and can be stale (ADR 0033)."""
     try:
         payload: dict[str, Any] = decode_access_token(token)
-        user_id = UserId(uuid.UUID(str(payload["sub"])))
+        user_id = UserId.create(uuid.UUID(str(payload["sub"])))
     except (KeyError, TypeError, ValueError, jwt.PyJWTError) as exc:
         raise _INVALID_TOKEN from exc
 

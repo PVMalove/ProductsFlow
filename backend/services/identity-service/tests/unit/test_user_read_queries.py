@@ -14,9 +14,9 @@ from application.queries.get_user_audit import (
     GetUserAuditQueryHandler,
 )
 from application.queries.list_users import ListUsersQuery, ListUsersQueryHandler
-from domain.email import Email
 from domain.role import Role
-from domain.user_id import UserId
+from domain.value_objects.email import Email
+from domain.value_objects.user_id import UserId
 
 _UserAuditEntries = list[UserAuditEntry]
 
@@ -26,8 +26,8 @@ class FakeUserReadRepository:
         self.users = UserPage(
             items=[
                 UserReadModel(
-                    id=UserId.generate(),
-                    email=Email("admin@example.com"),
+                    id=UserId.new_id(),
+                    email=Email.create("admin@example.com").value,
                     role=Role.ADMIN,
                     is_active=True,
                 )
@@ -41,8 +41,8 @@ class FakeUserReadRepository:
         self.audit_entries = [
             UserAuditEntry(
                 id=1,
-                user_id=UserId.generate(),
-                actor_user_id=UserId.generate(),
+                user_id=UserId.new_id(),
+                actor_user_id=UserId.new_id(),
                 action=UserAuditAction.REGISTERED,
                 description="Зарегистрирован пользователь",
                 created_at=datetime.now(timezone.utc),
@@ -75,7 +75,7 @@ class FakeUserReadRepository:
 
 async def test_list_users_query_returns_cursor_page_from_read_repository() -> None:
     repository = FakeUserReadRepository()
-    after = Cursor(datetime(2026, 1, 1, tzinfo=timezone.utc), UserId.generate().value)
+    after = Cursor(datetime(2026, 1, 1, tzinfo=timezone.utc), UserId.new_id().value)
 
     result = await ListUsersQueryHandler(repository).execute(
         ListUsersQuery(limit=5, after=after)
@@ -116,7 +116,7 @@ async def test_user_audit_query_returns_not_found_for_an_unknown_target_user() -
     repository = FakeUserReadRepository()
 
     result = await GetUserAuditQueryHandler(repository, repository).execute(
-        GetUserAuditQuery(user_id=UserId.generate())
+        GetUserAuditQuery(user_id=UserId.new_id())
     )
 
     assert result.is_err

@@ -18,8 +18,7 @@ from application.commands import (
 )
 from application.errors import UserListCursorConflictError, UserListInvalidCursorError
 from application.queries import GetUserAuditQuery, ListUsersQuery
-from domain.email import Email
-from domain.user_id import UserId
+from domain.value_objects.user_id import UserId
 
 
 class UserCreate(BaseModel):
@@ -27,7 +26,6 @@ class UserCreate(BaseModel):
     password: str
 
     def to_command(self) -> RegisterUserCommand:
-        Email(self.email)
         return RegisterUserCommand(email=self.email, password=self.password)
 
 
@@ -42,7 +40,7 @@ class PasswordChange(BaseModel):
 
     def to_command(self, *, actor: Actor) -> ChangePasswordCommand:
         return ChangePasswordCommand(
-            user_id=UserId(actor.id),
+            user_id=UserId.create(actor.id),
             old_password=self.old_password,
             new_password=self.new_password,
         )
@@ -54,7 +52,7 @@ class UserActivateRequest(BaseModel):
     user_id: UUID
 
     def to_command(self) -> ActivateUserCommand:
-        return ActivateUserCommand(target_user_id=UserId(self.user_id))
+        return ActivateUserCommand(target_user_id=UserId.create(self.user_id))
 
 
 class UserDeactivateRequest(BaseModel):
@@ -64,7 +62,8 @@ class UserDeactivateRequest(BaseModel):
 
     def to_command(self, *, actor: Actor) -> DeactivateUserCommand:
         return DeactivateUserCommand(
-            target_user_id=UserId(self.user_id), actor_user_id=UserId(actor.id)
+            target_user_id=UserId.create(self.user_id),
+            actor_user_id=UserId.create(actor.id),
         )
 
 
@@ -74,7 +73,7 @@ class UserTargetAuditRequest(BaseModel):
     user_id: UUID
 
     def to_query(self) -> GetUserAuditQuery:
-        return GetUserAuditQuery(user_id=UserId(self.user_id))
+        return GetUserAuditQuery(user_id=UserId.create(self.user_id))
 
 
 class UserGlobalAuditRequest(BaseModel):

@@ -1,18 +1,15 @@
-from domain.email import Email
+from domain.entities.user import User
 from domain.events import Activated, Deactivated
-from domain.role import Role
-from domain.user import User
-from domain.user_id import UserId
+from domain.value_objects.email import Email
 
 
 def _user(*, is_active: bool) -> User:
-    return User(
-        UserId.generate(),
-        email=Email("user@example.com"),
-        password_hash="some-hash",
-        role=Role.USER,
-        is_active=is_active,
-    )
+    user = User.register(Email.create("user@example.com").value, "some-hash").value
+    user.pull_events()
+    if not is_active:
+        user.deactivate()
+        user.pull_events()
+    return user
 
 
 def test_deactivate_an_active_user_succeeds_and_pulls_a_deactivated_event() -> None:
