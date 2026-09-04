@@ -16,6 +16,10 @@ from application.commands.deactivate_user import (
     DeactivateUserCommand,
     DeactivateUserCommandHandler,
 )
+from application.commands.delete_account import (
+    DeleteAccountCommand,
+    DeleteAccountCommandHandler,
+)
 from application.commands.login import LoginCommand, LoginCommandHandler
 from application.commands.register_user import (
     RegisterUserCommand,
@@ -31,6 +35,8 @@ __all__ = [
     "ChangeUserRoleCommandHandler",
     "DeactivateUserCommand",
     "DeactivateUserCommandHandler",
+    "DeleteAccountCommand",
+    "DeleteAccountCommandHandler",
     "LoginCommand",
     "LoginCommandHandler",
     "RegisterUserCommand",

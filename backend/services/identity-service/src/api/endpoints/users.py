@@ -10,6 +10,7 @@ from api.dependencies import (
     ActivateUserDI,
     ChangePasswordDI,
     DeactivateUserDI,
+    DeleteAccountDI,
     GetCurrentUserDI,
     ListUsersDI,
     UserAuditDI,
@@ -23,6 +24,7 @@ from api.schemas import (
     UserTargetAuditRequest,
 )
 from api.security import AdminActor, RequiredActor
+from application.commands.delete_account import DeleteAccountCommand
 from application.ports import UserAuditEntry, UserAuditPage
 from application.queries import GetCurrentUserQuery, GetUserAuditQuery
 from contracts.user import UserView
@@ -50,6 +52,16 @@ async def read_current_user(
     actor: RequiredActor, handler: GetCurrentUserDI
 ) -> ApiResponse[UserView]:
     result = await handler.execute(GetCurrentUserQuery(user_id=UserId.create(actor.id)))
+    return match_result(result)
+
+
+@router.delete("/me", response_model=ApiResponse[None])
+async def delete_own_account(
+    actor: RequiredActor, handler: DeleteAccountDI
+) -> ApiResponse[None]:
+    result: Result[None] = await handler.execute(
+        DeleteAccountCommand(user_id=UserId.create(actor.id))
+    )
     return match_result(result)
 
 

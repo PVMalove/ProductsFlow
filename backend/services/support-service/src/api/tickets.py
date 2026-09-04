@@ -18,6 +18,7 @@ from api.dependencies import (
     ListTicketsDI,
 )
 from api.schemas import (
+    AdminTicketDetailRequest,
     AdminTicketListRequest,
     TicketCreateRequest,
     TicketDetailRequest,
@@ -95,6 +96,16 @@ async def list_admin_tickets(
         data=[TicketView.from_domain(ticket) for ticket in page.items],
         meta=_page_meta(page.page_info),
     )
+
+
+@router.get("/admin/{ticket_id}", response_model=ApiResponse[TicketDetailView])
+async def get_admin_ticket_detail(
+    request: Annotated[AdminTicketDetailRequest, Depends()],
+    actor: RequiredActor,
+    handler: GetTicketDetailDI,
+) -> ApiResponse[TicketDetailView]:
+    detail: TicketDetail = _unwrap(await handler.execute(request.to_query(actor=actor)))
+    return ApiResponse(data=detail.view, meta=_page_meta(detail.messages_page_info))
 
 
 @router.post(

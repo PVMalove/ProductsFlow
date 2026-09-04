@@ -93,6 +93,38 @@ async def _wait_for_response(
         delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
 
 
+async def _wait_for_ticket_closed(
+    client: httpx.AsyncClient, *, url: str, headers: dict[str, str]
+) -> dict[str, object]:
+    """Poll a ticket-detail response until Support's async user-deletion
+    consumer closes it. Unlike `_wait_for_response`, the transient signal
+    lives in the response body, not the status code: only a `200` with a
+    non-terminal `status` is retried — every other outcome (a non-`200`, or
+    a request error) ends the test immediately."""
+    deadline = time.monotonic() + _READINESS_DEADLINE_SECONDS
+    delay = _MIN_RETRY_DELAY_SECONDS
+    last_body = "<no response received>"
+
+    while True:
+        response = await client.get(url, headers=headers)
+        last_body = response.text
+        if response.status_code != 200:
+            pytest.fail(
+                f"GET {url} returned unexpected {response.status_code}: {last_body}"
+            )
+        data = response.json()["data"]
+        if data["status"] == "CLOSED":
+            return data
+
+        if time.monotonic() >= deadline:
+            pytest.fail(
+                f"Timed out after {_READINESS_DEADLINE_SECONDS:.0f}s waiting for "
+                f"{url} to close; last response body: {last_body}"
+            )
+        await asyncio.sleep(min(_MAX_RETRY_DELAY_SECONDS, delay * uniform(0.8, 1.2)))
+        delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
+
+
 async def _login_seeded_admin(client: httpx.AsyncClient) -> str:
     response = await client.post(
         "/api/v1/auth/login",

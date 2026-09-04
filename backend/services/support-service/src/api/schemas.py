@@ -116,6 +116,28 @@ class TicketDetailRequest(BaseModel):
         )
 
 
+class AdminTicketDetailRequest(BaseModel):
+    """Path- and query-bound — same shape as `TicketDetailRequest`, but its
+    query forces the admin-only gate (`GET /tickets/admin/{ticket_id}`)."""
+
+    ticket_id: uuid.UUID
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+    before: str | None = Query(default=None)
+
+    def to_query(self, *, actor: Actor) -> GetTicketDetailQuery:
+        after_cursor, before_cursor = _decode_cursors(self.after, self.before)
+        return GetTicketDetailQuery(
+            ticket_id=TicketId.create(self.ticket_id),
+            actor_id=actor.id,
+            is_admin=_is_admin(actor),
+            limit=self.limit,
+            after=after_cursor,
+            before=before_cursor,
+            require_admin=True,
+        )
+
+
 class TicketMessageCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=10_000)
 
