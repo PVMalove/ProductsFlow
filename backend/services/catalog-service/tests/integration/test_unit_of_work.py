@@ -7,12 +7,48 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.commands import CreateProductCommand, CreateProductCommandHandler
+from application.ports import Actor, IdentityUser
 from domain.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.models import ProductImageModel, ProductModel
+from infrastructure.db.owner_read_model import OwnerReadModelRow, SqlOwnerReadModel
 from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
+
+
+class _IdentityGateway:
+    def __init__(self, user_id: uuid.UUID) -> None:
+        self._user_id = user_id
+
+    async def fetch_current_user(self, token: str) -> IdentityUser:
+        return IdentityUser(id=self._user_id, role="user", is_active=True)
+
+
+async def test_failed_create_rolls_back_cold_start_owner_projection(
+    db_session: AsyncSession,
+) -> None:
+    """The separately injected OwnerReadModel shares the handler's UoW."""
+    owner_id = uuid.uuid4()
+    handler = CreateProductCommandHandler(
+        SqlCatalogUnitOfWork(db_session),
+        SqlOwnerReadModel(db_session),
+        _IdentityGateway(owner_id),
+    )
+
+    result = await handler.execute(
+        CreateProductCommand(
+            actor=Actor(user_id=owner_id, token="token"),
+            name="ab",
+            description="",
+            price=1.0,
+            category="Категория",
+        )
+    )
+
+    assert result.is_err
+    assert await db_session.get(OwnerReadModelRow, owner_id) is None
 
 
 async def test_image_mutations_rollback_together_without_partial_audit_or_outbox(

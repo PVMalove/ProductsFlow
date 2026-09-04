@@ -112,6 +112,7 @@ class SqlOwnerReadModel:
             role=owner.role,
             is_active=owner.is_active,
             last_applied_outbox_id=owner.last_applied_outbox_id,
+            commit=False,
         )
 
     async def find_by_role(self, role: str) -> OwnerSnapshot | None:

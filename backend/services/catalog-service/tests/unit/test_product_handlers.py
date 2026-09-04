@@ -171,7 +171,8 @@ def _dependencies(
 async def test_create_product_seeds_owner_before_creating() -> None:
     product = _product()
     repo, owners, identity = _dependencies(product=product)
-    handler = CreateProductCommandHandler(FakeCatalogUnitOfWork(repo), owners, identity)
+    uow = FakeCatalogUnitOfWork(repo)
+    handler = CreateProductCommandHandler(uow, owners, identity)
 
     result = await handler.execute(
         CreateProductCommand(
@@ -194,6 +195,7 @@ async def test_create_product_seeds_owner_before_creating() -> None:
         "category": "Категория",
         "user_id": OWNER_ID,
     }
+    assert uow.committed is True
 
 
 async def test_get_product_denies_inactive_owner_to_other_viewer() -> None:
@@ -230,7 +232,8 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = UpdateProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
+    uow = FakeCatalogUnitOfWork(repo)
+    handler = UpdateProductCommandHandler(uow, identity)
 
     result = await handler.execute(
         UpdateProductCommand(
@@ -251,6 +254,7 @@ async def test_update_product_allows_owner_and_keeps_partial_fields() -> None:
         "price": 42.0,
         "category": None,
     }
+    assert uow.committed is True
 
 
 async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> None:
@@ -258,7 +262,8 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
     repo, owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = DeleteProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
+    uow = FakeCatalogUnitOfWork(repo)
+    handler = DeleteProductCommandHandler(uow, identity)
 
     with pytest.raises(ProductAccessDeniedError):
         await handler.execute(
@@ -267,6 +272,7 @@ async def test_delete_product_denies_non_owner_when_identity_is_not_admin() -> N
 
     assert repo.deleted is False
     assert owners.upserts == []
+    assert uow.rolled_back is True
 
 
 async def test_delete_product_by_owner_returns_ok_result_with_none_value() -> None:
@@ -274,7 +280,8 @@ async def test_delete_product_by_owner_returns_ok_result_with_none_value() -> No
     repo, _owners, identity = _dependencies(
         product=product, owner=OwnerSnapshot(OWNER_ID, "user", True, 1)
     )
-    handler = DeleteProductCommandHandler(FakeCatalogUnitOfWork(repo), identity)
+    uow = FakeCatalogUnitOfWork(repo)
+    handler = DeleteProductCommandHandler(uow, identity)
 
     result = await handler.execute(
         DeleteProductCommand(product_id=product.id.value, actor=_actor())
@@ -283,6 +290,7 @@ async def test_delete_product_by_owner_returns_ok_result_with_none_value() -> No
     assert result.is_ok
     assert result.value is None
     assert repo.deleted is True
+    assert uow.committed is True
 
 
 async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> None:
@@ -292,14 +300,16 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     )
     actor = _actor()
 
+    activate_uow = FakeCatalogUnitOfWork(repo)
     activate_result = await ActivateProductCommandHandler(
-        FakeCatalogUnitOfWork(repo), identity
+        activate_uow, identity
     ).execute(ActivateProductCommand(product_id=product.id.value, actor=actor))
     assert activate_result.is_ok
     assert activate_result.value == ProductView.from_domain(product)
 
+    deactivate_uow = FakeCatalogUnitOfWork(repo)
     deactivate_result = await DeactivateProductCommandHandler(
-        FakeCatalogUnitOfWork(repo), identity
+        deactivate_uow, identity
     ).execute(DeactivateProductCommand(product_id=product.id.value, actor=actor))
     assert deactivate_result.is_ok
     assert deactivate_result.value == ProductView.from_domain(product)
@@ -315,3 +325,5 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     assert list_result.value.items == [ProductView.from_domain(product)]
     assert audit.is_ok
     assert audit.value[0].action == "created"
+    assert activate_uow.committed is True
+    assert deactivate_uow.committed is True
