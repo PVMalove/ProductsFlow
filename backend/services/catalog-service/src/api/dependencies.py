@@ -27,12 +27,14 @@ from application.queries import (
 )
 from core.settings import settings
 from domain.repositories import ProductRepository
+from domain.unit_of_work import CatalogUnitOfWork
 from infrastructure.db.audit import SqlProductAuditReader
 from infrastructure.db.owner_read_model import SqlOwnerReadModel
 from infrastructure.db.product_repository import (
     ProductRepository as SqlProductRepository,
 )
 from infrastructure.db.session import DbSessionDI
+from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 from infrastructure.identity_gateway import IdentityGatewayAdapter
 from infrastructure.security.auth import (
     AuthContext,
@@ -48,6 +50,13 @@ def get_product_repository(session: DbSessionDI) -> ProductRepository:
 
 
 ProductRepositoryDI = Annotated[ProductRepository, Depends(get_product_repository)]
+
+
+def get_catalog_uow(session: DbSessionDI) -> CatalogUnitOfWork:
+    return SqlCatalogUnitOfWork(session)
+
+
+CatalogUnitOfWorkDI = Annotated[CatalogUnitOfWork, Depends(get_catalog_uow)]
 
 
 def get_owner_read_model(session: DbSessionDI) -> OwnerReadModel:
@@ -80,11 +89,11 @@ ApplicationIdentityGatewayDI = Annotated[
 
 
 def get_create_product_handler(
-    repository: ProductRepositoryDI,
+    uow: CatalogUnitOfWorkDI,
     owner_read_model: OwnerReadModelDI,
     identity: ApplicationIdentityGatewayDI,
 ) -> CreateProductCommandHandler:
-    return CreateProductCommandHandler(repository, owner_read_model, identity)
+    return CreateProductCommandHandler(uow, owner_read_model, identity)
 
 
 CreateProductDI = Annotated[
@@ -113,9 +122,9 @@ GetProductDI = Annotated[GetProductQueryHandler, Depends(get_product_handler)]
 
 
 def get_update_product_handler(
-    repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
+    uow: CatalogUnitOfWorkDI, identity: ApplicationIdentityGatewayDI
 ) -> UpdateProductCommandHandler:
-    return UpdateProductCommandHandler(repository, identity)
+    return UpdateProductCommandHandler(uow, identity)
 
 
 UpdateProductDI = Annotated[
@@ -124,9 +133,9 @@ UpdateProductDI = Annotated[
 
 
 def get_activate_product_handler(
-    repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
+    uow: CatalogUnitOfWorkDI, identity: ApplicationIdentityGatewayDI
 ) -> ActivateProductCommandHandler:
-    return ActivateProductCommandHandler(repository, identity)
+    return ActivateProductCommandHandler(uow, identity)
 
 
 ActivateProductDI = Annotated[
@@ -135,9 +144,9 @@ ActivateProductDI = Annotated[
 
 
 def get_deactivate_product_handler(
-    repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
+    uow: CatalogUnitOfWorkDI, identity: ApplicationIdentityGatewayDI
 ) -> DeactivateProductCommandHandler:
-    return DeactivateProductCommandHandler(repository, identity)
+    return DeactivateProductCommandHandler(uow, identity)
 
 
 DeactivateProductDI = Annotated[
@@ -146,9 +155,9 @@ DeactivateProductDI = Annotated[
 
 
 def get_delete_product_handler(
-    repository: ProductRepositoryDI, identity: ApplicationIdentityGatewayDI
+    uow: CatalogUnitOfWorkDI, identity: ApplicationIdentityGatewayDI
 ) -> DeleteProductCommandHandler:
-    return DeleteProductCommandHandler(repository, identity)
+    return DeleteProductCommandHandler(uow, identity)
 
 
 DeleteProductDI = Annotated[
@@ -190,12 +199,12 @@ GetProductImageDI = Annotated[
 
 
 def get_upsert_product_image_handler(
-    repository: ProductRepositoryDI,
+    uow: CatalogUnitOfWorkDI,
     identity: ApplicationIdentityGatewayDI,
     storage: StorageDI,
 ) -> UpsertProductImageCommandHandler:
     return UpsertProductImageCommandHandler(
-        repository, identity, storage, settings.minio_bucket_name_product
+        uow, identity, storage, settings.minio_bucket_name_product
     )
 
 
@@ -205,12 +214,12 @@ UpsertProductImageDI = Annotated[
 
 
 def get_delete_product_image_handler(
-    repository: ProductRepositoryDI,
+    uow: CatalogUnitOfWorkDI,
     identity: ApplicationIdentityGatewayDI,
     storage: StorageDI,
 ) -> DeleteProductImageCommandHandler:
     return DeleteProductImageCommandHandler(
-        repository, identity, storage, settings.minio_bucket_name_product
+        uow, identity, storage, settings.minio_bucket_name_product
     )
 
 
@@ -229,6 +238,7 @@ __all__ = [
     "GetProductImageDI",
     "DeleteProductImageDI",
     "ApplicationIdentityGatewayDI",
+    "CatalogUnitOfWorkDI",
     "IdentityGatewayDI",
     "ListProductsDI",
     "OptionalAuth",

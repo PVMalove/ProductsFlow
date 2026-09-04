@@ -1,5 +1,4 @@
 import uuid
-from typing import cast
 
 import pytest
 from kernel_domain.result import Result
@@ -21,7 +20,7 @@ from application.commands import (
     UpsertProductImageCommandHandler,
 )
 from application.image_dto import ProductImageMutation
-from application.ports import Actor, IdentityUser, OwnerSnapshot, ProductCommandPort
+from application.ports import Actor, IdentityUser, OwnerSnapshot
 from application.queries import (
     GetProductAuditQuery,
     GetProductAuditQueryHandler,
@@ -34,6 +33,7 @@ from application.queries import (
 )
 from domain.product import Product
 from domain.product_id import ProductId
+from tests.unit.fake_catalog_unit_of_work import FakeCatalogUnitOfWork
 
 OWNER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -140,7 +140,7 @@ async def test_create_product_command_handler_seeds_owner_and_creates_product() 
     repository = FakeProductRepository()
     owners = FakeOwnerReadModel()
     handler = CreateProductCommandHandler(
-        repository=cast(ProductCommandPort, repository),
+        uow=FakeCatalogUnitOfWork(repository),
         owner_read_model=owners,
         identity=FakeIdentityGateway(),
     )

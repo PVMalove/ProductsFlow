@@ -12,10 +12,10 @@ from application.errors import ProductImageNotFoundError, ProductNotFoundError
 from application.ports import (
     Actor,
     IdentityGateway,
-    ProductCommandPort,
     ProductImageStorage,
 )
 from domain.product_id import ProductId
+from domain.unit_of_work import CatalogUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -37,28 +37,30 @@ class DeleteProductImageCommandHandler:
 
     def __init__(
         self,
-        repository: ProductCommandPort,
+        uow: CatalogUnitOfWork,
         identity: IdentityGateway,
         storage: ProductImageStorage,
         bucket_name: str,
     ) -> None:
-        self._repository = repository
+        self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
         self._storage = storage
         self._bucket_name = bucket_name
 
     async def execute(self, command: DeleteProductImageCommand) -> Result[None]:
-        product = await self._repository.get_by_id(ProductId(command.product_id))
-        if product is None:
-            raise ProductNotFoundError
-        await self._authorizer.require_owner_or_admin(command.actor, product)
-        image = await self._repository.get_product_image(product.id)
-        if image is None:
-            raise ProductImageNotFoundError
+        async with self._uow:
+            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            if product is None:
+                raise ProductNotFoundError
+            await self._authorizer.require_owner_or_admin(command.actor, product)
+            image = await self._uow.products.get_product_image(product.id)
+            if image is None:
+                raise ProductImageNotFoundError
 
-        await self._repository.delete_product_image(
-            product.id, actor_user_id=command.actor.user_id
-        )
-        if not image.s3_key.startswith(SEED_KEY_PREFIX):
-            await self._storage.delete_object(self._bucket_name, image.s3_key)
+            await self._uow.products.delete_product_image(
+                product.id, actor_user_id=command.actor.user_id
+            )
+            if not image.s3_key.startswith(SEED_KEY_PREFIX):
+                await self._storage.delete_object(self._bucket_name, image.s3_key)
+            await self._uow.commit()
         return Result[None].ok(None)

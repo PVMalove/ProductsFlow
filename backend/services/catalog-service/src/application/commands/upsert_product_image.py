@@ -12,10 +12,10 @@ from application.image_dto import ProductImageMutation
 from application.ports import (
     Actor,
     IdentityGateway,
-    ProductCommandPort,
     ProductImageStorage,
 )
 from domain.product_id import ProductId
+from domain.unit_of_work import CatalogUnitOfWork
 
 SEED_KEY_PREFIX = "seed/"
 IMAGE_KEY_TEMPLATE = "products/{product_id}/image"
@@ -42,12 +42,12 @@ class UpsertProductImageCommandHandler:
 
     def __init__(
         self,
-        repository: ProductCommandPort,
+        uow: CatalogUnitOfWork,
         identity: IdentityGateway,
         storage: ProductImageStorage,
         bucket_name: str,
     ) -> None:
-        self._repository = repository
+        self._uow = uow
         self._authorizer = ProductAuthorizer(identity)
         self._storage = storage
         self._bucket_name = bucket_name
@@ -55,29 +55,31 @@ class UpsertProductImageCommandHandler:
     async def execute(
         self, command: UpsertProductImageCommand
     ) -> Result[ProductImageMutation]:
-        product = await self._repository.get_by_id(ProductId(command.product_id))
-        if product is None:
-            raise ProductNotFoundError
-        await self._authorizer.require_owner_or_admin(command.actor, product)
-        existing = await self._repository.get_product_image(product.id)
-        key = IMAGE_KEY_TEMPLATE.format(product_id=product.id.value)
+        async with self._uow:
+            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            if product is None:
+                raise ProductNotFoundError
+            await self._authorizer.require_owner_or_admin(command.actor, product)
+            existing = await self._uow.products.get_product_image(product.id)
+            key = IMAGE_KEY_TEMPLATE.format(product_id=product.id.value)
 
-        await self._storage.put_object(
-            self._bucket_name, key, command.body, command.content_type
-        )
-        await self._repository.upsert_product_image(
-            product.id,
-            s3_key=key,
-            content_type=command.content_type,
-            size_bytes=len(command.body),
-            actor_user_id=command.actor.user_id,
-        )
-        if (
-            existing is not None
-            and existing.s3_key != key
-            and not existing.s3_key.startswith(SEED_KEY_PREFIX)
-        ):
-            await self._storage.delete_object(self._bucket_name, existing.s3_key)
+            await self._storage.put_object(
+                self._bucket_name, key, command.body, command.content_type
+            )
+            await self._uow.products.upsert_product_image(
+                product.id,
+                s3_key=key,
+                content_type=command.content_type,
+                size_bytes=len(command.body),
+                actor_user_id=command.actor.user_id,
+            )
+            if (
+                existing is not None
+                and existing.s3_key != key
+                and not existing.s3_key.startswith(SEED_KEY_PREFIX)
+            ):
+                await self._storage.delete_object(self._bucket_name, existing.s3_key)
+            await self._uow.commit()
 
         return Result[ProductImageMutation].ok(
             ProductImageMutation(replaced=existing is not None)

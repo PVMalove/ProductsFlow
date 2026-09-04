@@ -31,7 +31,7 @@ from application.ports import (
 from core.settings import settings
 from infrastructure.db.models import ProductModel
 from infrastructure.db.owner_read_model import SqlOwnerReadModel
-from infrastructure.db.product_repository import ProductRepository
+from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 from infrastructure.identity_gateway import IdentityGatewayAdapter
 from infrastructure.storage import ensure_minio_buckets, get_storage
 
@@ -92,12 +92,12 @@ async def _seed_products(
         logger.info("catalog-bootstrap: products already seeded; skipping")
         return
 
-    repository = ProductRepository(session)
+    uow = SqlCatalogUnitOfWork(session)
     create_handler = CreateProductCommandHandler(
-        repository, SqlOwnerReadModel(session), identity
+        uow, SqlOwnerReadModel(session), identity
     )
     image_handler = UpsertProductImageCommandHandler(
-        repository, identity, image_storage, bucket_name
+        uow, identity, image_storage, bucket_name
     )
     actor = Actor(user_id=admin_user_id, token="")
     placeholder_bytes = await asyncio.to_thread(_load_placeholder_image)
