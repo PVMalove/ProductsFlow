@@ -40,7 +40,9 @@ def _actor(user_id: uuid.UUID, *, admin: bool = False) -> Actor:
 
 def test_ticket_list_returns_the_callers_page() -> None:
     author_id = uuid.uuid4()
-    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
 
     class FakeHandler:
         async def execute(self, query: ListTicketsQuery) -> TicketPage:
@@ -86,7 +88,9 @@ def test_ticket_detail_is_404_when_not_owned_by_the_caller() -> None:
 
 def test_ticket_detail_reads_messages_through_one_combined_query() -> None:
     author_id = uuid.uuid4()
-    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
 
     class FakeHandler:
         async def execute(self, query: GetTicketDetailQuery) -> Result[TicketDetail]:
@@ -163,7 +167,9 @@ def test_non_admin_cannot_reach_the_admin_ticket_list() -> None:
 
 def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
     author_id = uuid.uuid4()
-    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
 
     class FakeHandler:
         async def execute(self, command: AddTicketMessageCommand) -> Result[TicketView]:
@@ -189,7 +195,7 @@ def test_ticket_message_endpoint_passes_owner_or_admin_context() -> None:
 def test_admin_status_endpoint_passes_status_command() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     admin_id = uuid.uuid4()
 
     class FakeHandler:
@@ -219,7 +225,7 @@ def test_admin_status_endpoint_passes_status_command() -> None:
 def test_non_admin_status_change_is_forbidden() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
 
     class FakeHandler:
         async def execute(
@@ -251,7 +257,9 @@ def test_non_admin_status_change_is_forbidden() -> None:
 
 def test_ticket_message_edit_endpoint_passes_message_command() -> None:
     author_id = uuid.uuid4()
-    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
     message_id = ticket.messages[0].id
 
     class FakeHandler:
@@ -283,7 +291,7 @@ def test_ticket_message_delete_endpoint_returns_null_data() -> None:
     actor_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     message_id = ticket.messages[0].id
 
     class FakeHandler:
@@ -310,7 +318,9 @@ def test_ticket_message_delete_endpoint_returns_null_data() -> None:
 
 def test_ticket_message_edit_maps_a_closed_ticket_to_conflict() -> None:
     author_id = uuid.uuid4()
-    ticket = Ticket.create(author_id=author_id, subject="Mine", first_message="Body")
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
     message_id = ticket.messages[0].id
 
     class FakeHandler:

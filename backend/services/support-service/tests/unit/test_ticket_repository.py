@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
 
-from domain.entities.ticket import Ticket
+from domain.entities.ticket import (
+    InvalidStatusTransitionError,
+    Ticket,
+    TicketClosedError,
+    TicketMessageImmutableError,
+)
 from domain.ticket_status import TicketStatus
 from domain.value_objects.ticket_id import TicketId
 from infrastructure.db.entity_configurations.models import (
@@ -17,12 +22,16 @@ from infrastructure.db.ticket_repository import SqlTicketRepository
 class RecordingSession:
     def __init__(self) -> None:
         self.added: list[object] = []
+        self.rolled_back = False
 
     def add(self, value: object) -> None:
         self.added.append(value)
 
     async def flush(self) -> None:
         pass
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
 
 
 class MutationSession(RecordingSession):
@@ -47,7 +56,7 @@ async def test_create_adds_ticket_message_and_outbox_without_committing() -> Non
     session = RecordingSession()
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="Message"
-    )
+    ).value
 
     await SqlTicketRepository(session).create(ticket)  # type: ignore[arg-type]
 
@@ -58,7 +67,12 @@ async def test_create_adds_ticket_message_and_outbox_without_committing() -> Non
     }
 
 
-def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageModel]:
+def _stored_ticket(
+    author_id: uuid.UUID,
+    *,
+    status: TicketStatus = TicketStatus.OPEN,
+    is_system: bool = False,
+) -> tuple[TicketModel, TicketMessageModel]:
     ticket_id = uuid.uuid4()
     created_at = datetime.now(UTC)
     return (
@@ -66,7 +80,7 @@ def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageMode
             id=ticket_id,
             author_id=author_id,
             subject="Subject",
-            status=TicketStatus.OPEN.value,
+            status=status.value,
             created_at=created_at,
         ),
         TicketMessageModel(
@@ -75,6 +89,7 @@ def _stored_ticket(author_id: uuid.UUID) -> tuple[TicketModel, TicketMessageMode
             author_id=author_id,
             body="First message",
             created_at=created_at,
+            is_system=is_system,
         ),
     )
 
@@ -169,7 +184,7 @@ async def test_rejected_status_change_raises_without_mutating_session() -> None:
     row, first_message = _stored_ticket(author_id)
     session = MutationSession(row, first_message)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidStatusTransitionError):
         await SqlTicketRepository(session).change_status(  # type: ignore[arg-type]
             ticket_id=TicketId.create(row.id),
             actor_id=uuid.uuid4(),
@@ -177,3 +192,40 @@ async def test_rejected_status_change_raises_without_mutating_session() -> None:
         )
 
     assert session.added == []
+    assert session.rolled_back is True
+
+
+@pytest.mark.asyncio
+async def test_add_message_on_closed_ticket_raises_and_rolls_back() -> None:
+    author_id = uuid.uuid4()
+    row, first_message = _stored_ticket(author_id, status=TicketStatus.CLOSED)
+    session = MutationSession(row, first_message)
+
+    with pytest.raises(TicketClosedError):
+        await SqlTicketRepository(session).add_message(  # type: ignore[arg-type]
+            ticket_id=TicketId.create(row.id),
+            actor_id=author_id,
+            body="Too late",
+            is_admin=False,
+        )
+
+    assert session.added == []
+    assert session.rolled_back is True
+
+
+@pytest.mark.asyncio
+async def test_edit_message_on_system_message_raises_and_rolls_back() -> None:
+    author_id = uuid.uuid4()
+    row, message = _stored_ticket(author_id, is_system=True)
+    session = MutationSession(row, message)
+
+    with pytest.raises(TicketMessageImmutableError):
+        await SqlTicketRepository(session).edit_message(  # type: ignore[arg-type]
+            ticket_id=TicketId.create(row.id),
+            message_id=message.id,
+            actor_id=author_id,
+            body="Should not apply",
+        )  # type: ignore[arg-type]
+
+    assert session.added == []
+    assert session.rolled_back is True

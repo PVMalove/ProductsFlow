@@ -67,7 +67,7 @@ class FakeMutationRepository:
 async def test_add_message_command_passes_actor_category_to_repository() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
@@ -91,7 +91,7 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
 async def test_change_status_command_passes_requested_status_to_repository() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     actor_id = uuid.uuid4()
@@ -115,7 +115,7 @@ async def test_change_status_command_passes_requested_status_to_repository() -> 
 async def test_change_status_command_forbids_a_non_admin_actor() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
 
@@ -138,7 +138,7 @@ async def test_change_status_command_forbids_a_non_admin_actor() -> None:
 async def test_edit_message_command_passes_message_and_new_body() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id
@@ -164,7 +164,7 @@ async def test_edit_message_command_passes_message_and_new_body() -> None:
 async def test_delete_message_command_passes_admin_moderation_context() -> None:
     ticket = Ticket.create(
         author_id=uuid.uuid4(), subject="Subject", first_message="First message"
-    )
+    ).value
     repository = FakeMutationRepository(ticket)
     uow = FakeSupportUnitOfWork(repository)
     message_id = ticket.messages[0].id

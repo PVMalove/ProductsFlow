@@ -1,12 +1,21 @@
 import uuid
+from typing import NoReturn
 
 from kernel_domain.domain_event import DomainEvent
+from kernel_domain.errors import Error
 from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import Select, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.entities.ticket import Ticket
+from domain.entities.ticket import (
+    InvalidStatusTransitionError,
+    Ticket,
+    TicketClosedError,
+    TicketMessageAlreadyDeletedError,
+    TicketMessageImmutableError,
+    TicketMessageNotFoundError,
+)
 from domain.entities.ticket_message import TicketMessage
 from domain.events import (
     TicketMessageAdded,
@@ -22,6 +31,23 @@ from infrastructure.db.entity_configurations.models import (
     TicketMessageModel,
     TicketModel,
 )
+
+
+def _raise_for_error(error: Error) -> NoReturn:
+    """Трансляционный шов (issue #253): переводит `Result.fail` доменных
+    методов `Ticket` обратно в те же типизированные исключения, что они
+    бросали раньше напрямую, — внешний HTTP-контракт не меняется."""
+    if error.code == "ticket_closed":
+        raise TicketClosedError(error.description)
+    if error.code == "invalid_status_transition":
+        raise InvalidStatusTransitionError(error.description)
+    if error.code == "message_not_found":
+        raise TicketMessageNotFoundError(error.description)
+    if error.code == "message_immutable":
+        raise TicketMessageImmutableError(error.description)
+    if error.code == "message_already_deleted":
+        raise TicketMessageAlreadyDeletedError(error.description)
+    raise ValueError(error.description)
 
 
 class TicketRepository:
@@ -103,13 +129,16 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(row)
-        message = ticket.add_message(
+        result = ticket.add_message(
             author_id=actor_id,
             body=body,
             actor_category="admin" if is_admin else "user",
         )
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
         row.status = ticket.status.value
-        self._session.add(_to_message_model(message))
+        self._session.add(_to_message_model(result.value))
         await self._drain_outbox(ticket)
         return ticket
 
@@ -121,7 +150,10 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(row)
-        ticket.change_status(status, actor_category="admin")
+        result = ticket.change_status(status, actor_category="admin")
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
         row.status = ticket.status.value
         await self._drain_outbox(ticket)
         return ticket
@@ -143,13 +175,16 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(ticket_row)
-        message = ticket.edit_message(
+        result = ticket.edit_message(
             message_id=message_id,
             author_id=actor_id,
             body=body,
             actor_category="admin" if is_admin else "user",
         )
-        message_row.body = message.body
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
+        message_row.body = result.value.body
         await self._drain_outbox(ticket)
         return ticket
 
@@ -169,13 +204,16 @@ class TicketRepository:
             return None
 
         ticket = await self._to_domain(ticket_row)
-        message = ticket.delete_message(
+        result = ticket.delete_message(
             message_id=message_id,
             actor_id=actor_id,
             actor_category="admin" if is_admin else "user",
         )
-        message_row.body = message.body
-        message_row.is_deleted = message.is_deleted
+        if result.is_err:
+            await self._session.rollback()
+            _raise_for_error(result.error)
+        message_row.body = result.value.body
+        message_row.is_deleted = result.value.is_deleted
         await self._drain_outbox(ticket)
         return ticket
 
