@@ -14,8 +14,8 @@ from application.ports import (
     IdentityGateway,
     ProductImageStorage,
 )
-from domain.product_id import ProductId
 from domain.unit_of_work import CatalogUnitOfWork
+from domain.value_objects.product_id import ProductId
 
 SEED_KEY_PREFIX = "seed/"
 IMAGE_KEY_TEMPLATE = "products/{product_id}/image"
@@ -56,7 +56,9 @@ class UpsertProductImageCommandHandler:
         self, command: UpsertProductImageCommand
     ) -> Result[ProductImageMutation]:
         async with self._uow:
-            product = await self._uow.products.get_by_id(ProductId(command.product_id))
+            product = await self._uow.products.get_by_id(
+                ProductId.create(command.product_id)
+            )
             if product is None:
                 raise ProductNotFoundError
             await self._authorizer.require_owner_or_admin(command.actor, product)

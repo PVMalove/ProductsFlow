@@ -7,7 +7,7 @@ from kernel_platform.pagination import decode_cursor
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.entity_configurations.models import ProductModel
 from infrastructure.db.owner_read_model import upsert_owner_read_model
@@ -16,7 +16,7 @@ from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
-UNKNOWN_PRODUCT_ID = ProductId(uuid.uuid4())
+UNKNOWN_PRODUCT_ID = ProductId.create(uuid.uuid4())
 PAGINATION_PRODUCT_IDS = (
     uuid.UUID("00000000-0000-0000-0000-000000000001"),
     uuid.UUID("00000000-0000-0000-0000-000000000002"),

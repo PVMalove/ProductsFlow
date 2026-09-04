@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.commands import CreateProductCommand, CreateProductCommandHandler
 from application.ports import Actor, IdentityUser
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.entity_configurations.models import (
     ProductImageModel,
@@ -76,7 +76,7 @@ async def test_image_mutations_rollback_together_without_partial_audit_or_outbox
     with pytest.raises(RuntimeError, match="storage failed"):
         async with uow:
             await uow.products.upsert_product_image(
-                ProductId(product_id),
+                ProductId.create(product_id),
                 s3_key=f"products/{product_id}/image",
                 content_type="image/jpeg",
                 size_bytes=10,
@@ -129,7 +129,7 @@ async def test_image_mutation_commits_its_audit_without_creating_outbox_message(
     uow = SqlCatalogUnitOfWork(db_session)
     async with uow:
         await uow.products.upsert_product_image(
-            ProductId(product_id),
+            ProductId.create(product_id),
             s3_key=f"products/{product_id}/image",
             content_type="image/jpeg",
             size_bytes=10,

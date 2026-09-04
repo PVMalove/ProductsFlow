@@ -15,7 +15,7 @@ from application.ports import (
     ProductAuditReader,
     ProductQueryPort,
 )
-from domain.product_id import ProductId
+from domain.value_objects.product_id import ProductId
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class GetProductAuditQueryHandler:
     async def execute(
         self, query: GetProductAuditQuery
     ) -> Result[list[ProductAuditEntry]]:
-        product = await self._repository.get_by_id(ProductId(query.product_id))
+        product = await self._repository.get_by_id(ProductId.create(query.product_id))
         entries = await self._audit_reader.get_by_product(query.product_id)
 
         if product is not None:

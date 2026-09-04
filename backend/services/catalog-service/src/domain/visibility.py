@@ -1,4 +1,4 @@
-from domain.product import Product
+from domain.entities.product import Product
 from domain.viewer import Viewer
 
 

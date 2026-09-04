@@ -4,7 +4,7 @@
 import uuid
 from dataclasses import dataclass
 
-from domain.product import Product
+from domain.entities.product import Product
 
 
 @dataclass(frozen=True)
