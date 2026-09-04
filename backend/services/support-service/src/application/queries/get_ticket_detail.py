@@ -23,6 +23,10 @@ class GetTicketDetailQuery:
     limit: int
     after: Cursor | None = None
     before: Cursor | None = None
+    # Set by the admin-only detail route (`GET /tickets/admin/{id}`) — the
+    # owner-or-admin route leaves this `False` and keeps its existing
+    # fallback-to-owner behavior.
+    require_admin: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,14 @@ class GetTicketDetailQueryHandler:
         self._tickets = tickets
 
     async def execute(self, query: GetTicketDetailQuery) -> Result[TicketDetail]:
+        if query.require_admin and not query.is_admin:
+            return Result[TicketDetail].fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
         ticket = (
             await self._tickets.get_by_id(query.ticket_id)
             if query.is_admin

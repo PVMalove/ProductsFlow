@@ -120,6 +120,62 @@ def test_ticket_detail_reads_messages_through_one_combined_query() -> None:
     }
 
 
+def test_admin_ticket_detail_returns_any_ticket_for_an_admin() -> None:
+    author_id = uuid.uuid4()
+    ticket = Ticket.create(
+        author_id=author_id, subject="Mine", first_message="Body"
+    ).value
+
+    class FakeHandler:
+        async def execute(self, query: GetTicketDetailQuery) -> Result[TicketDetail]:
+            assert query.require_admin is True
+            assert query.is_admin is True
+            return Result[TicketDetail].ok(
+                TicketDetail(
+                    view=TicketDetailView.from_domain(ticket, ticket.messages),
+                    messages_page_info=PageInfo(None, None, False, False),
+                )
+            )
+
+    app.dependency_overrides[get_current_actor] = lambda: _actor(
+        uuid.uuid4(), admin=True
+    )
+    app.dependency_overrides[get_ticket_detail_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.get(f"/api/v1/tickets/admin/{ticket.id.value}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"]["subject"] == "Mine"
+
+
+def test_non_admin_cannot_reach_the_admin_ticket_detail() -> None:
+    class FakeHandler:
+        async def execute(self, query: GetTicketDetailQuery) -> Result[TicketDetail]:
+            assert query.require_admin is True
+            assert query.is_admin is False
+            return Result[TicketDetail].fail(
+                Error(
+                    code="FORBIDDEN",
+                    description="Доступ только для администраторов!",
+                    type=ErrorType.FORBIDDEN,
+                )
+            )
+
+    app.dependency_overrides[get_current_actor] = lambda: _actor(uuid.uuid4())
+    app.dependency_overrides[get_ticket_detail_handler] = lambda: FakeHandler()
+    try:
+        with TestClient(app) as client:
+            response = client.get(f"/api/v1/tickets/admin/{uuid.uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
 def test_admin_ticket_list_is_available_through_admin_dependency() -> None:
     class FakeHandler:
         async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:

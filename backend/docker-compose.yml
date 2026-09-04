@@ -3,7 +3,6 @@ name: productsflow-backend
 services:
   identity-db:
     image: postgres:18.0
-    container_name: identity-db
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
@@ -25,7 +24,6 @@ services:
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
-    container_name: identity-bootstrap
     command:
       [
         "sh",
@@ -47,7 +45,6 @@ services:
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
-    container_name: identity-api
     environment:
       APP_ENV: ${APP_ENV}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
@@ -67,7 +64,6 @@ services:
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
-    container_name: identity-worker
     command: ["python", "-m", "api.worker"]
     environment:
       APP_ENV: ${APP_ENV}
@@ -81,7 +77,6 @@ services:
 
   catalog-db:
     image: postgres:18.0
-    container_name: catalog-db
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
@@ -107,7 +102,6 @@ services:
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
-    container_name: catalog-bootstrap
     command:
       [
         "sh",
@@ -141,7 +135,6 @@ services:
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
-    container_name: catalog-api
     environment:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
@@ -171,7 +164,6 @@ services:
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
-    container_name: catalog-worker
     command:
       [
         "sh",
@@ -224,7 +216,6 @@ services:
 
   support-db:
     image: postgres:18.0
-    container_name: support-db
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
@@ -246,7 +237,6 @@ services:
     build:
       context: .
       dockerfile: services/support-service/Dockerfile
-    container_name: support-bootstrap
     command:
       [
         "sh",
@@ -266,7 +256,6 @@ services:
     build:
       context: .
       dockerfile: services/support-service/Dockerfile
-    container_name: support-api
     environment:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
@@ -280,7 +269,6 @@ services:
     build:
       context: .
       dockerfile: services/support-service/Dockerfile
-    container_name: support-worker
     command: ["python", "-m", "api.worker"]
     environment:
       APP_ENV: ${APP_ENV}

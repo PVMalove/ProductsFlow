@@ -5,10 +5,13 @@ The support HTTP surface is designed in the Phase 5 domain session.
 
 - `POST /api/v1/tickets` creates a Ticket and its required first message.
 - `GET /api/v1/tickets` lists the caller's Tickets with a keyset cursor.
-- `GET /api/v1/admin/tickets` lists every Ticket for an `admin` actor.
+- `GET /api/v1/tickets/admin` lists every Ticket for an `admin` actor.
 - `POST /api/v1/tickets/{ticket_id}/messages` appends a message.
 - `GET /api/v1/tickets/{ticket_id}` returns an accessible Ticket and a
-  cursor-paginated message thread.
+  cursor-paginated message thread; a non-admin caller is denied `404` for a
+  Ticket that isn't theirs.
+- `GET /api/v1/tickets/admin/{ticket_id}` returns any Ticket's detail for an
+  `admin` actor; a non-admin caller is denied `403`.
 - `PATCH /api/v1/tickets/{ticket_id}/messages/{message_id}` edits the caller's
   own non-deleted message before the Ticket is closed.
 - `DELETE /api/v1/tickets/{ticket_id}/messages/{message_id}` soft-deletes a

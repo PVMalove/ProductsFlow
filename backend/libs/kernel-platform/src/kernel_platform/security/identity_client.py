@@ -111,8 +111,11 @@ class IdentityClient:
         )
         response.raise_for_status()
         body = response.json()
+        user = body.get("data", body)
         return CurrentUserInfo(
-            id=uuid.UUID(body["id"]), role=body["role"], is_active=body["is_active"]
+            id=uuid.UUID(user["id"]),
+            role=user["role"],
+            is_active=user["is_active"],
         )
 
     async def _resolve_key(self, kid: str | None) -> Any:

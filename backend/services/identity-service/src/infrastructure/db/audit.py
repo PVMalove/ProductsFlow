@@ -89,6 +89,18 @@ def _on_user_update(
     _mapper: Mapper[UserModel], connection: Connection, target: UserModel
 ) -> None:
     state = inspect(target)
+    if state.attrs.is_deleted.history.has_changes() and target.is_deleted:
+        # One domain event (User.delete()) touches email/password_hash/
+        # is_active/is_deleted together — a single audit row describes it;
+        # the checks below would otherwise misdescribe it as a password
+        # change plus a deactivation.
+        _write_audit(
+            connection,
+            user_id=target.id,
+            action=UserAuditAction.DELETED,
+            description="Учётная запись удалена и анонимизирована",
+        )
+        return
     if state.attrs.password_hash.history.has_changes():
         _write_audit(
             connection,

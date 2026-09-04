@@ -6,6 +6,7 @@ from application.commands import (
     ActivateUserCommandHandler,
     ChangePasswordCommandHandler,
     DeactivateUserCommandHandler,
+    DeleteAccountCommandHandler,
     LoginCommandHandler,
     RegisterUserCommandHandler,
 )
@@ -119,6 +120,17 @@ DeactivateUserDI = Annotated[
 ]
 
 
+def get_delete_account_handler(
+    uow: IdentityUnitOfWorkDI,
+) -> DeleteAccountCommandHandler:
+    return DeleteAccountCommandHandler(uow)
+
+
+DeleteAccountDI = Annotated[
+    DeleteAccountCommandHandler, Depends(get_delete_account_handler)
+]
+
+
 def get_list_users_handler(
     repository: UserListRepositoryDI,
 ) -> ListUsersQueryHandler:
@@ -152,6 +164,7 @@ __all__ = [
     "ChangePasswordDI",
     "DeactivateUserDI",
     "DbSessionDI",
+    "DeleteAccountDI",
     "GetCurrentUserDI",
     "IdentityUnitOfWorkDI",
     "ListUsersDI",

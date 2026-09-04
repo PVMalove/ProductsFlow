@@ -189,3 +189,48 @@ async def test_identity_http_flow_covers_auth_users_and_audit(
     )
     assert self_deactivation.status_code == 403
     assert self_deactivation.json()["error"]["code"] == "cannot_deactivate_self"
+
+
+async def test_self_delete_tombstones_the_account_and_revokes_the_old_token(
+    identity_api_client: httpx.AsyncClient,
+) -> None:
+    client = identity_api_client
+
+    registered = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "deleteme@example.com", "password": "Password1"},
+    )
+    assert registered.status_code == 201
+    user_id = registered.json()["data"]["id"]
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "deleteme@example.com", "password": "Password1"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    authorized = {"Authorization": f"Bearer {token}"}
+
+    deleted = await client.delete("/api/v1/users/me", headers=authorized)
+    assert deleted.status_code == 200
+    assert deleted.json() == {"data": None, "meta": {}}
+
+    denied_me = await client.get("/api/v1/users/me", headers=authorized)
+    assert denied_me.status_code == 403
+    assert denied_me.json()["error"]["code"] == "FORBIDDEN"
+
+    relogin = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "deleteme@example.com", "password": "Password1"},
+    )
+    assert relogin.status_code == 401
+
+    reregistered = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "deleteme@example.com", "password": "Password2"},
+    )
+    assert reregistered.status_code == 201
+    assert reregistered.json()["data"]["id"] != user_id
+
+    second_delete = await client.delete("/api/v1/users/me", headers=authorized)
+    assert second_delete.status_code == 403
