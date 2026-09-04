@@ -1,5 +1,18 @@
 name: productsflow-e2e
 
+x-catalog-environment: &catalog-environment
+  APP_ENV: e2e
+  CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
+  CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+  CATALOG_IDENTITY_BASE_URL: http://identity-api:8000
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_PUBLIC_ENDPOINT: http://gateway
+  MINIO_ROOT_USER: minio-admin
+  MINIO_ROOT_PASSWORD: minio-secret-key
+  MINIO_BUCKET_NAME_PRODUCT: product-chunks
+  MINIO_BUCKET_NAME_LOKI: loki-chunks
+  MINIO_BUCKET_NAME_TEMPO: tempo-traces
+
 services:
   # The key pair is generated inside this project-scoped volume for every
   # stack. No developer key or credential is ever mounted into E2E.
@@ -63,32 +76,12 @@ services:
 
   catalog-bootstrap:
     environment:
-      APP_ENV: e2e
-      CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
-      CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
-      CATALOG_IDENTITY_BASE_URL: http://identity-api:8000
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_ENDPOINT: http://gateway
-      MINIO_ROOT_USER: minio-admin
-      MINIO_ROOT_PASSWORD: minio-secret-key
-      MINIO_BUCKET_NAME_PRODUCT: product-chunks
-      MINIO_BUCKET_NAME_LOKI: loki-chunks
-      MINIO_BUCKET_NAME_TEMPO: tempo-traces
+      <<: *catalog-environment
       CATALOG_SEED_PLACEHOLDER_IMAGE_PATH: /srv/assets/placeholder.jpg
 
   catalog-api:
     environment:
-      APP_ENV: e2e
-      CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
-      CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
-      CATALOG_IDENTITY_BASE_URL: http://identity-api:8000
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_ENDPOINT: http://gateway
-      MINIO_ROOT_USER: minio-admin
-      MINIO_ROOT_PASSWORD: minio-secret-key
-      MINIO_BUCKET_NAME_PRODUCT: product-chunks
-      MINIO_BUCKET_NAME_LOKI: loki-chunks
-      MINIO_BUCKET_NAME_TEMPO: tempo-traces
+      <<: *catalog-environment
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/products')"]
       interval: 1s
