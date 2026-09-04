@@ -32,6 +32,23 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
             await connection.run_sync(Base.metadata.drop_all)
 
 
+class _CreateTwoUsersHandler:
+    """Integration seam for the command-side transaction boundary."""
+
+    def __init__(self, uow: SqlIdentityUnitOfWork) -> None:
+        self._uow = uow
+
+    async def execute(
+        self, first: User, second: User, *, fail_after_writes: bool = False
+    ) -> None:
+        async with self._uow:
+            await self._uow.users.add(first)
+            await self._uow.users.add(second)
+            if fail_after_writes:
+                raise RuntimeError("second mutation failed")
+            await self._uow.commit()
+
+
 async def test_add_persists_user_and_register_event_atomically(
     db_session: AsyncSession, _schema: None
 ) -> None:
@@ -168,7 +185,7 @@ async def test_audit_uses_current_actor_from_request_context(
     assert audit_rows[-1].actor_user_id == actor.id.value
 
 
-async def test_uow_rolls_back_multiple_user_writes_and_their_outbox_rows(
+async def test_handler_rolls_back_multiple_user_writes_and_their_outbox_rows(
     db_session: AsyncSession, _schema: None
 ) -> None:
     first = User.register(Email("first@example.com"), "hashed-password")
@@ -176,13 +193,32 @@ async def test_uow_rolls_back_multiple_user_writes_and_their_outbox_rows(
     assert first.is_ok
     assert second.is_ok
 
-    uow = SqlIdentityUnitOfWork(db_session)
+    handler = _CreateTwoUsersHandler(SqlIdentityUnitOfWork(db_session))
     with pytest.raises(RuntimeError, match="second mutation failed"):
-        async with uow:
-            await uow.users.add(first.value)
-            await uow.users.add(second.value)
-            raise RuntimeError("second mutation failed")
+        await handler.execute(first.value, second.value, fail_after_writes=True)
 
     db_session.expunge_all()
     assert await db_session.scalar(select(UserModel.id)) is None
     assert await db_session.scalar(select(OutboxMessage.id)) is None
+
+
+async def test_handler_commits_multiple_user_writes_with_outbox_rows(
+    db_session: AsyncSession, _schema: None
+) -> None:
+    first = User.register(Email("first@example.com"), "hashed-password")
+    second = User.register(Email("second@example.com"), "hashed-password")
+    assert first.is_ok
+    assert second.is_ok
+
+    await _CreateTwoUsersHandler(SqlIdentityUnitOfWork(db_session)).execute(
+        first.value, second.value
+    )
+
+    db_session.expunge_all()
+    users = list((await db_session.scalars(select(UserModel))).all())
+    outbox = list((await db_session.scalars(select(OutboxMessage))).all())
+    assert {user.email for user in users} == {"first@example.com", "second@example.com"}
+    assert [row.event_type for row in outbox] == [
+        "user.registered.v1",
+        "user.registered.v1",
+    ]
