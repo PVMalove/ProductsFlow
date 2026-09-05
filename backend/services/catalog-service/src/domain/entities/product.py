@@ -3,9 +3,10 @@ from typing import cast
 
 from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error, ErrorList
 from kernel_domain.result import Result
 
+from domain.errors import CatalogErrors
 from domain.events.product_domain_event import (
     ProductActivated,
     ProductCreated,
@@ -24,31 +25,18 @@ _MISSING = object()
 
 
 def _validate(*, name: str, category: str, price: float) -> Error | None:
+    errors: list[Error] = []
     if not (NAME_MIN_LENGTH <= len(name) <= NAME_MAX_LENGTH):
-        return Error(
-            code="invalid_name",
-            description=(
-                f"Название должно быть от {NAME_MIN_LENGTH} "
-                f"до {NAME_MAX_LENGTH} символов"
-            ),
-            type=ErrorType.VALIDATION,
-        )
+        errors.append(CatalogErrors.invalid_name(NAME_MIN_LENGTH, NAME_MAX_LENGTH))
     if not (CATEGORY_MIN_LENGTH <= len(category) <= CATEGORY_MAX_LENGTH):
-        return Error(
-            code="invalid_category",
-            description=(
-                f"Категория должна быть от {CATEGORY_MIN_LENGTH} "
-                f"до {CATEGORY_MAX_LENGTH} символов"
-            ),
-            type=ErrorType.VALIDATION,
+        errors.append(
+            CatalogErrors.invalid_category(CATEGORY_MIN_LENGTH, CATEGORY_MAX_LENGTH)
         )
     if price < 0:
-        return Error(
-            code="invalid_price",
-            description="Цена не может быть отрицательной",
-            type=ErrorType.VALIDATION,
-        )
-    return None
+        errors.append(CatalogErrors.invalid_price())
+    if not errors:
+        return None
+    return ErrorList.of(errors)
 
 
 class Product(Entity[ProductId]):
@@ -172,13 +160,7 @@ class Product(Entity[ProductId]):
 
     def activate(self) -> Result[None]:
         if self.is_active:
-            return Result[None].fail(
-                Error(
-                    code="already_active",
-                    description="Товар уже активен",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(CatalogErrors.already_active())
 
         self.is_active = True
         self.add_domain_event(ProductActivated(product_id=self.id))
@@ -186,13 +168,7 @@ class Product(Entity[ProductId]):
 
     def deactivate(self) -> Result[None]:
         if not self.is_active:
-            return Result[None].fail(
-                Error(
-                    code="already_deactivated",
-                    description="Товар уже деактивирован",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(CatalogErrors.already_deactivated())
 
         self.is_active = False
         self.add_domain_event(ProductDeactivated(product_id=self.id))

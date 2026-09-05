@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from kernel_domain.errors import ErrorType
+from kernel_domain.errors import ErrorList, ErrorType
 
 from domain.entities.product import Product
 from domain.events import (
@@ -79,6 +79,7 @@ def test_create_rejects_too_short_name() -> None:
     assert result.is_err
     assert result.error.type is ErrorType.VALIDATION
     assert result.error.code == "invalid_name"
+    assert result.error.invalid_field == "name"
 
 
 def test_create_rejects_negative_price() -> None:
@@ -93,6 +94,34 @@ def test_create_rejects_negative_price() -> None:
 
     assert result.is_err
     assert result.error.code == "invalid_price"
+    assert result.error.invalid_field == "price"
+
+
+def test_create_accumulates_independent_validation_errors_in_field_order() -> None:
+    result = Product.create(
+        ProductId.new_id(),
+        name="ab",
+        description="",
+        price=-1.0,
+        category="xy",
+        user_id=uuid.uuid4(),
+    )
+
+    assert result.is_err
+    error = result.error
+    assert isinstance(error, ErrorList)
+    assert error.code == "general_multiple_validation_errors"
+    assert error.type is ErrorType.VALIDATION
+    assert [child.code for child in error.errors] == [
+        "invalid_name",
+        "invalid_category",
+        "invalid_price",
+    ]
+    assert [child.invalid_field for child in error.errors] == [
+        "name",
+        "category",
+        "price",
+    ]
 
 
 def test_update_changes_only_provided_fields() -> None:
@@ -118,7 +147,32 @@ def test_update_rejects_invalid_value_without_mutating_state() -> None:
 
     assert result.is_err
     assert result.error.code == "invalid_name"
+    assert result.error.invalid_field == "name"
     assert product.name == original_name
+    assert product.pull_events() == []
+
+
+def test_update_accumulates_independent_validation_errors_without_mutating_state() -> (
+    None
+):
+    product = _create()
+    original_name = product.name
+    original_category = product.category
+    original_price = product.price
+
+    result = product.update(name="ab", category="xy", price=-1.0)
+
+    assert result.is_err
+    error = result.error
+    assert isinstance(error, ErrorList)
+    assert [child.code for child in error.errors] == [
+        "invalid_name",
+        "invalid_category",
+        "invalid_price",
+    ]
+    assert product.name == original_name
+    assert product.category == original_category
+    assert product.price == original_price
     assert product.pull_events() == []
 
 
