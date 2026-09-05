@@ -14,7 +14,9 @@ def _message(**overrides: object) -> TicketMessage:
         "body": "Hello",
     }
     defaults.update(overrides)
-    return TicketMessage.create(**defaults)  # type: ignore[arg-type]
+    result = TicketMessage.create(**defaults)  # type: ignore[arg-type]
+    assert result.is_ok
+    return result.value
 
 
 def test_ticket_message_direct_construction_raises_runtime_error() -> None:
@@ -84,3 +86,24 @@ def test_ticket_message_delete_rejects_already_deleted_messages() -> None:
 
     assert result.is_err
     assert result.error.code == "message_already_deleted"
+
+
+@pytest.mark.parametrize("body", ["", " ", "x" * 10_001])
+def test_ticket_message_create_rejects_invalid_body_without_raising(body: str) -> None:
+    result = TicketMessage.create(
+        id=uuid.uuid4(), ticket_id=TicketId.new_id(), author_id=uuid.uuid4(), body=body
+    )
+
+    assert result.is_err
+    assert result.error.code == "invalid_body"
+    assert result.error.invalid_field == "body"
+
+
+def test_ticket_message_edit_rejects_invalid_body_without_mutating_state() -> None:
+    message = _message()
+
+    result = message.edit(" ")
+
+    assert result.is_err
+    assert result.error.code == "invalid_body"
+    assert message.body == "Hello"
