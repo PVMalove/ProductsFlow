@@ -33,6 +33,7 @@ class IdentityGatewayAdapter:
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403, 404):
                 from application.errors import ProductAccessDeniedError
+
                 raise ProductAccessDeniedError from exc
             raise IdentityUnavailableError from exc
         except httpx.RequestError as exc:
