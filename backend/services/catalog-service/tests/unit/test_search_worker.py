@@ -1,7 +1,9 @@
 import json
 import uuid
+from typing import cast
 
 import pytest
+from aio_pika.abc import AbstractIncomingMessage
 
 from api.search_worker import handle_product_event
 from application.search_snapshot import ProductSearchSnapshot
@@ -29,18 +31,21 @@ async def test_worker_indexes_a_complete_v2_product_snapshot() -> None:
     indexer = RecordingIndexer()
 
     await handle_product_event(
-        FakeMessage(
-            event_type="product.deactivated.v2",
-            payload={
-                "product_id": str(product_id),
-                "user_id": str(owner_id),
-                "name": "Cordless drill",
-                "description": "18V brushless drill",
-                "category": "Tools",
-                "price": 99.0,
-                "is_active": False,
-                "search_revision": 4,
-            },
+        cast(
+            AbstractIncomingMessage,
+            FakeMessage(
+                event_type="product.deactivated.v2",
+                payload={
+                    "product_id": str(product_id),
+                    "user_id": str(owner_id),
+                    "name": "Cordless drill",
+                    "description": "18V brushless drill",
+                    "category": "Tools",
+                    "price": 99.0,
+                    "is_active": False,
+                    "search_revision": 4,
+                },
+            ),
         ),
         indexer,
     )

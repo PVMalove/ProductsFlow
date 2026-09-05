@@ -30,8 +30,8 @@ async def test_public_search_returns_bff_envelope_with_active_text_matches(
     from api.main import app
 
     search = FakeProductSearch()
-    app.dependency_overrides[get_search_products_handler] = (
-        lambda: SearchProductsQueryHandler(search)
+    app.dependency_overrides[get_search_products_handler] = lambda: (
+        SearchProductsQueryHandler(search)
     )
     try:
         response = await catalog_client.get(
