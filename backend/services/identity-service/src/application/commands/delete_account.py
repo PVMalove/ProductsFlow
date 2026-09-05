@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
+from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.user_id import UserId
 
@@ -26,13 +26,7 @@ class DeleteAccountCommandHandler:
         async with self._uow:
             user = await self._uow.users.get_by_id(command.user_id)
             if user is None:
-                return Result[None].fail(
-                    Error(
-                        code="user_not_found",
-                        description="Пользователь не найден",
-                        type=ErrorType.NOT_FOUND,
-                    )
-                )
+                return Result[None].fail(IdentityErrors.user_not_found())
             result = user.delete()
             if result.is_err:
                 return Result[None].fail(result.error)

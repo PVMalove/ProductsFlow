@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, cast
 
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error, ErrorList
 from kernel_domain.result import Result
 from kernel_domain.value_object import ValueObject
 
+from domain.errors import IdentityErrors
 from domain.value_objects import PRIVATE_MARKER
 
 _MIN_LENGTH = 8
@@ -43,22 +44,13 @@ class RawPassword(ValueObject):
 
 
 def _validate(value: str) -> Error | None:
+    errors: list[Error] = []
     if len(value) < _MIN_LENGTH:
-        return Error(
-            code="password_too_short",
-            description="Пароль должен содержать минимум 8 символов",
-            type=ErrorType.VALIDATION,
-        )
+        errors.append(IdentityErrors.password_too_short())
     if not any(ch.islower() for ch in value):
-        return Error(
-            code="password_missing_lowercase",
-            description="Пароль должен содержать строчную букву",
-            type=ErrorType.VALIDATION,
-        )
+        errors.append(IdentityErrors.password_missing_lowercase())
     if not any(ch.isdigit() for ch in value):
-        return Error(
-            code="password_missing_digit",
-            description="Пароль должен содержать цифру",
-            type=ErrorType.VALIDATION,
-        )
-    return None
+        errors.append(IdentityErrors.password_missing_digit())
+    if not errors:
+        return None
+    return ErrorList.of(errors)

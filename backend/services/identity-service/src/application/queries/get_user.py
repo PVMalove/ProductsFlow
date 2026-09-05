@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import UserQueryPort, UserReadModel
+from domain.errors import IdentityErrors
 from domain.value_objects.user_id import UserId
 
 
@@ -43,11 +43,5 @@ class GetUserQueryHandler:
         """
         read_model = await self._users.get_by_id(query.user_id)
         if read_model is None:
-            return Result[UserReadModel].fail(
-                Error(
-                    code="user_not_found",
-                    description="Пользователь не найден",
-                    type=ErrorType.NOT_FOUND,
-                )
-            )
+            return Result[UserReadModel].fail(IdentityErrors.user_not_found())
         return Result[UserReadModel].ok(read_model)

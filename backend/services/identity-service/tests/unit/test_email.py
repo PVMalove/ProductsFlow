@@ -31,6 +31,14 @@ def test_an_invalid_email_is_rejected(value: str) -> None:
 
     assert result.is_err
     assert result.error.code == "invalid_email"
+    assert result.error.invalid_field == "email"
+
+
+def test_an_invalid_email_error_does_not_reflect_the_submitted_value() -> None:
+    result = Email.create("not-an-email@")
+
+    assert result.is_err
+    assert "not-an-email@" not in result.error.description
 
 
 def test_direct_construction_raises_runtime_error() -> None:

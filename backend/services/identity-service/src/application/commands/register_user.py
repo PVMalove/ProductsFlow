@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error, ErrorList
 from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
 from contracts.user import UserView
 from domain.entities.user import User
+from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.email import Email
 from domain.value_objects.raw_password import RawPassword
@@ -39,23 +40,22 @@ class RegisterUserCommandHandler:
     async def execute(self, command: RegisterUserCommand) -> Result[UserView]:
         async with self._uow:
             email_result = Email.create(command.email)
+            password_result = RawPassword.create(command.password)
+
+            validation_errors: list[Error] = []
             if email_result.is_err:
-                return Result[UserView].fail(email_result.error)
+                validation_errors.append(email_result.error)
+            if password_result.is_err:
+                validation_errors.append(password_result.error)
+            if validation_errors:
+                return Result[UserView].fail(ErrorList.of(validation_errors))
+
             email = email_result.value
+            password = password_result.value
             if await self._uow.users.exists_by_email(email):
-                return Result[UserView].fail(
-                    Error(
-                        code="email_already_registered",
-                        description=f"Email {command.email!r} уже зарегистрирован",
-                        type=ErrorType.CONFLICT,
-                    )
-                )
-            password = RawPassword.create(command.password)
-            if password.is_err:
-                return Result[UserView].fail(password.error)
-            result = User.register(
-                email, self._password_hasher.hash(password.value.value)
-            )
+                return Result[UserView].fail(IdentityErrors.email_already_registered())
+
+            result = User.register(email, self._password_hasher.hash(password.value))
             if result.is_err:
                 return Result[UserView].fail(result.error)
             await self._uow.users.add(result.value)
