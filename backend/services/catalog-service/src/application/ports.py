@@ -165,7 +165,36 @@ class ProductSearchPort(Protocol):
 
 
 class ProductSearchIndexer(Protocol):
-    async def index(self, snapshot: ProductSearchSnapshot) -> None: ...
+    async def index(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None: ...
+
+    async def set_owner_active(
+        self, user_id: uuid.UUID, *, is_active: bool
+    ) -> None: ...
+
+
+@dataclass(frozen=True)
+class OwnerSearchState:
+    """Durable Owner visibility flag maintained by `catalog-search-worker`
+    from Identity lifecycle events (issue #288). A missing row means the
+    worker has not yet observed this owner and must be treated as inactive
+    (deny-by-default) — never resolved via a synchronous Identity call, unlike
+    `OwnerReadModel`."""
+
+    user_id: uuid.UUID
+    is_active: bool
+    last_applied_outbox_id: int
+
+
+class OwnerSearchStateStore(Protocol):
+    async def get(self, user_id: uuid.UUID) -> OwnerSearchState | None: ...
+
+    async def upsert(self, state: OwnerSearchState) -> bool:
+        """Returns whether `state` was actually applied — `False` for a
+        stale/duplicate event (see `last_applied_outbox_id` versioning,
+        ADR 0011)."""
+        ...
 
 
 __all__ = [
@@ -177,6 +206,8 @@ __all__ = [
     "OwnerProjectionWriter",
     "OwnerQueryPort",
     "OwnerSnapshot",
+    "OwnerSearchState",
+    "OwnerSearchStateStore",
     "ProductCommandPort",
     "ProductImage",
     "ProductImageStorage",

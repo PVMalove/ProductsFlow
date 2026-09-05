@@ -36,7 +36,8 @@ async def test_index_uses_product_revision_for_opensearch_external_versioning() 
             price=99.0,
             is_active=True,
             search_revision=3,
-        )
+        ),
+        owner_is_active=True,
     )
 
     create_index, request = request_log
@@ -55,7 +56,34 @@ async def test_index_uses_product_revision_for_opensearch_external_versioning() 
         "category": "Tools",
         "price": 99.0,
         "is_active": True,
+        "owner_is_active": True,
     }
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_search_filters_by_active_product_and_active_owner() -> None:
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        return httpx.Response(200, json={"hits": {"hits": []}})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.search("drill")
+
+    [request] = request_log
+    body = json.loads(request.content)
+    assert body["query"]["bool"]["filter"] == [
+        {"term": {"is_active": True}},
+        {"term": {"owner_is_active": True}},
+    ]
     await client.aclose()
 
 
@@ -70,4 +98,45 @@ async def test_search_returns_no_matches_before_the_index_exists() -> None:
     )
 
     assert await search.search("drill") == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_set_owner_active_updates_every_indexed_product_of_the_owner() -> None:
+    user_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        return httpx.Response(200, json={"updated": 3})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.set_owner_active(user_id, is_active=False)
+
+    [request] = request_log
+    assert request.method == "POST"
+    assert request.url.path == "/catalog-products/_update_by_query"
+    body = json.loads(request.content)
+    assert body["query"] == {"term": {"user_id": str(user_id)}}
+    assert body["script"]["params"] == {"is_active": False}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_set_owner_active_is_a_noop_before_the_index_exists() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+        base_url="http://opensearch",
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.set_owner_active(uuid.uuid4(), is_active=True)
     await client.aclose()
