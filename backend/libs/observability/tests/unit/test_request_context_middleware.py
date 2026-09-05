@@ -115,6 +115,34 @@ async def test_exactly_one_access_log_record_with_correct_fields(
     assert getattr(record, "duration_ms") >= 0
 
 
+async def test_logs_raw_x_user_id_and_x_user_role_headers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="observability.middleware"):
+        async with _build_client(FakeTokenVerifier()) as client:
+            await client.get(
+                "/echo", headers={"X-User-Id": "attacker", "X-User-Role": "admin"}
+            )
+
+    records = [r for r in caplog.records if r.name == "observability.middleware"]
+    assert len(records) == 1
+    assert "x_user_id='attacker'" in records[0].getMessage()
+    assert "x_user_role='admin'" in records[0].getMessage()
+
+
+async def test_logs_empty_x_user_id_and_x_user_role_when_headers_are_absent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="observability.middleware"):
+        async with _build_client(FakeTokenVerifier()) as client:
+            await client.get("/echo")
+
+    records = [r for r in caplog.records if r.name == "observability.middleware"]
+    assert len(records) == 1
+    assert "x_user_id=''" in records[0].getMessage()
+    assert "x_user_role=''" in records[0].getMessage()
+
+
 async def test_writes_exactly_one_access_log_record_when_the_handler_raises(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

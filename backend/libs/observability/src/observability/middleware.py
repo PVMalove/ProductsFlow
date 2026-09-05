@@ -80,10 +80,18 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1000
+            # x_user_id/x_user_role — сырые значения хэдеров как они дошли до
+            # сервиса (в норме — пустые: gateway их зануляет, ADR 0005/issue
+            # #286). Единственный способ автоматически подтвердить это
+            # anti-spoofing поведение по issue #292 — их непустое значение
+            # здесь сигнализирует о попытке подделки или об обходе gateway.
             logger.info(
-                "%s %s",
+                "%s %s request_id=%s x_user_id=%r x_user_role=%r",
                 request.method,
                 request.url.path,
+                request_id,
+                request.headers.get("x-user-id", ""),
+                request.headers.get("x-user-role", ""),
                 extra={
                     "method": request.method,
                     "path": request.url.path,
