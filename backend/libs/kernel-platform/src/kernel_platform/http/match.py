@@ -3,7 +3,11 @@
 from kernel_domain.result import Result
 
 from kernel_platform.http.envelope import ApiResponse
-from kernel_platform.http.errors import ApiError, status_code_for_error_type
+from kernel_platform.http.errors import (
+    ApiError,
+    details_for_error,
+    status_code_for_error_type,
+)
 from kernel_platform.pagination import Page, PageInfo
 
 
@@ -14,6 +18,7 @@ def _raise_for_error[T](result: Result[T]) -> None:
             status_code=status_code_for_error_type(error.type),
             code=error.code,
             message=error.description,
+            details=details_for_error(error),
         )
 
 

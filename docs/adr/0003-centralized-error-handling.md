@@ -6,7 +6,7 @@
 
 ## Структура `Result.err`
 
-Доменный слой ([ADR 0006](0006-service-internal-architecture-baseline.md)) не бросает исключения для бизнес-правил — возвращает `Result[T]`. Ошибочный `Result` несёт `Error(code, description, type)`, где `type: ErrorType` — один из `VALIDATION`/`NOT_FOUND`/`CONFLICT`/`FORBIDDEN`/`UNAUTHORIZED`/`PROBLEM`/`FAILURE`. `ErrorType` определяет HTTP-статус трансляции; `code` — стабильный машиночитаемый идентификатор конкретной причины (не переиспользуется между разными бизнес-правилами), `description` попадает в `message` конверта.
+Доменный слой ([ADR 0006](0006-service-internal-architecture-baseline.md)) не бросает исключения для бизнес-правил — возвращает `Result[T]`. Ошибочный `Result` несёт `Error(code, description, type)` либо наследующий его `ErrorList`; `type: ErrorType` — один из `VALIDATION`/`NOT_FOUND`/`CONFLICT`/`FORBIDDEN`/`UNAUTHORIZED`/`PROBLEM`/`FAILURE`. `ErrorType` определяет HTTP-статус трансляции; `code` — стабильный машиночитаемый идентификатор конкретной причины (не переиспользуется между разными бизнес-правилами), `description` попадает в `message` конверта. `ErrorList` передаёт отдельные нарушения в опциональный `error.details` BFF-конверта согласно ADR 0014.
 
 `ErrorType` → HTTP-статус:
 
@@ -44,7 +44,7 @@
 
 - **Ожидаемые исключения сервиса** структурно экспонируют `code`, `message`, `status_code` — `kernel-platform` читает эти атрибуты, не импортируя классы исключений сервиса.
 - **Доменный `Result.error`** — `match_result` единственная точка, которая по `ErrorType` решает HTTP-статус, а по `code`/`description` — тело ответа.
-- **FastAPI HTTP- и validation-ошибки** (`RequestValidationError`, `HTTPException` и т. п.) получают стандартные BFF-коды — тот же конверт, что и доменные ошибки, не отдельная форма для «технических» ошибок. `RequestValidationError` (transport-уровень, Pydantic) сохраняет нативный `422`, отдельно от `ErrorType.VALIDATION` (domain-уровень, `400` из таблицы выше) — оба используют один и тот же машиночитаемый `code: "VALIDATION_ERROR"`, но разные HTTP-статусы, потому что описывают разные вещи (форма запроса vs бизнес-правило).
+- **FastAPI HTTP- и validation-ошибки** (`RequestValidationError`, `HTTPException` и т. п.) получают стандартные BFF-коды — тот же конверт, что и доменные ошибки, не отдельная форма для «технических» ошибок. `RequestValidationError` (transport-уровень, Pydantic) сохраняет нативный `422`, отдельно от `ErrorType.VALIDATION` (domain-уровень, `400` из таблицы выше) — оба используют один и тот же машиночитаемый `code: "VALIDATION_ERROR"`, но разные HTTP-статусы, потому что описывают разные вещи (форма запроса vs бизнес-правило). Для request-validation Pydantic `loc` становится dot-path `details.field` без транспортных префиксов (`body`, `query`, `path`); `msg` становится `details.issue`.
 - **Неизвестные (необработанные) отказы** логируются с полным стектрейсом, но клиенту отдаются только как безопасный `500 INTERNAL_ERROR` — без утечки внутренних деталей в тело ответа.
 
 `match_created` делает создание явным в роутере отдельно от `match_result`, но декоратор маршрута остаётся единственным владельцем HTTP `201` — `match_created` не переопределяет код статуса, только форму тела. Сырые доменные исключения application boundary не покидают: handler сам переводит их в `Result.err(...)` до возврата, а не полагается на то, что exception handler их поймает где-то выше.
