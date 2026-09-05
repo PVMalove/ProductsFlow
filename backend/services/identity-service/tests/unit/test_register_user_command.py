@@ -1,4 +1,4 @@
-from kernel_domain.errors import ErrorType
+from kernel_domain.errors import ErrorList, ErrorType
 
 from application.register_user import RegisterUserCommand, RegisterUserCommandHandler
 from domain.role import Role
@@ -72,3 +72,31 @@ async def test_register_does_not_hash_a_weak_password() -> None:
     await handler.execute(RegisterUserCommand("user@example.com", "short"))
 
     assert repository.users == {}
+
+
+async def test_register_aggregates_independent_email_and_password_violations() -> None:
+    handler = RegisterUserCommandHandler(
+        FakeIdentityUnitOfWork(FakeUserRepository()), FakePasswordHasher()
+    )
+
+    result = await handler.execute(RegisterUserCommand("not-an-email", "password"))
+
+    assert result.is_err
+    error = result.error
+    assert isinstance(error, ErrorList)
+    assert error.type is ErrorType.VALIDATION
+    assert [child.code for child in error.errors] == [
+        "invalid_email",
+        "password_missing_digit",
+    ]
+
+
+async def test_register_does_not_persist_on_combined_validation_failure() -> None:
+    repository = FakeUserRepository()
+    uow = FakeIdentityUnitOfWork(repository)
+    handler = RegisterUserCommandHandler(uow, FakePasswordHasher())
+
+    await handler.execute(RegisterUserCommand("not-an-email", "password"))
+
+    assert repository.users == {}
+    assert uow.committed is False

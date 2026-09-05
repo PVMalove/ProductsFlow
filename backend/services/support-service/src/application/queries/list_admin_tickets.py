@@ -1,12 +1,11 @@
-# ruff: noqa: E501
 """Query и handler list-all-tickets."""
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import TicketQueryPort
+from domain.errors import SupportErrors
 from domain.repositories import Cursor, TicketPage
 
 
@@ -34,13 +33,7 @@ class ListAdminTicketsQueryHandler:
 
     async def execute(self, query: ListAdminTicketsQuery) -> Result[TicketPage]:
         if not query.is_admin:
-            return Result[TicketPage].fail(
-                Error(
-                    code="FORBIDDEN",
-                    description="Доступ только для администраторов!",
-                    type=ErrorType.FORBIDDEN,
-                )
-            )
+            return Result[TicketPage].fail(SupportErrors.forbidden())
         page = await self._repository.list_all(
             limit=query.limit,
             after=query.after,

@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.user import UserView
+from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.user_id import UserId
 
@@ -27,13 +27,7 @@ class ActivateUserCommandHandler:
         async with self._uow:
             user = await self._uow.users.get_by_id(command.target_user_id)
             if user is None:
-                return Result[UserView].fail(
-                    Error(
-                        code="user_not_found",
-                        description="Пользователь не найден",
-                        type=ErrorType.NOT_FOUND,
-                    )
-                )
+                return Result[UserView].fail(IdentityErrors.user_not_found())
             result = user.activate()
             if result.is_err:
                 return Result[UserView].fail(result.error)

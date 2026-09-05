@@ -128,11 +128,46 @@ async def test_create_product_rejects_invalid_payload(
     }
 
 
+async def test_create_product_reports_multiple_validation_errors_as_details(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    """Issue #274 (ADR 0014): несколько независимых нарушений одного
+    запроса приходят одним HTTP 400 с `error.details` вместо единственной
+    ошибки, останавливающей проверку на первом же поле."""
+    token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.post(
+        "/api/v1/products",
+        json={**_PRODUCT_PAYLOAD, "name": "аб", "category": "юя", "price": -1},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "general_multiple_validation_errors",
+            "message": "Обнаружены множественные ошибки валидации",
+            "details": [
+                {
+                    "field": "name",
+                    "issue": "Название должно быть от 3 до 100 символов",
+                },
+                {
+                    "field": "category",
+                    "issue": "Категория должна быть от 3 до 100 символов",
+                },
+                {"field": "price", "issue": "Цена не может быть отрицательной"},
+            ],
+        }
+    }
+
+
 async def test_create_product_rejects_a_malformed_request_body(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
     """Валидация уровня фреймворка (Pydantic), не доменная — тоже
-    структурная форма ошибки, но с каноническим VALIDATION_ERROR (ADR 0003)."""
+    структурная форма ошибки, но с каноническим VALIDATION_ERROR и dot-path
+    `details.field` без транспортного префикса (ADR 0003/0014)."""
     token, _ = _register_owner(identity_gateway)
 
     response = await catalog_client.post(
@@ -143,7 +178,19 @@ async def test_create_product_rejects_a_malformed_request_body(
 
     assert response.status_code == 422
     assert response.json() == {
-        "error": {"code": "VALIDATION_ERROR", "message": "Некорректные данные запроса"}
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Некорректные данные запроса",
+            "details": [
+                {
+                    "field": "price",
+                    "issue": (
+                        "Input should be a valid number, unable to parse "
+                        "string as a number"
+                    ),
+                }
+            ],
+        }
     }
 
 

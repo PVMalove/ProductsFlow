@@ -6,11 +6,11 @@
 import uuid
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import TicketQueryPort
 from contracts.ticket import TicketDetailView
+from domain.errors import SupportErrors
 from domain.repositories import Cursor, PageInfo
 from domain.value_objects.ticket_id import TicketId
 
@@ -45,26 +45,14 @@ class GetTicketDetailQueryHandler:
 
     async def execute(self, query: GetTicketDetailQuery) -> Result[TicketDetail]:
         if query.require_admin and not query.is_admin:
-            return Result[TicketDetail].fail(
-                Error(
-                    code="FORBIDDEN",
-                    description="Доступ только для администраторов!",
-                    type=ErrorType.FORBIDDEN,
-                )
-            )
+            return Result[TicketDetail].fail(SupportErrors.forbidden())
         ticket = (
             await self._tickets.get_by_id(query.ticket_id)
             if query.is_admin
             else await self._tickets.get_for_author(query.ticket_id, query.actor_id)
         )
         if ticket is None:
-            return Result[TicketDetail].fail(
-                Error(
-                    code="TICKET_NOT_FOUND",
-                    description="Тикет не найден",
-                    type=ErrorType.NOT_FOUND,
-                )
-            )
+            return Result[TicketDetail].fail(SupportErrors.ticket_not_found())
         page = await self._tickets.list_messages(
             ticket_id=query.ticket_id,
             limit=query.limit,

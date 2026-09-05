@@ -1,8 +1,6 @@
-# ruff: noqa: E501
 import uuid
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from contracts.ticket import TicketView
@@ -10,6 +8,7 @@ from domain.entities.ticket import (
     InvalidStatusTransitionError,
     TicketClosedError,
 )
+from domain.errors import SupportErrors
 from domain.ticket_status import TicketStatus
 from domain.unit_of_work import SupportUnitOfWork
 from domain.value_objects.ticket_id import TicketId
@@ -31,13 +30,7 @@ class ChangeTicketStatusCommandHandler:
 
     async def execute(self, command: ChangeTicketStatusCommand) -> Result[TicketView]:
         if not command.is_admin:
-            return Result[TicketView].fail(
-                Error(
-                    code="FORBIDDEN",
-                    description="Доступ только для администраторов!",
-                    type=ErrorType.FORBIDDEN,
-                )
-            )
+            return Result[TicketView].fail(SupportErrors.forbidden())
         async with self._uow:
             try:
                 ticket = await self._uow.tickets.change_status(
@@ -46,28 +39,12 @@ class ChangeTicketStatusCommandHandler:
                     status=command.status,
                 )
             except TicketClosedError:
-                return Result[TicketView].fail(
-                    Error(
-                        code="TICKET_CLOSED",
-                        description="Закрытый тикет нельзя изменять",
-                        type=ErrorType.CONFLICT,
-                    )
-                )
+                return Result[TicketView].fail(SupportErrors.ticket_closed_conflict())
             except InvalidStatusTransitionError:
                 return Result[TicketView].fail(
-                    Error(
-                        code="INVALID_STATUS_TRANSITION",
-                        description="Недопустимый переход статуса тикета",
-                        type=ErrorType.CONFLICT,
-                    )
+                    SupportErrors.ticket_status_transition_rejected()
                 )
             if ticket is None:
-                return Result[TicketView].fail(
-                    Error(
-                        code="TICKET_NOT_FOUND",
-                        description="Тикет не найден",
-                        type=ErrorType.NOT_FOUND,
-                    )
-                )
+                return Result[TicketView].fail(SupportErrors.ticket_not_found())
             await self._uow.commit()
         return Result[TicketView].ok(TicketView.from_domain(ticket))

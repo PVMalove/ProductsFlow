@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from kernel_platform.http.errors import ApiError, ErrorDetail
 from kernel_platform.http.exception_handlers import register_error_handlers
 
 
@@ -21,8 +22,13 @@ class _DemoServiceError(Exception):
         super().__init__(self.message)
 
 
+class _Item(BaseModel):
+    price: float
+
+
 class _Body(BaseModel):
     price: float
+    items: list[_Item] = []
 
 
 def _build_app() -> FastAPI:
@@ -48,6 +54,18 @@ def _build_app() -> FastAPI:
     @app.get("/service-error")
     async def _service_error() -> None:
         raise _DemoServiceError()
+
+    @app.get("/api-error-with-details")
+    async def _api_error_with_details() -> None:
+        raise ApiError(
+            status_code=400,
+            code="general_multiple_validation_errors",
+            message="Обнаружены множественные ошибки валидации",
+            details=[
+                ErrorDetail(field="name", issue="Плохое имя"),
+                ErrorDetail(field="price", issue="Плохая цена"),
+            ],
+        )
 
     @app.get("/boom")
     async def _boom() -> None:
@@ -90,9 +108,55 @@ async def test_request_validation_error_becomes_structured_400_shape(
     async with client:
         response = await client.post("/validate", json={"price": "not-a-number"})
 
+    body = response.json()
     assert response.status_code == 422
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["message"] == "Некорректные данные запроса"
+
+
+async def test_request_validation_error_details_use_dot_path_without_transport_prefix(
+    client: httpx.AsyncClient,
+) -> None:
+    async with client:
+        response = await client.post(
+            "/validate",
+            json={"price": "not-a-number", "items": [{"price": "also-bad"}]},
+        )
+
+    fields = {detail["field"] for detail in response.json()["error"]["details"]}
+    assert fields == {"price", "items.0.price"}
+    for detail in response.json()["error"]["details"]:
+        assert "body" not in detail["field"]
+
+
+async def test_request_validation_error_omits_field_for_form_level_violations(
+    client: httpx.AsyncClient,
+) -> None:
+    async with client:
+        response = await client.post("/validate", content=b"not json")
+
+    details = response.json()["error"]["details"]
+    assert len(details) == 1
+    assert "field" not in details[0]
+    assert "issue" in details[0]
+
+
+async def test_api_error_with_details_includes_them_in_the_response(
+    client: httpx.AsyncClient,
+) -> None:
+    async with client:
+        response = await client.get("/api-error-with-details")
+
+    assert response.status_code == 400
     assert response.json() == {
-        "error": {"code": "VALIDATION_ERROR", "message": "Некорректные данные запроса"}
+        "error": {
+            "code": "general_multiple_validation_errors",
+            "message": "Обнаружены множественные ошибки валидации",
+            "details": [
+                {"field": "name", "issue": "Плохое имя"},
+                {"field": "price", "issue": "Плохая цена"},
+            ],
+        }
     }
 
 

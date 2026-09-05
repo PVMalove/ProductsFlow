@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_platform.pagination import DEFAULT_PAGE_LIMIT
 
@@ -12,6 +11,7 @@ from application.ports import (
     UserAuditQueryPort,
     UserQueryPort,
 )
+from domain.errors import IdentityErrors
 from domain.value_objects.user_id import UserId
 
 
@@ -47,11 +47,7 @@ class GetUserAuditQueryHandler:
             return Result[UserAuditPage | list[UserAuditEntry]].ok(page)
         if await self._users.get_by_id(query.user_id) is None:
             return Result[UserAuditPage | list[UserAuditEntry]].fail(
-                Error(
-                    code="user_not_found",
-                    description="Пользователь не найден",
-                    type=ErrorType.NOT_FOUND,
-                )
+                IdentityErrors.user_not_found()
             )
         entries = await self._audit.get_by_user(query.user_id)
         return Result[UserAuditPage | list[UserAuditEntry]].ok(entries)

@@ -14,7 +14,7 @@ from application.commands import (
     EditTicketMessageCommandHandler,
 )
 from contracts.ticket import TicketView
-from domain.entities.ticket import Ticket
+from domain.entities.ticket import Ticket, TicketMessageInvalidBodyError
 from domain.ticket_status import TicketStatus
 from domain.value_objects.ticket_id import TicketId
 
@@ -85,6 +85,61 @@ async def test_add_message_command_passes_actor_category_to_repository() -> None
     assert result.value == TicketView.from_domain(ticket)
     assert repository.message_calls == [(actor_id, True)]
     assert uow.committed
+
+
+class FakeInvalidBodyRepository:
+    async def add_message(
+        self, *, ticket_id: TicketId, actor_id: uuid.UUID, body: str, is_admin: bool
+    ) -> Ticket | None:
+        raise TicketMessageInvalidBodyError("body must contain 1-10000 characters")
+
+    async def edit_message(
+        self,
+        *,
+        ticket_id: TicketId,
+        message_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        body: str,
+        is_admin: bool = False,
+    ) -> Ticket | None:
+        raise TicketMessageInvalidBodyError("body must contain 1-10000 characters")
+
+
+@pytest.mark.asyncio
+async def test_add_message_command_rejects_invalid_body_as_validation_error() -> None:
+    uow = FakeSupportUnitOfWork(FakeInvalidBodyRepository())
+
+    result = await AddTicketMessageCommandHandler(uow).execute(
+        AddTicketMessageCommand(
+            ticket_id=TicketId.new_id(),
+            actor_id=uuid.uuid4(),
+            body=" ",
+            is_admin=False,
+        )
+    )
+
+    assert result.is_err
+    assert result.error.code == "invalid_body"
+    assert not uow.committed
+
+
+@pytest.mark.asyncio
+async def test_edit_message_command_rejects_invalid_body_as_validation_error() -> None:
+    uow = FakeSupportUnitOfWork(FakeInvalidBodyRepository())
+
+    result = await EditTicketMessageCommandHandler(uow).execute(
+        EditTicketMessageCommand(
+            ticket_id=TicketId.new_id(),
+            message_id=uuid.uuid4(),
+            actor_id=uuid.uuid4(),
+            body=" ",
+            is_admin=False,
+        )
+    )
+
+    assert result.is_err
+    assert result.error.code == "invalid_body"
+    assert not uow.committed
 
 
 @pytest.mark.asyncio

@@ -2,10 +2,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, cast
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_domain.value_object import ValueObject
 
+from domain.errors import IdentityErrors
 from domain.value_objects import PRIVATE_MARKER
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -30,13 +30,7 @@ class Email(ValueObject):
     @classmethod
     def create(cls, value: str) -> Result["Email"]:
         if not _EMAIL_PATTERN.match(value):
-            return Result[Email].fail(
-                Error(
-                    code="invalid_email",
-                    description=f"Некорректный email: {value!r}",
-                    type=ErrorType.VALIDATION,
-                )
-            )
+            return Result[Email].fail(IdentityErrors.invalid_email())
         return Result[Email].ok(cls(PRIVATE_MARKER, value))
 
     def _equality_components(self) -> tuple[Any, ...]:

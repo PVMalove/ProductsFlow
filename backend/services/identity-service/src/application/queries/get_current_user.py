@@ -7,11 +7,11 @@ framework-independent `UserView`."""
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import UserQueryPort
 from contracts.user import UserView
+from domain.errors import IdentityErrors
 from domain.value_objects.user_id import UserId
 
 
@@ -27,11 +27,5 @@ class GetCurrentUserHandler:
     async def execute(self, query: GetCurrentUserQuery) -> Result[UserView]:
         user = await self._users.get_by_id(query.user_id)
         if user is None:
-            return Result[UserView].fail(
-                Error(
-                    code="user_not_found",
-                    description="Пользователь не найден",
-                    type=ErrorType.NOT_FOUND,
-                )
-            )
+            return Result[UserView].fail(IdentityErrors.user_not_found())
         return Result[UserView].ok(UserView.from_user(user))
