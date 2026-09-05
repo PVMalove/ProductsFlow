@@ -79,7 +79,19 @@ async def main() -> None:
     if not settings.admin_password:
         raise RuntimeError("ADMIN_PASSWORD must be configured")
 
-    engine = create_async_engine(settings.identity_database_url)
+    engine = create_async_engine(
+        settings.identity_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
+    import os
+
+    if os.environ.get("SKIP_SEED") == "true":
+        logger.info("identity-bootstrap: seed skipped due to SKIP_SEED=true")
+        return
+
     try:
         await seed_admin_user(
             engine,

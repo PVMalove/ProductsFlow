@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     support_jwt_public_key: str = ""
     support_jwt_issuer: str = "identity-service"
 
+    db_pool_size: int = 20
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

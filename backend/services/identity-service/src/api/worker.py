@@ -19,7 +19,13 @@ async def main() -> None:
     (issue #102), 5-секундный poll (issue #100, happy path) остаётся
     страховкой на случай потерянного `NOTIFY`.
     """
-    engine = create_async_engine(settings.identity_database_url)
+    engine = create_async_engine(
+        settings.identity_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     connection = await aio_pika.connect_robust(settings.identity_amqp_url)
@@ -34,10 +40,20 @@ async def main() -> None:
         async with OutboxListener(listener_dsn) as listener:
             logger.info("identity-worker: outbox publisher started (hybrid wakeup)")
             while True:
-                await publisher.run_once()
-                await listener.wait_for_wakeup(
-                    settings.identity_outbox_poll_interval_seconds
-                )
+                try:
+                    await publisher.run_once()
+                except Exception:
+                    logger.exception("identity-worker: error in publisher loop")
+                    await asyncio.sleep(settings.identity_outbox_poll_interval_seconds)
+                    continue
+
+                try:
+                    await listener.wait_for_wakeup(
+                        settings.identity_outbox_poll_interval_seconds
+                    )
+                except Exception:
+                    logger.exception("identity-worker: error in wakeup loop")
+                    await asyncio.sleep(settings.identity_outbox_poll_interval_seconds)
 
 
 if __name__ == "__main__":

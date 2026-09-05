@@ -30,7 +30,12 @@ class IdentityGatewayAdapter:
     async def fetch_current_user(self, token: str) -> IdentityUser:
         try:
             info = await self._gateway.fetch_current_user(token)
-        except httpx.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (401, 403, 404):
+                from application.errors import ProductAccessDeniedError
+                raise ProductAccessDeniedError from exc
+            raise IdentityUnavailableError from exc
+        except httpx.RequestError as exc:
             raise IdentityUnavailableError from exc
         return IdentityUser(id=info.id, role=info.role, is_active=info.is_active)
 

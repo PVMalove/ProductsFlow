@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     minio_bucket_name_tempo: str = "tempo-traces"
     catalog_seed_placeholder_image_path: str = _DEFAULT_SEED_PLACEHOLDER_IMAGE_PATH
 
+    db_pool_size: int = 20
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
+
     @property
     def minio_bucket_names(self) -> tuple[str, ...]:
         return (

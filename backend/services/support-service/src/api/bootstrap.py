@@ -22,7 +22,13 @@ async def check_database_connectivity(engine: AsyncEngine) -> None:
 async def main() -> None:
     if not settings.support_database_url:
         raise RuntimeError("SUPPORT_DATABASE_URL must be configured")
-    engine = create_async_engine(settings.support_database_url)
+    engine = create_async_engine(
+        settings.support_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
     try:
         await check_database_connectivity(engine)
     finally:

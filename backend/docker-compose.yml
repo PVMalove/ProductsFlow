@@ -42,6 +42,7 @@ services:
       - backend-network
 
   identity-api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
@@ -59,6 +60,7 @@ services:
       - backend-network
 
   identity-worker:
+    restart: unless-stopped
     # Outbox Publisher (ADR 0010, issue #100) — вторая точка входа
     # identity-service, не HTTP-процесс: тот же образ, другой CMD. Никогда
     # не делит процесс с identity-api: краш/рестарт паблишера не задевает
@@ -135,6 +137,7 @@ services:
       - backend-network
 
   catalog-api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
@@ -156,6 +159,7 @@ services:
       - backend-network
 
   catalog-worker:
+    restart: unless-stopped
     # User-event projection worker (ADR 0010/0011) — тот же образ catalog,
     # отдельный процесс и CMD, что и catalog-api. Зависит только от
     # catalog-db (issue #208): поллинг admin-discovery в catalog-bootstrap
@@ -256,6 +260,7 @@ services:
       - backend-network
 
   support-api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/support-service/Dockerfile
@@ -269,6 +274,7 @@ services:
       - backend-network
 
   support-worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: services/support-service/Dockerfile

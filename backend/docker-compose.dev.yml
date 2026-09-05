@@ -9,6 +9,14 @@ services:
     environment:
       APP_ENV: dev
 
+  identity-bootstrap:
+    environment:
+      SKIP_SEED: "true"
+
+  catalog-bootstrap:
+    environment:
+      SKIP_SEED: "true"
+
   catalog-api:
     environment:
       APP_ENV: dev
@@ -27,3 +35,15 @@ services:
     ports:
       - "9002:9000"
       - "9003:9001"
+
+  identity-db:
+    ports:
+      - "5441:5432"
+
+  catalog-db:
+    ports:
+      - "5442:5432"
+
+  support-db:
+    ports:
+      - "5443:5432"

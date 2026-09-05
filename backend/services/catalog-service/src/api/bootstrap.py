@@ -164,7 +164,19 @@ async def main() -> None:
 
     await ensure_minio_buckets()
 
-    engine = create_async_engine(settings.catalog_database_url)
+    import os
+
+    if os.environ.get("SKIP_SEED") == "true":
+        logger.info("catalog-bootstrap: seed skipped due to SKIP_SEED=true")
+        return
+
+    engine = create_async_engine(
+        settings.catalog_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
     http_client = httpx.AsyncClient(base_url=settings.catalog_identity_base_url)
     identity = IdentityGatewayAdapter(IdentityClient(http_client))
     try:

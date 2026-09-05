@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     admin_email: str = ""
     admin_password: str = ""
 
+    db_pool_size: int = 20
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

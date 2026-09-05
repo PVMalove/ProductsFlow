@@ -191,7 +191,13 @@ async def main() -> None:
     """Запускает консьюмер проекции user-событий и удаления Support."""
     if not settings.support_database_url:
         raise RuntimeError("SUPPORT_DATABASE_URL must be configured")
-    engine = create_async_engine(settings.support_database_url)
+    engine = create_async_engine(
+        settings.support_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     connection = await aio_pika.connect_robust(settings.support_amqp_url)
 
