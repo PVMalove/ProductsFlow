@@ -20,11 +20,11 @@
 
 ## Точки входа
 
-**Production/dev — без единой точки входа.** Клиент (включая BFF-фронтенд) обращается к каждому из трёх сервисов напрямую по его собственному host-порту (`docker-compose.dev.yml`: 9010–9012; `docker-compose.prod.yml`: 9013–9015). Общего API Gateway или Nginx перед сервисами в production/dev-профилях нет — `backend/docker-compose.yml` (база, на которую накладываются `dev`/`prod`-override) не содержит `nginx`-сервиса.
+**Dev — единая точка входа через Nginx Gateway.** Клиент (включая BFF-фронтенд) обращается к сервисам через один Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway` в `backend/docker-compose.yml`), который маршрутизирует по текущему `/api/v1/*` контракту на соответствующий сервис. В dev-профиле `gateway` — единственный сервис, публикующий порт наружу (`docker-compose.dev.yml`: `8080:80`); `identity-api`/`catalog-api`/`support-api` порты на хост в dev больше не пробрасывают. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md).
 
-**Nginx-Gateway существует, но только как E2E-тестовая инфраструктура** (`docker-compose.e2e.yml`, `backend/tests/e2e/nginx.conf`) — session-scoped, поднимается и уничтожается pytest-фикстурой на время прогона E2E-сценариев, не является частью боевой топологии. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md), стратегия его использования в тестах — [ADR 0013](0013-testing-strategy.md).
+**Prod пока не переключён.** `backend/docker-compose.prod.yml` не тронут этим решением: `identity-api`/`catalog-api`/`support-api` по-прежнему публикуют `9013`–`9015`, а `gateway` (унаследованный из базового `docker-compose.yml`) в prod-профиле не публикует порт вовсе. Перевод prod на единую точку входа через `gateway` — отдельное решение (issue #289).
 
-Если продуктовый API Gateway когда-нибудь появится, это отдельное архитектурное решение, а не расширение E2E-инфраструктуры задним числом.
+**Nginx-Gateway для E2E — отдельная, не связанная с dev/prod инфраструктура** (`docker-compose.e2e.yml`, `backend/tests/e2e/nginx.conf`) — session-scoped, поднимается и уничтожается pytest-фикстурой на время прогона E2E-сценариев, использует собственный конфиг и динамический порт, не является частью боевой топологии. Стратегия его использования в тестах — [ADR 0013](0013-testing-strategy.md).
 
 ## Безопасный старт
 
