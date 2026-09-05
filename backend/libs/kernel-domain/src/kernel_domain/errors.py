@@ -34,6 +34,13 @@ class Error:
     def validation(
         cls, code: str, description: str, *, invalid_field: str | None = None
     ) -> "Error":
+        """
+        Создаёт объект Error, указывающий, что запрос не прошёл проверку бизнес-правила.
+
+        Используется, когда значение поля или запроса в целом нарушает доменное
+        правило валидации. Соответствует HTTP 400 (Bad Request).
+        Пример: Error.validation("invalid_price", "Цена не может быть отрицательной", invalid_field="price")
+        """
         return cls(
             code=code,
             description=description,
@@ -43,26 +50,72 @@ class Error:
 
     @classmethod
     def not_found(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error, указывающий, что запрашиваемый ресурс не найден.
+
+        Используется, когда запрашиваемый ресурс не существует. Соответствует HTTP 404 (Not Found).
+        Пример: Error.not_found("CheckEnterprise.NotFound", "Не найдено проверяемое предприятие с идентификатором 12345")
+        """
         return cls(code=code, description=description, type=ErrorType.NOT_FOUND)
 
     @classmethod
     def conflict(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error, указывающий, что операция конфликтует с текущим состоянием ресурса.
+
+        Используется, когда ресурс уже находится в состоянии, несовместимом с
+        запрошенным действием (повторная активация, нарушение уникальности и
+        т. п.). Соответствует HTTP 409 (Conflict).
+        Пример: Error.conflict("already_active", "Товар уже активен")
+        """
         return cls(code=code, description=description, type=ErrorType.CONFLICT)
 
     @classmethod
     def forbidden(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error, указывающий, что действие запрещено для текущего актёра.
+
+        Используется, когда актёр аутентифицирован, но не имеет прав на
+        запрошенное действие. Соответствует HTTP 403 (Forbidden).
+        Пример: Error.forbidden("not_owner", "Товар принадлежит другому пользователю")
+        """
         return cls(code=code, description=description, type=ErrorType.FORBIDDEN)
 
     @classmethod
     def unauthorized(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error, указывающий, что актёр не аутентифицирован.
+
+        Используется, когда запрос не несёт валидных учётных данных (токен
+        отсутствует, истёк или некорректен). Соответствует HTTP 401 (Unauthorized).
+        Пример: Error.unauthorized("invalid_token", "Токен доступа недействителен")
+        """
         return cls(code=code, description=description, type=ErrorType.UNAUTHORIZED)
 
     @classmethod
     def problem(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error для доменного нарушения, не привязанного к конкретному полю.
+
+        Используется для бизнес-проблем, которые не являются ни ошибкой
+        отдельного поля (см. `validation`), ни конфликтом состояния ресурса
+        (см. `conflict`) — например, превышение общего лимита операции.
+        Соответствует HTTP 400 (Bad Request).
+        Пример: Error.problem("order_limit_exceeded", "Превышен лимит заказов на сегодня")
+        """
         return cls(code=code, description=description, type=ErrorType.PROBLEM)
 
     @classmethod
     def failure(cls, code: str, description: str) -> "Error":
+        """
+        Создаёт объект Error для непредвиденного технического сбоя.
+
+        Используется, когда операция не может быть завершена по причине,
+        не являющейся бизнес-правилом (сбой инфраструктуры, недоступность
+        зависимости и т. п.), но домену всё равно нужно вернуть `Result.err`,
+        а не бросить исключение. Соответствует HTTP 500 (Internal Server Error).
+        Пример: Error.failure("identity_unavailable", "identity-service недоступен")
+        """
         return cls(code=code, description=description, type=ErrorType.FAILURE)
 
     def serialize(self) -> str:
