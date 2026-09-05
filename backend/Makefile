@@ -7,7 +7,7 @@ SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
 .PHONY: check test format lint architecture-check build up_dev up_prod keys \
-	setup demo \
+	setup demo gateway-smoke \
 	db-revision db-upgrade db-downgrade db-current db-history help _require-pkg
 
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
@@ -55,6 +55,9 @@ build: ## Пересобрать образы docker compose (make build service
 keys: ## Сгенерировать локальную RS256-пару для identity (ADR 0011, dev-only, не в git)
 	cd services/identity-service && uv sync
 	cd services/identity-service && uv run python ../../scripts/generate_dev_keys.py
+
+gateway-smoke: ## Прогнать smoke-test шлюза (issue #292): docker compose config, nginx -t, роутинг/rate limiting/anti-spoofing на свежем dev-стеке
+	bash infra/gateway/smoke_test.sh
 
 db-revision: _require-pkg ## Создать ревизию через autogenerate (make db-revision pkg=<service> msg="add foo")
 	cd $(member_dir) && uv sync
