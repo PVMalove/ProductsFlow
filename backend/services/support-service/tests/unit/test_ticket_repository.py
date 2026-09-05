@@ -9,6 +9,7 @@ from domain.entities.ticket import (
     Ticket,
     TicketClosedError,
     TicketMessageImmutableError,
+    TicketMessageInvalidBodyError,
 )
 from domain.ticket_status import TicketStatus
 from domain.value_objects.ticket_id import TicketId
@@ -206,6 +207,24 @@ async def test_add_message_on_closed_ticket_raises_and_rolls_back() -> None:
             ticket_id=TicketId.create(row.id),
             actor_id=author_id,
             body="Too late",
+            is_admin=False,
+        )
+
+    assert session.added == []
+    assert session.rolled_back is True
+
+
+@pytest.mark.asyncio
+async def test_add_message_with_invalid_body_raises_and_rolls_back() -> None:
+    author_id = uuid.uuid4()
+    row, first_message = _stored_ticket(author_id)
+    session = MutationSession(row, first_message)
+
+    with pytest.raises(TicketMessageInvalidBodyError):
+        await SqlTicketRepository(session).add_message(  # type: ignore[arg-type]
+            ticket_id=TicketId.create(row.id),
+            actor_id=author_id,
+            body=" ",
             is_admin=False,
         )
 

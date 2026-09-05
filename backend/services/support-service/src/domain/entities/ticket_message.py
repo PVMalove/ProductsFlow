@@ -2,9 +2,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error
 from kernel_domain.result import Result
 
+from domain.errors import SupportErrors
 from domain.value_objects import PRIVATE_MARKER
 from domain.value_objects.ticket_id import TicketId
 
@@ -66,14 +67,21 @@ class TicketMessage:
         author_id: uuid.UUID | None,
         body: str,
         is_system: bool = False,
-    ) -> "TicketMessage":
-        return cls(
-            PRIVATE_MARKER,
-            id=id,
-            ticket_id=ticket_id,
-            author_id=author_id,
-            body=validate_plaintext(body, field_name="body", maximum=10_000),
-            is_system=is_system,
+    ) -> Result["TicketMessage"]:
+        body_result = validate_plaintext(
+            body, error=SupportErrors.invalid_body(), maximum=10_000
+        )
+        if body_result.is_err:
+            return Result[TicketMessage].fail(body_result.error)
+        return Result[TicketMessage].ok(
+            cls(
+                PRIVATE_MARKER,
+                id=id,
+                ticket_id=ticket_id,
+                author_id=author_id,
+                body=body_result.value,
+                is_system=is_system,
+            )
         )
 
     @classmethod
@@ -104,11 +112,13 @@ class TicketMessage:
         if error is not None:
             return Result[None].fail(error)
 
-        object.__setattr__(
-            self,
-            "body",
-            validate_plaintext(body, field_name="body", maximum=10_000),
+        body_result = validate_plaintext(
+            body, error=SupportErrors.invalid_body(), maximum=10_000
         )
+        if body_result.is_err:
+            return Result[None].fail(body_result.error)
+
+        object.__setattr__(self, "body", body_result.value)
         return Result[None].ok(None)
 
     def delete(self) -> Result[None]:
@@ -122,22 +132,14 @@ class TicketMessage:
 
     def _immutability_error(self) -> Error | None:
         if self.is_system:
-            return Error(
-                code="message_immutable",
-                description="Системные сообщения нельзя изменять",
-                type=ErrorType.CONFLICT,
-            )
+            return SupportErrors.message_immutable()
         if self.is_deleted:
-            return Error(
-                code="message_already_deleted",
-                description="Сообщение уже удалено",
-                type=ErrorType.CONFLICT,
-            )
+            return SupportErrors.message_already_deleted()
         return None
 
 
-def validate_plaintext(value: str, *, field_name: str, maximum: int) -> str:
-    value = value.strip()
-    if not value or len(value) > maximum:
-        raise ValueError(f"{field_name} must contain 1-{maximum} characters")
-    return value
+def validate_plaintext(value: str, *, error: Error, maximum: int) -> Result[str]:
+    trimmed = value.strip()
+    if not trimmed or len(trimmed) > maximum:
+        return Result[str].fail(error)
+    return Result[str].ok(trimmed)

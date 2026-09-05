@@ -14,6 +14,7 @@ from domain.entities.ticket import (
     TicketClosedError,
     TicketMessageAlreadyDeletedError,
     TicketMessageImmutableError,
+    TicketMessageInvalidBodyError,
     TicketMessageNotFoundError,
 )
 from domain.entities.ticket_message import TicketMessage
@@ -47,6 +48,8 @@ def _raise_for_error(error: Error) -> NoReturn:
         raise TicketMessageImmutableError(error.description)
     if error.code == "message_already_deleted":
         raise TicketMessageAlreadyDeletedError(error.description)
+    if error.code == "invalid_body":
+        raise TicketMessageInvalidBodyError(error.description)
     raise ValueError(error.description)
 
 

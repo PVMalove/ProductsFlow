@@ -4,10 +4,11 @@ from typing import cast
 
 from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error, ErrorList
 from kernel_domain.result import Result
 
 from domain.entities.ticket_message import TicketMessage, validate_plaintext
+from domain.errors import SupportErrors
 from domain.events.ticket_domain_event import (
     TicketCreated,
     TicketMessageAdded,
@@ -44,29 +45,15 @@ class TicketMessageAlreadyDeletedError(ValueError):
     """Поднимается при повторной мутации уже удалённого сообщения."""
 
 
+class TicketMessageInvalidBodyError(ValueError):
+    """Поднимается, когда тело сообщения не проходит штатную валидацию."""
+
+
 _NEXT_STATUS = {
     TicketStatus.OPEN: TicketStatus.IN_PROGRESS,
     TicketStatus.IN_PROGRESS: TicketStatus.RESOLVED,
     TicketStatus.RESOLVED: TicketStatus.CLOSED,
 }
-
-
-def _ticket_closed_error(description: str) -> Error:
-    return Error(code="ticket_closed", description=description, type=ErrorType.CONFLICT)
-
-
-def _invalid_status_transition_error(description: str) -> Error:
-    return Error(
-        code="invalid_status_transition",
-        description=description,
-        type=ErrorType.CONFLICT,
-    )
-
-
-def _message_not_found_error(description: str) -> Error:
-    return Error(
-        code="message_not_found", description=description, type=ErrorType.NOT_FOUND
-    )
 
 
 class Ticket(Entity[TicketId]):
@@ -95,7 +82,7 @@ class Ticket(Entity[TicketId]):
     ) -> None:
         super().__init__(marker, id=id)
         self.author_id = author_id
-        self.subject = validate_plaintext(subject, field_name="subject", maximum=200)
+        self.subject = subject
         self.status = status
         self.messages = messages or []
         if not self.messages:
@@ -111,40 +98,36 @@ class Ticket(Entity[TicketId]):
     def create(
         cls, *, author_id: uuid.UUID, subject: str, first_message: str
     ) -> Result["Ticket"]:
-        try:
-            validate_plaintext(subject, field_name="subject", maximum=200)
-        except ValueError as exc:
-            return Result[Ticket].fail(
-                Error(
-                    code="invalid_subject",
-                    description=str(exc),
-                    type=ErrorType.VALIDATION,
-                )
-            )
+        subject_result = validate_plaintext(
+            subject, error=SupportErrors.invalid_subject(), maximum=200
+        )
+        message_result = validate_plaintext(
+            first_message, error=SupportErrors.invalid_first_message(), maximum=10_000
+        )
+
+        errors: list[Error] = []
+        if subject_result.is_err:
+            errors.append(subject_result.error)
+        if message_result.is_err:
+            errors.append(message_result.error)
+        if errors:
+            return Result[Ticket].fail(ErrorList.of(errors))
 
         ticket_id = TicketId.new_id()
-        try:
-            message = TicketMessage.create(
-                id=uuid.uuid4(),
-                ticket_id=ticket_id,
-                author_id=author_id,
-                body=first_message,
-            )
-        except ValueError as exc:
-            return Result[Ticket].fail(
-                Error(
-                    code="invalid_first_message",
-                    description=str(exc),
-                    type=ErrorType.VALIDATION,
-                )
-            )
+        message = TicketMessage.create(
+            id=uuid.uuid4(),
+            ticket_id=ticket_id,
+            author_id=author_id,
+            body=message_result.value,
+        )
+        assert message.is_ok, "first_message already validated above"
         ticket = cls(
             PRIVATE_MARKER,
             ticket_id,
             author_id=author_id,
-            subject=subject,
+            subject=subject_result.value,
             status=TicketStatus.OPEN,
-            messages=[message],
+            messages=[message.value],
         )
         ticket.add_domain_event(TicketCreated(ticket_id=ticket_id, author_id=author_id))
         return Result[Ticket].ok(ticket)
@@ -179,17 +162,18 @@ class Ticket(Entity[TicketId]):
         is_system: bool = False,
     ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED:
-            return Result[TicketMessage].fail(
-                _ticket_closed_error("closed tickets cannot receive messages")
-            )
+            return Result[TicketMessage].fail(SupportErrors.ticket_closed())
 
-        message = TicketMessage.create(
+        message_result = TicketMessage.create(
             id=uuid.uuid4(),
             ticket_id=self.id,
             author_id=author_id,
             body=body,
             is_system=is_system,
         )
+        if message_result.is_err:
+            return Result[TicketMessage].fail(message_result.error)
+        message = message_result.value
         self.messages.append(message)
         self.add_domain_event(
             TicketMessageAdded(
@@ -245,13 +229,15 @@ class Ticket(Entity[TicketId]):
                 actor_category="system",
             )
         )
-        system_message = TicketMessage.create(
+        system_message_result = TicketMessage.create(
             id=uuid.uuid4(),
             ticket_id=self.id,
             author_id=None,
             body=USER_DELETED_MESSAGE,
             is_system=True,
         )
+        assert system_message_result.is_ok, "USER_DELETED_MESSAGE must be valid"
+        system_message = system_message_result.value
         self.messages.append(system_message)
         self.add_domain_event(
             TicketMessageAdded(
@@ -271,18 +257,12 @@ class Ticket(Entity[TicketId]):
         actor_category: str,
     ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED:
-            return Result[TicketMessage].fail(
-                _ticket_closed_error("closed tickets cannot edit messages")
-            )
+            return Result[TicketMessage].fail(SupportErrors.ticket_closed())
         message = self._message_by_id(message_id)
         if message is None:
-            return Result[TicketMessage].fail(
-                _message_not_found_error("message does not belong to the ticket")
-            )
+            return Result[TicketMessage].fail(SupportErrors.message_not_found())
         if message.author_id != author_id:
-            return Result[TicketMessage].fail(
-                _message_not_found_error("message is owned by another author")
-            )
+            return Result[TicketMessage].fail(SupportErrors.message_not_found())
 
         result = message.edit(body)
         if result.is_err:
@@ -305,18 +285,12 @@ class Ticket(Entity[TicketId]):
         actor_category: str,
     ) -> Result[TicketMessage]:
         if self.status is TicketStatus.CLOSED and actor_category != "admin":
-            return Result[TicketMessage].fail(
-                _ticket_closed_error("closed tickets cannot delete messages")
-            )
+            return Result[TicketMessage].fail(SupportErrors.ticket_closed())
         message = self._message_by_id(message_id)
         if message is None:
-            return Result[TicketMessage].fail(
-                _message_not_found_error("message does not belong to the ticket")
-            )
+            return Result[TicketMessage].fail(SupportErrors.message_not_found())
         if actor_category != "admin" and message.author_id != actor_id:
-            return Result[TicketMessage].fail(
-                _message_not_found_error("message is owned by another author")
-            )
+            return Result[TicketMessage].fail(SupportErrors.message_not_found())
 
         result = message.delete()
         if result.is_err:
@@ -345,15 +319,9 @@ class Ticket(Entity[TicketId]):
         allow_reopen: bool = False,
     ) -> Result[None]:
         if self.status is TicketStatus.CLOSED:
-            return Result[None].fail(
-                _ticket_closed_error("closed tickets have a terminal status")
-            )
+            return Result[None].fail(SupportErrors.ticket_closed())
         if not allow_reopen and _NEXT_STATUS.get(self.status) is not status:
-            return Result[None].fail(
-                _invalid_status_transition_error(
-                    f"cannot change status from {self.status} to {status}"
-                )
-            )
+            return Result[None].fail(SupportErrors.invalid_status_transition())
 
         previous_status = self.status
         self.status = status

@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from kernel_domain.errors import ErrorType
+from kernel_domain.errors import ErrorList, ErrorType
 
 from domain.entities.ticket import Ticket
 from domain.events.ticket_domain_event import (
@@ -84,6 +84,19 @@ def test_ticket_rejects_invalid_first_message(body: str) -> None:
     assert result.is_err
     assert result.error.code == "invalid_first_message"
     assert result.error.type is ErrorType.VALIDATION
+
+
+def test_ticket_create_accumulates_independent_subject_and_message_violations() -> None:
+    result = Ticket.create(author_id=uuid.uuid4(), subject="", first_message=" ")
+
+    assert result.is_err
+    error = result.error
+    assert isinstance(error, ErrorList)
+    assert error.type is ErrorType.VALIDATION
+    assert [child.code for child in error.errors] == [
+        "invalid_subject",
+        "invalid_first_message",
+    ]
 
 
 def test_ticket_author_message_reopens_resolved_ticket() -> None:
