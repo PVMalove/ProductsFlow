@@ -132,7 +132,8 @@ async def test_create_product_rejects_a_malformed_request_body(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
     """Валидация уровня фреймворка (Pydantic), не доменная — тоже
-    структурная форма ошибки, но с каноническим VALIDATION_ERROR (ADR 0003)."""
+    структурная форма ошибки, но с каноническим VALIDATION_ERROR и dot-path
+    `details.field` без транспортного префикса (ADR 0003/0014)."""
     token, _ = _register_owner(identity_gateway)
 
     response = await catalog_client.post(
@@ -143,7 +144,19 @@ async def test_create_product_rejects_a_malformed_request_body(
 
     assert response.status_code == 422
     assert response.json() == {
-        "error": {"code": "VALIDATION_ERROR", "message": "Некорректные данные запроса"}
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Некорректные данные запроса",
+            "details": [
+                {
+                    "field": "price",
+                    "issue": (
+                        "Input should be a valid number, unable to parse "
+                        "string as a number"
+                    ),
+                }
+            ],
+        }
     }
 
 

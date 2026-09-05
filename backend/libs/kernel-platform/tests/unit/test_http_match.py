@@ -1,11 +1,11 @@
 """ADR 0002/0003: общий конверт успеха + разворачивание `Result` в HTTP."""
 
 import pytest
-from kernel_domain.errors import Error, ErrorType
+from kernel_domain.errors import Error, ErrorList, ErrorType
 from kernel_domain.result import Result
 
 from kernel_platform.http.envelope import ApiResponse
-from kernel_platform.http.errors import ApiError
+from kernel_platform.http.errors import ApiError, ErrorDetail
 from kernel_platform.http.match import match_created, match_page, match_result
 from kernel_platform.pagination import Page, PageInfo
 
@@ -37,6 +37,26 @@ def test_match_result_raises_api_error_with_the_mapped_status_and_domain_code() 
     assert exc_info.value.status_code == 400
     assert exc_info.value.code == "invalid_name"
     assert exc_info.value.message == "Плохое имя"
+    assert exc_info.value.details is None
+
+
+def test_match_result_attaches_details_for_an_error_list() -> None:
+    error_list = ErrorList.of(
+        [
+            Error.validation("invalid_name", "Плохое имя", invalid_field="name"),
+            Error.validation("invalid_price", "Плохая цена", invalid_field="price"),
+        ]
+    )
+    result: Result[int] = Result[int].fail(error_list)
+
+    with pytest.raises(ApiError) as exc_info:
+        match_result(result)
+
+    assert exc_info.value.code == "general_multiple_validation_errors"
+    assert exc_info.value.details == [
+        ErrorDetail(field="name", issue="Плохое имя"),
+        ErrorDetail(field="price", issue="Плохая цена"),
+    ]
 
 
 def test_match_created_behaves_exactly_like_match_result() -> None:
