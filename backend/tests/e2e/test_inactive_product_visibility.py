@@ -3,21 +3,7 @@ import uuid
 import httpx
 import pytest
 
-
-async def _register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
-    password = "E2e-only-password-123"
-    registration = await client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "password": password},
-    )
-    assert registration.status_code == 201, registration.text
-
-    login = await client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": password},
-    )
-    assert login.status_code == 200, login.text
-    return str(login.json()["access_token"])
+from tests.e2e.conftest import register_and_login
 
 
 @pytest.mark.asyncio
@@ -25,10 +11,10 @@ async def test_owner_keeps_direct_access_to_deactivated_product(
     gateway_client: httpx.AsyncClient,
 ) -> None:
     suffix = uuid.uuid4().hex
-    owner_token = await _register_and_login(
+    owner_token = await register_and_login(
         gateway_client, email=f"e2e-owner-{suffix}@example.test"
     )
-    viewer_token = await _register_and_login(
+    viewer_token = await register_and_login(
         gateway_client, email=f"e2e-viewer-{suffix}@example.test"
     )
     owner_headers = {"Authorization": f"Bearer {owner_token}"}

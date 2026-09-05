@@ -2,23 +2,12 @@ import uuid
 
 import httpx
 import pytest
-from tests.e2e.conftest import login_seeded_admin, wait_for_ticket_closed
 
-
-async def _register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
-    password = "E2e-only-password-123"
-    registration = await client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "password": password},
-    )
-    assert registration.status_code == 201, registration.text
-
-    login = await client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": password},
-    )
-    assert login.status_code == 200, login.text
-    return str(login.json()["access_token"])
+from tests.e2e.conftest import (
+    login_seeded_admin,
+    register_and_login,
+    wait_for_ticket_closed,
+)
 
 
 @pytest.mark.asyncio
@@ -26,7 +15,7 @@ async def test_self_delete_anonymizes_and_closes_the_users_ticket(
     gateway_client: httpx.AsyncClient,
 ) -> None:
     suffix = uuid.uuid4().hex
-    user_token = await _register_and_login(
+    user_token = await register_and_login(
         gateway_client, email=f"e2e-deleted-user-{suffix}@example.test"
     )
     user_headers = {"Authorization": f"Bearer {user_token}"}

@@ -267,6 +267,9 @@ services:
     environment:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
+      SUPPORT_JWT_PUBLIC_KEY_PATH: secrets/identity_jwt_public_key.pem
+    volumes:
+      - ./secrets:/srv/secrets:ro
     depends_on:
       support-bootstrap:
         condition: service_completed_successfully
@@ -283,6 +286,9 @@ services:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
       SUPPORT_AMQP_URL: ${SUPPORT_AMQP_URL}
+      SUPPORT_JWT_PUBLIC_KEY_PATH: secrets/identity_jwt_public_key.pem
+    volumes:
+      - ./secrets:/srv/secrets:ro
     depends_on:
       support-bootstrap:
         condition: service_completed_successfully

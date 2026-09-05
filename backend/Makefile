@@ -106,8 +106,8 @@ setup: ## Поднять *-db + MinIO + RabbitMQ, дождаться health, п�
 	docker compose run --rm --no-deps support-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 
 demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity-worker/catalog-worker, connectivity-check support)
+	docker compose up -d --wait --no-deps identity-worker catalog-worker support-worker
 	docker compose run --rm --no-deps identity-bootstrap python -m api.bootstrap
-	docker compose up -d --wait --no-deps identity-worker catalog-worker
 	docker compose run --rm --no-deps catalog-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps support-bootstrap python -m api.bootstrap
 
