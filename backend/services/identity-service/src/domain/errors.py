@@ -50,6 +50,9 @@ class IdentityErrors:
 
     @staticmethod
     def old_password_mismatch() -> Error:
+        # Код намеренно совпадает с invalid_credentials() — это тот же публичный
+        # код, что и раньше отдавал сырой конструктор change-password, только с
+        # контекстным описанием.
         return Error.unauthorized("invalid_credentials", "Текущий пароль не совпадает")
 
     @staticmethod
