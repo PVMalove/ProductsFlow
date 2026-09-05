@@ -18,7 +18,7 @@
 - **Aggregate / Entity.** Сущность, инкапсулирующая бизнес-инварианты; создаётся только через фабричный метод (`create`), не напрямую через конструктор ([ADR 0006](../adr/0006-service-internal-architecture-baseline.md)).
 - **Outbox Pattern.** Решение проблемы "двойной записи" (dual write): доменные события сохраняются в таблицу `outbox_messages` в одной транзакции с бизнес-данными явным вызовом `drain_events_to_outbox()`, а фоновый воркер асинхронно доставляет их в брокер ([ADR 0010](../adr/0010-identity-service-event-integration.md)).
 - **Идемпотентность.** Способность обработчика событий безопасно принимать одно и то же сообщение несколько раз без дублирования эффектов — необходимо из-за гарантии доставки At-Least-Once в RabbitMQ.
-- **API Gateway.** В этом проекте — **не production-компонент**. Nginx-Gateway существует только как изолированная E2E-тестовая инфраструктура, поднимаемая и уничтожаемая pytest-фикстурой на время прогона; клиенты в dev/prod обращаются к каждому сервису напрямую по его собственному host-порту ([ADR 0001](../adr/0001-platform-topology-and-bounded-contexts.md), [ADR 0004](../adr/0004-api-gateway-and-routing.md)).
+- **API Gateway.** Единый Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway`) — единственная публично открытая точка входа и в dev (`8080:80`), и в prod (`80:80`); `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Отдельно от него — изолированная E2E-тестовая инфраструктура (свой Nginx-Gateway), поднимаемая и уничтожаемая pytest-фикстурой на время прогона ([ADR 0001](../adr/0001-platform-topology-and-bounded-contexts.md), [ADR 0004](../adr/0004-api-gateway-and-routing.md)).
 
 ---
 
@@ -29,8 +29,8 @@ backend/
 ├── Makefile                     # Task runner: pkg=<lib|service> для сборки/тестов, service=<compose-service> для образов/стека
 ├── pyproject.toml               # Общий [tool.ruff]/[tool.mypy]-конфиг + [tool.uv.workspace] (members = libs/*, services/*) → один backend/uv.lock
 ├── docker-compose.yml           # База: *-db, *-bootstrap, *-api, *-worker, minio, rabbitmq
-├── docker-compose.dev.yml       # Override: host-порты 9010–9012, APP_ENV=dev
-├── docker-compose.prod.yml      # Override: host-порты 9013–9015, APP_ENV=prod, restart: unless-stopped
+├── docker-compose.dev.yml       # Override: gateway публикует 8080:80 (единственный порт), APP_ENV=dev
+├── docker-compose.prod.yml      # Override: gateway публикует 80:80 (единственный порт), APP_ENV=prod, restart: unless-stopped
 ├── docker-compose.e2e.yml       # Override: Nginx Gateway, только для E2E-фикстуры (не для dev/prod)
 ├── tests/e2e/                   # Межсервисные black-box сценарии + nginx.conf Gateway'я
 │
@@ -73,16 +73,18 @@ backend/services/<service>/
 
 ## 3. Макро-архитектура (межсервисное взаимодействие)
 
-Сервисы **не имеют общих баз данных** и не импортируют код друг друга. Клиент обращается к каждому сервису напрямую (нет production Gateway, см. глоссарий); синхронные межсервисные вызовы сведены к двум узким точкам в catalog ([ADR 0011](../adr/0011-catalog-service-event-integration.md)).
+Сервисы **не имеют общих баз данных** и не импортируют код друг друга. Клиент обращается к сервисам только через единый Nginx Gateway (см. глоссарий); синхронные межсервисные вызовы сведены к двум узким точкам в catalog ([ADR 0011](../adr/0011-catalog-service-event-integration.md)).
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 graph TD
     Client(["Web / BFF Clients"])
 
-    Client -->|"HTTP :9013"| IS["identity-service"]
-    Client -->|"HTTP :9014"| CS["catalog-service"]
-    Client -->|"HTTP :9015"| SS["support-service"]
+    Client -->|"HTTP :80"| GW["gateway (Nginx)"]
+
+    GW --> IS["identity-service"]
+    GW --> CS["catalog-service"]
+    GW --> SS["support-service"]
 
     subgraph "Polyrepo Workspace (backend/)"
         direction TB
@@ -116,6 +118,7 @@ graph TD
     SS --> DB & MQ
 
     style Client fill:#1f2937,stroke:#9ca3af,color:#fff
+    style GW fill:#581c87,stroke:#c084fc,color:#fff
     style IS fill:#1e3a8a,stroke:#60a5fa,color:#fff
     style CS fill:#1e3a8a,stroke:#60a5fa,color:#fff
     style SS fill:#1e3a8a,stroke:#60a5fa,color:#fff

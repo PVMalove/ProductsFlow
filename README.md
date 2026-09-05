@@ -22,7 +22,7 @@ ProductsFlow — распределённая микросервисная пл�
 
 ## Топология
 
-Сервисы **не имеют общих баз данных** и не импортируют код друг друга. **Единой точки входа (production API Gateway) в системе нет** — клиент обращается к каждому сервису напрямую по его собственному порту. Nginx-Gateway существует, но только как изолированная E2E-тестовая инфраструктура, поднимаемая и уничтожаемая pytest-фикстурой на время прогона.
+Сервисы **не имеют общих баз данных** и не импортируют код друг друга. **Единая точка входа — Nginx Gateway**: и в dev (`8080:80`), и в prod (`80:80`) это единственный сервис, публикующий порт наружу; `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Отдельно от него — изолированная E2E-тестовая инфраструктура (свой Nginx-Gateway), поднимаемая и уничтожаемая pytest-фикстурой на время прогона.
 
 <details>
 <summary><b>Показать схему макро-архитектуры (Mermaid)</b></summary>
@@ -32,9 +32,11 @@ ProductsFlow — распределённая микросервисная пл�
 graph TD
     Client(["Web / BFF Clients"])
 
-    Client -->|"HTTP :9010/9013"| IS["identity-service"]
-    Client -->|"HTTP :9011/9014"| CS["catalog-service"]
-    Client -->|"HTTP :9012/9015"| SS["support-service"]
+    Client -->|"HTTP :8080 (dev) / :80 (prod)"| GW["gateway (Nginx)"]
+
+    GW --> IS["identity-service"]
+    GW --> CS["catalog-service"]
+    GW --> SS["support-service"]
 
     subgraph APP["Polyrepo Workspace (backend/)"]
         direction TB
@@ -85,6 +87,7 @@ graph TD
     CS --->|"presigned URL"| MinIO
 
     style Client fill:#1f2937,stroke:#9ca3af,color:#fff
+    style GW fill:#581c87,stroke:#c084fc,color:#fff
     style IS fill:#1e3a8a,stroke:#60a5fa,color:#fff
     style CS fill:#1e3a8a,stroke:#60a5fa,color:#fff
     style SS fill:#1e3a8a,stroke:#60a5fa,color:#fff

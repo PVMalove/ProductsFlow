@@ -58,7 +58,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         1. Выцепляет `X-Request-ID` из хэдеров или генерит свежий UUIDv4. Пишет в `contextvars`.
         2. Дергает парсинг токена для инжекта `actor_id` в контекст.
         3. Засекает `perf_counter` и прокидывает запрос дальше по ASGI-пайплайну.
-        4. В блоке `finally` считает `duration_ms` и пишет один жирный лог уровня INFO со всеми метриками запроса в `extra`.
+        4. В блоке `finally` считает `duration_ms` и пишет один жирный лог уровня INFO: метрики запроса — в `extra`, плюс `request_id`/сырые `X-User-Id`/`X-User-Role` — в тексте сообщения (issue #292/ADR 0005 anti-spoofing observability).
         5. Откатывает `contextvars` через `reset()`, чтобы не запрачило соседние таски в том же event loop.
         6. Прошивает `X-Request-ID` в response.
 
@@ -80,10 +80,18 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1000
+            # x_user_id/x_user_role — сырые значения хэдеров как они дошли до
+            # сервиса (в норме — пустые: gateway их зануляет, ADR 0005/issue
+            # #286). Единственный способ автоматически подтвердить это
+            # anti-spoofing поведение по issue #292 — их непустое значение
+            # здесь сигнализирует о попытке подделки или об обходе gateway.
             logger.info(
-                "%s %s",
+                "%s %s request_id=%s x_user_id=%r x_user_role=%r",
                 request.method,
                 request.url.path,
+                request_id,
+                request.headers.get("x-user-id", ""),
+                request.headers.get("x-user-role", ""),
                 extra={
                     "method": request.method,
                     "path": request.url.path,
