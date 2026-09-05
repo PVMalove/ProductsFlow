@@ -2,9 +2,9 @@ from typing import cast
 
 from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
+from domain.errors import IdentityErrors
 from domain.events.user_domain_event import (
     Activated,
     Deactivated,
@@ -86,13 +86,7 @@ class User(Entity[UserId]):
 
     def change_password(self, new_password_hash: str) -> Result[None]:
         if not self.is_active:
-            return Result[None].fail(
-                Error(
-                    code="user_deactivated",
-                    description="Деактивированный пользователь не может сменить пароль",
-                    type=ErrorType.FORBIDDEN,
-                )
-            )
+            return Result[None].fail(IdentityErrors.user_deactivated())
 
         self.password_hash = new_password_hash
         self.add_domain_event(PasswordChanged(user_id=self.id))
@@ -100,13 +94,7 @@ class User(Entity[UserId]):
 
     def deactivate(self) -> Result[None]:
         if not self.is_active:
-            return Result[None].fail(
-                Error(
-                    code="already_deactivated",
-                    description="Пользователь уже деактивирован",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(IdentityErrors.already_deactivated())
 
         self.is_active = False
         self.add_domain_event(Deactivated(user_id=self.id))
@@ -114,21 +102,9 @@ class User(Entity[UserId]):
 
     def activate(self) -> Result[None]:
         if self.is_deleted:
-            return Result[None].fail(
-                Error(
-                    code="user_deleted",
-                    description="Удалённая учётная запись не может быть активирована",
-                    type=ErrorType.FORBIDDEN,
-                )
-            )
+            return Result[None].fail(IdentityErrors.user_deleted())
         if self.is_active:
-            return Result[None].fail(
-                Error(
-                    code="already_active",
-                    description="Пользователь уже активен",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(IdentityErrors.already_active())
 
         self.is_active = True
         self.add_domain_event(Activated(user_id=self.id))
@@ -141,13 +117,7 @@ class User(Entity[UserId]):
         замаскированная деактивация — а `is_deleted` навсегда блокирует
         реактивацию."""
         if self.is_deleted:
-            return Result[None].fail(
-                Error(
-                    code="already_deleted",
-                    description="Учётная запись уже удалена",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(IdentityErrors.already_deleted())
 
         anonymized_email = Email.create(f"deleted-{self.id.value}@tombstone.invalid")
         assert anonymized_email.is_ok, "generated tombstone email must be valid"
@@ -160,13 +130,7 @@ class User(Entity[UserId]):
 
     def change_role(self, role: Role) -> Result[None]:
         if self.role == role:
-            return Result[None].fail(
-                Error(
-                    code="role_unchanged",
-                    description=f"Пользователь уже имеет роль {role.value!r}",
-                    type=ErrorType.CONFLICT,
-                )
-            )
+            return Result[None].fail(IdentityErrors.role_unchanged())
 
         self.role = role
         self.add_domain_event(RoleChanged(user_id=self.id, role=role))

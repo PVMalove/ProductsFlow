@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass
 
-from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 
 from application.ports import PasswordHasher
 from contracts.user import UserView
+from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.raw_password import RawPassword
 from domain.value_objects.user_id import UserId
@@ -42,13 +42,7 @@ class ChangePasswordCommandHandler:
             if user is None or not self._password_hasher.verify(
                 command.old_password, user.password_hash
             ):
-                return Result[UserView].fail(
-                    Error(
-                        code="invalid_credentials",
-                        description="Текущий пароль не совпадает",
-                        type=ErrorType.UNAUTHORIZED,
-                    )
-                )
+                return Result[UserView].fail(IdentityErrors.old_password_mismatch())
             password = RawPassword.create(command.new_password)
             if password.is_err:
                 return Result[UserView].fail(password.error)
