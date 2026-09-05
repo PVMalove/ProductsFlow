@@ -31,7 +31,7 @@ Eventual consistency — правило по умолчанию, но с дву�
 
 ## Собственный Outbox для `Product`
 
-Catalog — не только потребитель, но и второй (после identity) producer transactional outbox, для агрегата `Product`. `ProductRepository.save()`/`delete()` вызывает общий `drain_events_to_outbox(self.session, product)` ([ADR 0006](0006-service-internal-architecture-baseline.md), [ADR 0010](0010-identity-service-event-integration.md)) в той же транзакции, что и мутация агрегата. Пять подклассов `ProductEvent` реализуют контракт `DomainEvent`: общий предок задаёт `aggregate_type = "Product"` и `aggregate_id()`/базовый `to_payload()` (`{"product_id": ...}`), `ProductCreated` расширяет `to_payload()` через `super()`, остальные четыре только объявляют свой `event_type`.
+Catalog — не только потребитель, но и второй (после identity) producer transactional outbox, для агрегата `Product`. `ProductRepository.save()`/`delete()` вызывает общий `drain_events_to_outbox(self.session, product)` ([ADR 0006](0006-service-internal-architecture-baseline.md), [ADR 0010](0010-identity-service-event-integration.md)) в той же транзакции, что и мутация агрегата. `api/outbox_worker.py` публикует эти строки в topic exchange. Для индексируемых create/update/(de)activate операций `ProductSnapshotEvent` публикует self-contained `product.*.v2` с полным конечным состоянием и `search_revision`; v1 параллельно не публикуется. `ProductDeleted` сохраняет отдельный контракт до задачи tombstone/reindex.
 
 ## Considered Options
 

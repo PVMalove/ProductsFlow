@@ -47,6 +47,7 @@ def _to_domain(row: ProductModel) -> Product:
         category=row.category,
         user_id=row.user_id,
         is_active=row.is_active,
+        search_revision=row.search_revision,
     )
 
 
@@ -102,6 +103,7 @@ class ProductRepository:
                 category=product.category,
                 user_id=product.user_id,
                 is_active=product.is_active,
+                search_revision=product.search_revision,
             )
         )
         await drain_events_to_outbox(self.session, product)
@@ -135,6 +137,7 @@ class ProductRepository:
         row.description = product.description
         row.price = product.price
         row.category = product.category
+        row.search_revision = product.search_revision
         await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 
@@ -157,6 +160,7 @@ class ProductRepository:
             return Result[Product].fail(result.error)
 
         row.is_active = product.is_active
+        row.search_revision = product.search_revision
         await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 

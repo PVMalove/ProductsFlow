@@ -28,37 +28,48 @@ class ProductEvent(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProductCreated(ProductEvent):
-    event_type: str = "product.created.v1"
+class ProductSnapshotEvent(ProductEvent):
+    """Self-contained search snapshot emitted with each indexable mutation."""
 
     user_id: uuid.UUID
     name: str
+    description: str
     category: str
     price: float
+    is_active: bool
+    search_revision: int
 
     def to_payload(self) -> dict[str, Any]:
         return {
             **super().to_payload(),
             "user_id": str(self.user_id),
             "name": self.name,
+            "description": self.description,
             "category": self.category,
             "price": self.price,
+            "is_active": self.is_active,
+            "search_revision": self.search_revision,
         }
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProductUpdated(ProductEvent):
-    event_type: str = "product.updated.v1"
+class ProductCreated(ProductSnapshotEvent):
+    event_type: str = "product.created.v2"
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProductActivated(ProductEvent):
-    event_type: str = "product.activated.v1"
+class ProductUpdated(ProductSnapshotEvent):
+    event_type: str = "product.updated.v2"
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProductDeactivated(ProductEvent):
-    event_type: str = "product.deactivated.v1"
+class ProductActivated(ProductSnapshotEvent):
+    event_type: str = "product.activated.v2"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProductDeactivated(ProductSnapshotEvent):
+    event_type: str = "product.deactivated.v2"
 
 
 @dataclass(frozen=True, kw_only=True)

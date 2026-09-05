@@ -7,6 +7,8 @@ from typing import Protocol
 
 from kernel_domain.result import Result
 
+from application.search_snapshot import ProductSearchSnapshot
+from contracts.product import ProductView
 from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import Cursor, ProductPage
@@ -156,6 +158,16 @@ class ProductQueryPort(Protocol):
     ) -> ProductPage: ...
 
 
+class ProductSearchPort(Protocol):
+    """Read-side port for the public Product search index."""
+
+    async def search(self, query: str) -> list[ProductView]: ...
+
+
+class ProductSearchIndexer(Protocol):
+    async def index(self, snapshot: ProductSearchSnapshot) -> None: ...
+
+
 __all__ = [
     "Actor",
     "IdentityGateway",
@@ -171,4 +183,6 @@ __all__ = [
     "ProductAuditEntry",
     "ProductAuditReader",
     "ProductQueryPort",
+    "ProductSearchPort",
+    "ProductSearchIndexer",
 ]

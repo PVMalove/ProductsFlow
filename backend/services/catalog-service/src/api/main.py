@@ -12,6 +12,7 @@ from api.endpoints.products import router as products_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
+from infrastructure.search.opensearch import OpenSearchProductSearch
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
 # экземпляр verifier'а при регистрации (app.add_middleware), до того как
@@ -26,10 +27,15 @@ _identity_client = IdentityClient(_identity_http_client)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.sessionmaker = build_sessionmaker(settings.catalog_database_url)
     app.state.identity_gateway = _identity_client
+    app.state.product_search = OpenSearchProductSearch(
+        base_url=settings.catalog_opensearch_url,
+        index_name=settings.catalog_search_index_name,
+    )
     await _identity_client.preload()
     try:
         yield
     finally:
+        await app.state.product_search.close()
         await _identity_http_client.aclose()
 
 
