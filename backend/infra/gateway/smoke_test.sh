@@ -24,6 +24,10 @@ cd "$BACKEND_DIR"
 COMPOSE_DEV=(docker compose -f docker-compose.yml -f docker-compose.dev.yml)
 COMPOSE_PROD=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
 GATEWAY_URL="http://localhost:8080"
+# Exact literal from nginx.conf's catch-all location — fragile to incidental
+# whitespace/ordering changes there, but there's no jq dependency here, and
+# an exact match is the strongest signal that a response came from nginx's
+# own 404 rather than a service-level one.
 GATEWAY_404_BODY='{"error": {"code": "NOT_FOUND", "message": "Endpoint not found"}}'
 RATE_LIMIT_MARKER='"code": "TOO_MANY_REQUESTS"'
 
@@ -119,6 +123,17 @@ sleep 1
 check_reaches_upstream "products -> catalog-service" GET /api/v1/products 200
 sleep 1
 
+# #284 AC: an unmapped path returns the gateway's own JSON 404, not a raw
+# nginx error page. The catch-all location has no limit_req, so this needs
+# no refill wait.
+unmapped_status="$(curl -s -o "$TMP_DIR/body" -w '%{http_code}' "$GATEWAY_URL/api/v1/nonsense")"
+unmapped_body="$(cat "$TMP_DIR/body")"
+if [ "$unmapped_status" = "404" ] && [ "$unmapped_body" = "$GATEWAY_404_BODY" ]; then
+  ok "unmapped path returns the gateway's own JSON 404"
+else
+  bad "unmapped path: expected the gateway's JSON 404, got HTTP $unmapped_status ($unmapped_body)"
+fi
+
 # ---------------------------------------------------------------------------
 section "Correlation id (X-Request-ID)"
 # ---------------------------------------------------------------------------
@@ -210,11 +225,74 @@ assert_rate_limited "auth_limit (10 r/m)" POST /api/v1/auth/login 8 \
   -H "Content-Type: application/json" -d '{}'
 sleep 1
 
+# #285 AC: GET on /tickets/ and /users/ is still subject to write_limit at a
+# sane rate, and the zone is genuinely shared between them (not accidentally
+# given a conditional key the way products_read/write_limit needed — that
+# would let each path's GET through independently). Fire one concurrent
+# burst split across BOTH paths: a wall-clock gap between two separate curl
+# calls is too racy against write_limit's fast 0.5s refill to prove sharing
+# reliably, but a single atomic burst isn't.
+mixed_paths=(/api/v1/tickets /api/v1/users/me /api/v1/tickets /api/v1/users/me
+  /api/v1/tickets /api/v1/users/me /api/v1/tickets /api/v1/users/me)
+i=0
+for p in "${mixed_paths[@]}"; do
+  i=$((i + 1))
+  (
+    code="$(curl -s -o /dev/null -w '%{http_code}' "$GATEWAY_URL$p")"
+    printf '%s' "$code" >"$TMP_DIR/wl_$i"
+  ) &
+done
+wait
+wl_through=0
+wl_limited=0
+for i in $(seq 1 "${#mixed_paths[@]}"); do
+  code="$(cat "$TMP_DIR/wl_$i")"
+  if [ "$code" = "429" ]; then
+    wl_limited=$((wl_limited + 1))
+  else
+    wl_through=$((wl_through + 1))
+  fi
+done
+if [ "$wl_limited" -ge 1 ] && [ "$wl_through" -le 2 ]; then
+  ok "write_limit is shared across /tickets and /users/: $wl_through/${#mixed_paths[@]} got through, rest 429"
+else
+  bad "write_limit: expected a shared bucket (~1 through, rest 429) across /tickets+/users/, got $wl_through through / $wl_limited limited"
+fi
+sleep 1
+
 assert_rate_limited "products_read_limit (20 r/s)" GET /api/v1/products 15
 sleep 1
 
 assert_rate_limited "products_write_limit (2 r/s)" POST /api/v1/products 8 \
   -H "Content-Type: application/json" -d '{}'
+sleep 1
+
+# #285 AC: a burst of mutating requests must not bleed into the read zone on
+# the same location. products_read_limit is itself zero-burst, so firing
+# *several* concurrent reads alongside the write burst would mostly 429 on
+# reader-vs-reader contention alone — that's a confound, not evidence of a
+# shared bucket. Fire exactly one read alongside the write burst instead, in
+# the same atomic dispatch (no sequential wall-clock gap to race against
+# either zone's refill): with a lone reader, a 200 is only possible if the
+# read zone's own bucket — sitting untouched and full since the last check —
+# wasn't also drained by the concurrent write burst.
+for i in $(seq 1 8); do
+  (
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d '{}' "$GATEWAY_URL/api/v1/products")"
+    printf '%s' "$code" >"$TMP_DIR/rw_w_$i"
+  ) &
+done
+(
+  code="$(curl -s -o /dev/null -w '%{http_code}' "$GATEWAY_URL/api/v1/products")"
+  printf '%s' "$code" >"$TMP_DIR/rw_r"
+) &
+wait
+read_status="$(cat "$TMP_DIR/rw_r")"
+if [ "$read_status" = "200" ]; then
+  ok "products read/write zones are independent: a GET succeeded during a simultaneous write burst"
+else
+  bad "products read/write zones: a GET got $read_status during a simultaneous write burst — may be double-counting"
+fi
 sleep 1
 
 # ---------------------------------------------------------------------------
