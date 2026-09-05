@@ -20,11 +20,9 @@
 
 ## Точки входа
 
-**Production/dev — без единой точки входа.** Клиент (включая BFF-фронтенд) обращается к каждому из трёх сервисов напрямую по его собственному host-порту (`docker-compose.dev.yml`: 9010–9012; `docker-compose.prod.yml`: 9013–9015). Общего API Gateway или Nginx перед сервисами в production/dev-профилях нет — `backend/docker-compose.yml` (база, на которую накладываются `dev`/`prod`-override) не содержит `nginx`-сервиса.
+**Dev и prod — единая точка входа через Nginx Gateway.** Клиент (включая BFF-фронтенд) обращается к сервисам через один Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway` в `backend/docker-compose.yml`), который маршрутизирует по текущему `/api/v1/*` контракту на соответствующий сервис. И в dev-профиле (`docker-compose.dev.yml`: `8080:80`), и в prod-профиле (`docker-compose.prod.yml`: `80:80`) `gateway` — единственный сервис, публикующий порт наружу; `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md).
 
-**Nginx-Gateway существует, но только как E2E-тестовая инфраструктура** (`docker-compose.e2e.yml`, `backend/tests/e2e/nginx.conf`) — session-scoped, поднимается и уничтожается pytest-фикстурой на время прогона E2E-сценариев, не является частью боевой топологии. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md), стратегия его использования в тестах — [ADR 0013](0013-testing-strategy.md).
-
-Если продуктовый API Gateway когда-нибудь появится, это отдельное архитектурное решение, а не расширение E2E-инфраструктуры задним числом.
+**Nginx-Gateway для E2E — отдельная, не связанная с dev/prod инфраструктура** (`docker-compose.e2e.yml`, `backend/tests/e2e/nginx.conf`) — session-scoped, поднимается и уничтожается pytest-фикстурой на время прогона E2E-сценариев, использует собственный конфиг и динамический порт, не является частью боевой топологии. Стратегия его использования в тестах — [ADR 0013](0013-testing-strategy.md).
 
 ## Безопасный старт
 

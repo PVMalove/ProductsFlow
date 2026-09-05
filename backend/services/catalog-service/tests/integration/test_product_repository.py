@@ -89,8 +89,18 @@ async def test_create_persists_product_and_writes_outbox_row_in_same_transaction
 
     outbox_rows = await _outbox_rows_for(db_session, product.id.value)
     assert len(outbox_rows) == 1
-    assert outbox_rows[0].event_type == "product.created.v1"
+    assert outbox_rows[0].event_type == "product.created.v2"
     assert outbox_rows[0].payload["user_id"] == str(owner_id)
+    assert outbox_rows[0].payload == {
+        "product_id": str(product.id.value),
+        "user_id": str(owner_id),
+        "name": "Название товара",
+        "description": "Описание",
+        "category": "Категория",
+        "price": 9.99,
+        "is_active": True,
+        "search_revision": 1,
+    }
 
     audit_rows = await _audit_rows_for(db_session, product.id.value)
     assert len(audit_rows) == 1
@@ -144,9 +154,11 @@ async def test_update_applies_only_provided_fields_and_writes_outbox_row(
 
     outbox_rows = await _outbox_rows_for(db_session, created.id.value)
     assert [row.event_type for row in outbox_rows] == [
-        "product.created.v1",
-        "product.updated.v1",
+        "product.created.v2",
+        "product.updated.v2",
     ]
+    assert [row.payload["search_revision"] for row in outbox_rows] == [1, 2]
+    assert outbox_rows[-1].payload["name"] == "Новое имя"
 
 
 async def test_update_unknown_product_returns_none(db_session: AsyncSession) -> None:
@@ -183,10 +195,11 @@ async def test_activate_deactivate_toggle_persisted_state(
 
     outbox_rows = await _outbox_rows_for(db_session, created.id.value)
     assert [row.event_type for row in outbox_rows] == [
-        "product.created.v1",
-        "product.deactivated.v1",
-        "product.activated.v1",
+        "product.created.v2",
+        "product.deactivated.v2",
+        "product.activated.v2",
     ]
+    assert [row.payload["search_revision"] for row in outbox_rows] == [1, 2, 3]
 
 
 async def test_delete_removes_row_and_writes_outbox_row(
@@ -212,7 +225,7 @@ async def test_delete_removes_row_and_writes_outbox_row(
 
     outbox_rows = await _outbox_rows_for(db_session, created.id.value)
     assert [row.event_type for row in outbox_rows] == [
-        "product.created.v1",
+        "product.created.v2",
         "product.deleted.v1",
     ]
 

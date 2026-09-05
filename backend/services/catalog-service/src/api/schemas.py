@@ -30,6 +30,7 @@ from application.queries import (
     GetProductImageQuery,
     GetProductQuery,
     ListProductsQuery,
+    SearchProductsQuery,
 )
 
 _ALLOWED_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
@@ -125,6 +126,15 @@ class ProductListRequest(BaseModel):
         return ListProductsQuery(
             limit=self.limit, after=after_cursor, before=before_cursor
         )
+
+
+class ProductSearchRequest(BaseModel):
+    """Public search request; validation refinements arrive with issue #290."""
+
+    q: str = Query()
+
+    def to_query(self) -> SearchProductsQuery:
+        return SearchProductsQuery(q=self.q)
 
 
 class ProductAuditRequest(BaseModel):

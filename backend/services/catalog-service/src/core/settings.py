@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     catalog_database_url: str = ""
     catalog_amqp_url: str = "amqp://guest:guest@localhost:5672/"
+    catalog_opensearch_url: str = "http://localhost:9200"
+    catalog_search_index_name: str = "catalog-products"
+    catalog_outbox_poll_interval_seconds: float = 5.0
     # Базовый URL identity-service для `IdentityClient` (JWKS-верификация,
     # `GET /api/v1/users/me`, ADR 0005/0011) — имя сервиса compose-сети
     # (`backend/docker-compose.yml`), не публичный хост.

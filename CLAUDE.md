@@ -14,15 +14,15 @@ Five packages, each a flat directory with its own `pyproject.toml` declaring its
 - Test one package: `make test pkg=<member>` (`uv run pytest` inside the package directory), scoped to the same package directory.
 - Generate a local RS256 dev key pair for identity: `make keys` — writes `backend/secrets/identity_jwt_private_key.pem` (git-ignored); point `IDENTITY_JWT_PRIVATE_KEY_PATH` in `.env` at it.
 - Build service images: `make build service=<compose-service>` (`identity-api`/`catalog-api`/`support-api`), or `docker compose build` directly.
-- Dev stack: `make up_dev service=<compose-service>` — base `docker-compose.yml` + `docker-compose.dev.yml` override (host ports 9010–9012, `APP_ENV=dev`).
-- Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (host ports 9013–9015, `APP_ENV=prod`, `restart: unless-stopped`).
+- Dev stack: `make up_dev service=<compose-service>` — base `docker-compose.yml` + `docker-compose.dev.yml` override (`gateway` is the sole published port, `8080:80`, `APP_ENV=dev`).
+- Prod stack: `make up_prod service=<compose-service>` — base + `docker-compose.prod.yml` override (`gateway` is the sole published port, `80:80`, `APP_ENV=prod`, `restart: unless-stopped`).
 - Each service container gets only its own `*_DATABASE_URL` via `environment:` (not a blanket `env_file`); see `backend/.env.example` for the full variable list (`APP_ENV`, `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_PRIVATE_KEY_PATH`, `IDENTITY_ACCESS_TOKEN_TTL_HOURS`, `CATALOG_DATABASE_URL`, `CATALOG_IDENTITY_BASE_URL`, `SUPPORT_DATABASE_URL`).
 - Migrations/seeding run through one-off `*-bootstrap` Compose services (`api/bootstrap.py` per service), never in FastAPI's `lifespan`; `make setup` runs migrations for all three, `make demo` adds seeding.
 - CI (`.github/workflows/ci.yml`): `backend-lint` runs `make check pkg=<member>` as a matrix job per package; `backend-test` runs `make test pkg=<member>` as a matrix job over the packages; `backend-build` runs `docker compose build`.
 
 ## Architecture
 
-`backend/` is where all work happens — a set of isolated microservices (`identity-service`, `catalog-service`, `support-service`) and shared libraries (`kernel-domain`, `kernel-platform`, `observability`, `test-support`). No production API Gateway exists; each service is reached on its own port. Full decision record: `docs/adr/` (start at `docs/adr/README.md`); diagrams and prose: `docs/architecture/backend_architecture.md`.
+`backend/` is where all work happens — a set of isolated microservices (`identity-service`, `catalog-service`, `support-service`) and shared libraries (`kernel-domain`, `kernel-platform`, `observability`, `test-support`). A single Nginx gateway (`backend/infra/gateway/nginx.conf`) is the sole publicly exposed entry point in both dev (`8080:80`) and prod (`80:80`); `identity-api`/`catalog-api`/`support-api` no longer publish host ports in either profile. Full decision record: `docs/adr/` (start at `docs/adr/README.md`); diagrams and prose: `docs/architecture/backend_architecture.md`.
 
 - Services communicate asynchronously via the transactional outbox pattern (`kernel-platform`'s `drain_events_to_outbox()` + `identity-worker`/`catalog-worker`/`support-worker`). `identity-service` is the only event producer.
 - Synchronous interactions are the exception, not symmetric across services: `catalog-service` verifies JWTs via `IdentityClient`'s JWKS cache and makes a synchronous call to identity on a read-model cache miss or admin action; `support-service` verifies JWTs with a statically configured public key and never calls identity synchronously (deny-by-default instead). See `docs/adr/0005-security-auth-actor-contract.md`.

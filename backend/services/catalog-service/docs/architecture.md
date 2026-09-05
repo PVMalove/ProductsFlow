@@ -21,7 +21,7 @@ query-порту — query-порты зарезервированы за query-
 собираются только в `api/dependencies.py`, а `api` маппит application-ошибки
 на неизменный HTTP-статус и контракт ответа.
 
-## Второй процесс: воркер (ADR 0011)
+## Фоновые процессы: проекция владельцев, outbox и поиск (ADR 0011)
 
 Тот же `api`-слой владеет `api/worker.py` — вторым процессом образа catalog
 (наравне с identity-worker, ADR 0010). Он объявляет топологию
@@ -32,6 +32,16 @@ inbox/version-guard'ы `owner_read_model` (ADR 0011): не read-then-write —
 конкурентные писатели (событийный консьюмер и синхронный добор при холодном
 промахе) разрешаются атомарным upsert с проверкой версии по
 `last_applied_outbox_id`.
+
+`api/outbox_worker.py` публикует строки Catalog transactional outbox в topic
+exchange RabbitMQ. Индексируемые мутации `Product` несут полный
+`product.*.v2` snapshot и монотонный `search_revision`, сохранённые в той же
+транзакции, что и модель Товара. `api/search_worker.py` потребляет эти
+снимки отдельной очередью и пишет документ в OpenSearch с external versioning
+по revision. Публичный query handler зависит только от порта поисковой
+read-model; его OpenSearch-адаптер фильтрует деактивированные Товары. Состояние
+Владельца добавляется отдельной задачей, поэтому этот фундамент не делает
+поисковую выдачу видимой без дальнейшей owner-проекции.
 
 ## Изображения товара (ADR 0002, ADR 0003)
 

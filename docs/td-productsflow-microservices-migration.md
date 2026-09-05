@@ -286,7 +286,14 @@ ProductsFlow/
 **DoD:** `docker compose up --scale catalog-api=3` — 3 реплики без конфликта миграций/сида; nginx распределяет; readiness-гейт работает.
 
 ### Фаза 7b. HTTP API-шлюз на Nginx: rate limit, quota, версионирование
-**As-Is:** после распила каждый сервис публикует свой порт напрямую; единой точки входа нет. Маршрутизация версий сейчас живёт внутри монолита (`/api/v1`, `/api/v2` — ADR 0007), CORS настроен в приложении (`CORSMiddleware` из `settings.cors_allow_origins`). Rate limiting, квот и защиты от всплесков трафика нет ни на одном уровне — любой клиент может залить публичные list/search-эндпоинты (перегрузка Postgres, отсутствие backpressure — «Design for failure» из статьи не покрыт на входе).
+**Статус: частично реализовано** (issue #282, срезы #284/#285/#286/#289) — единый Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway`) существует и является единственной публикуемой точкой входа и в **dev**- (`8080:80`), и в **prod**-профиле (`80:80`) (`/api/v1/*` маршрутизация на реальные upstream-пути, JSON 404 на нераспознанный путь, `/healthz` для healthcheck), с rate limiting и anti-spoofing заголовков/`X-Request-ID` в обоих профилях. Подробности — [ADR 0004](adr/0004-api-gateway-and-routing.md), [ADR 0001](adr/0001-platform-topology-and-bounded-contexts.md). Остальное ниже остаётся нереализованным и годится как кандидаты на отдельные issue:
+- Quota (Redis/Lua/OpenResty, лимиты в сутки/месяц на пользователя или ключ).
+- CORS на шлюзе (сервисы пока сохраняют собственный `CORSMiddleware`).
+- Версионирование через `regex + map` под будущий `/api/vN` (пока нет ни одного `/api/v2`, добавлять негде).
+- Метрики nginx (`stub_status`/`nginx-prometheus-exporter`) и интеграция с Prometheus.
+- JSON-формат логов nginx для Loki/Promtail.
+
+**As-Is (было до #284, сохраняется только для нереализованных пунктов выше):** маршрутизация версий сейчас живёт внутри монолита (`/api/v1`, `/api/v2` — ADR 0007), CORS настроен в приложении (`CORSMiddleware` из `settings.cors_allow_origins`) — шлюз это пока не берёт на себя. Квоты (per-user/API-key лимиты в сутки/месяц) на уровне шлюза нет — см. «Статус» выше про то, что уже реализовано (rate limiting, anti-spoofing заголовков).
 **To-Be:** единый Nginx-шлюз перед всеми сервисами — терминирует TLS, маршрутизирует по версии и домену, ограничивает частоту и объём запросов (rate limit + quota), проставляет correlation-id и передаёт identity вниз, отдаёт стандартные 429/503 при перегрузке.
 
 **Шаги:**

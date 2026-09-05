@@ -7,7 +7,7 @@ SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
 .PHONY: check test format lint architecture-check build up_dev up_prod keys \
-	setup demo \
+	setup demo gateway-smoke \
 	db-revision db-upgrade db-downgrade db-current db-history help _require-pkg
 
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
@@ -56,6 +56,9 @@ keys: ## Сгенерировать локальную RS256-пару для ide
 	cd services/identity-service && uv sync
 	cd services/identity-service && uv run python ../../scripts/generate_dev_keys.py
 
+gateway-smoke: ## Прогнать smoke-test шлюза (issue #292): docker compose config, nginx -t, роутинг/rate limiting/anti-spoofing на свежем dev-стеке
+	bash infra/gateway/smoke_test.sh
+
 db-revision: _require-pkg ## Создать ревизию через autogenerate (make db-revision pkg=<service> msg="add foo")
 	cd $(member_dir) && uv sync
 	cd $(member_dir) && uv run alembic -c src/infrastructure/db/alembic.ini revision --autogenerate -m "$(msg)"
@@ -96,15 +99,15 @@ down: ## Остановить все контейнеры (docker compose down)
 down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
 
-setup: ## Поднять *-db + MinIO + RabbitMQ, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
-	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq
+setup: ## Поднять *-db + MinIO + RabbitMQ + search infrastructure, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
+	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq opensearch redis
 	docker compose run --rm --no-deps identity-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps catalog-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps support-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 
-demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity-worker/catalog-worker, connectivity-check support)
+demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity/catalog/search workers, connectivity-check support)
+	docker compose up -d --wait --no-deps identity-worker catalog-worker catalog-outbox-worker catalog-search-worker support-worker
 	docker compose run --rm --no-deps identity-bootstrap python -m api.bootstrap
-	docker compose up -d --wait --no-deps identity-worker catalog-worker
 	docker compose run --rm --no-deps catalog-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps support-bootstrap python -m api.bootstrap
 

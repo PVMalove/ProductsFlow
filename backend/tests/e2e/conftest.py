@@ -137,6 +137,23 @@ async def login_seeded_admin(client: httpx.AsyncClient) -> str:
     return str(response.json()["access_token"])
 
 
+async def register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
+    """Создаёт E2E-пользователя через identity и возвращает его JWT."""
+    password = "E2e-only-password-123"
+    registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": password},
+    )
+    assert registration.status_code == 201, registration.text
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": email, "password": password},
+    )
+    assert login.status_code == 200, login.text
+    return str(login.json()["access_token"])
+
+
 @pytest_asyncio.fixture(scope="session")
 async def gateway_client() -> AsyncIterator[httpx.AsyncClient]:
     port = _free_tcp_port()
