@@ -20,7 +20,9 @@
 
 ## Точки входа
 
-**Production/dev — единая точка входа через Nginx Gateway.** Клиент (включая BFF-фронтенд) обращается к сервисам через один Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway` в `backend/docker-compose.yml`), который маршрутизирует по текущему `/api/v1/*` контракту на соответствующий сервис. `gateway` — единственный сервис, публикующий порт наружу (`docker-compose.dev.yml`: `8080:80`; `docker-compose.prod.yml`: `80:80`); `identity-api`/`catalog-api`/`support-api` порты на хост больше не пробрасывают. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md).
+**Dev — единая точка входа через Nginx Gateway.** Клиент (включая BFF-фронтенд) обращается к сервисам через один Nginx-шлюз (`backend/infra/gateway/nginx.conf`, Compose-сервис `gateway` в `backend/docker-compose.yml`), который маршрутизирует по текущему `/api/v1/*` контракту на соответствующий сервис. В dev-профиле `gateway` — единственный сервис, публикующий порт наружу (`docker-compose.dev.yml`: `8080:80`); `identity-api`/`catalog-api`/`support-api` порты на хост в dev больше не пробрасывают. Полное описание — [ADR 0004](0004-api-gateway-and-routing.md).
+
+**Prod пока не переключён.** `backend/docker-compose.prod.yml` не тронут этим решением: `identity-api`/`catalog-api`/`support-api` по-прежнему публикуют `9013`–`9015`, а `gateway` (унаследованный из базового `docker-compose.yml`) в prod-профиле не публикует порт вовсе. Перевод prod на единую точку входа через `gateway` — отдельное решение (issue #289).
 
 **Nginx-Gateway для E2E — отдельная, не связанная с dev/prod инфраструктура** (`docker-compose.e2e.yml`, `backend/tests/e2e/nginx.conf`) — session-scoped, поднимается и уничтожается pytest-фикстурой на время прогона E2E-сценариев, использует собственный конфиг и динамический порт, не является частью боевой топологии. Стратегия его использования в тестах — [ADR 0013](0013-testing-strategy.md).
 

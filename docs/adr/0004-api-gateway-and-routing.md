@@ -1,4 +1,4 @@
-# 0004. Роутинг: единая версия API и Nginx Gateway (dev/prod + отдельный E2E)
+# 0004. Роутинг: единая версия API и Nginx Gateway (dev + отдельный E2E)
 
 **Статус:** Accepted
 
@@ -6,11 +6,11 @@
 
 Ни один из трёх сервисов не разводит версии API. Все бизнесовые эндпоинты живут под одним `/api/v1`; второй версии нет ни у одного сервиса — все три создавались с нуля, без унаследованных клиентов и выпущенных контрактов, которые нужно было бы защищать разведением версий. Если у какого-либо сервиса появится реальная причина не ломать уже выпущенный `/api/v1` (внешние клиенты и т. п.), решение о второй версии принимается заново, с этим новым основанием, а не превентивно.
 
-## Nginx Gateway — единая точка входа для dev/prod, отдельно от E2E
+## Nginx Gateway — единая точка входа для dev, отдельно от E2E
 
 Топология с единой точкой входа для клиентского трафика зафиксирована в [ADR 0001](0001-platform-topology-and-bounded-contexts.md). Есть два самостоятельных, не связанных друг с другом Nginx Gateway:
 
-- **Dev/prod Gateway** (`backend/infra/gateway/nginx.conf`, сервис `gateway` в `backend/docker-compose.yml`) — единственный сервис, публикующий порт наружу в обоих профилях (`8080:80` в dev, `80:80` в prod); `identity-api`/`catalog-api`/`support-api` порты на хост больше не пробрасывают. Маршрутизирует по текущему `/api/v1/*` контракту на реальные upstream-пути каждого сервиса (в т.ч. `support-service`'s фактический `/api/v1/tickets`, а не `/api/v1/support/*`); отдаёт собственный JSON 404 на нераспознанный путь и `/healthz` для `healthcheck:` без обращения к upstream'ам. Rate limiting, anti-spoofing заголовков и `X-Request-ID` — отдельный, ещё не реализованный срез (issue #285/#286); это осознанный частичный срез Фазы 7b, см. `docs/td-productsflow-microservices-migration.md`.
+- **Dev Gateway** (`backend/infra/gateway/nginx.conf`, сервис `gateway` в `backend/docker-compose.yml`) — в dev-профиле единственный сервис, публикующий порт наружу (`docker-compose.dev.yml`: `8080:80`); `identity-api`/`catalog-api`/`support-api` порты на хост в dev больше не пробрасывают. Маршрутизирует по текущему `/api/v1/*` контракту на реальные upstream-пути каждого сервиса (в т.ч. `support-service`'s фактический `/api/v1/tickets`, а не `/api/v1/support/*`); отдаёт собственный JSON 404 на нераспознанный путь и `/healthz` для `healthcheck:` без обращения к upstream'ам. Rate limiting, anti-spoofing заголовков и `X-Request-ID` — отдельный, ещё не реализованный срез (issue #285/#286); перевод prod-профиля на этот же gateway (`docker-compose.prod.yml` пока не тронут — `identity-api`/`catalog-api`/`support-api` там всё ещё публикуют `9013`–`9015`) — issue #289. Это осознанный частичный срез Фазы 7b, см. `docs/td-productsflow-microservices-migration.md`.
 - **E2E Gateway** (`backend/docker-compose.e2e.yml` + `backend/tests/e2e/nginx.conf`) — остаётся отдельной тестовой инфраструктурой:
   - Session-scoped pytest-фикстура (детали прогона — [ADR 0013](0013-testing-strategy.md)).
   - Strict allow-list публичных путей; проксирует авторизационные и forwarded-заголовки к upstream-сервисам без изменений.
