@@ -99,14 +99,14 @@ down: ## Остановить все контейнеры (docker compose down)
 down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
 
-setup: ## Поднять *-db + MinIO + RabbitMQ, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
-	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq
+setup: ## Поднять *-db + MinIO + RabbitMQ + search infrastructure, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
+	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq opensearch redis
 	docker compose run --rm --no-deps identity-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps catalog-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps support-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 
-demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity-worker/catalog-worker, connectivity-check support)
-	docker compose up -d --wait --no-deps identity-worker catalog-worker support-worker
+demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity/catalog/search workers, connectivity-check support)
+	docker compose up -d --wait --no-deps identity-worker catalog-worker catalog-outbox-worker catalog-search-worker support-worker
 	docker compose run --rm --no-deps identity-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps catalog-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps support-bootstrap python -m api.bootstrap

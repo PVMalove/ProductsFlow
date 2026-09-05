@@ -43,12 +43,15 @@ class OpenSearchProductSearch:
                 }
             },
         )
+        if response.status_code == 404:
+            return []
         response.raise_for_status()
         payload = response.json()
         hits = payload["hits"]["hits"]
         return [self._to_view(hit["_source"]) for hit in hits]
 
     async def index(self, snapshot: ProductSearchSnapshot) -> None:
+        await self._ensure_index()
         response = await self._client.put(
             f"/{self._index_name}/_doc/{snapshot.product_id}",
             params={
@@ -66,6 +69,14 @@ class OpenSearchProductSearch:
             },
         )
         response.raise_for_status()
+
+    async def _ensure_index(self) -> None:
+        response = await self._client.put(
+            f"/{self._index_name}",
+            json={"settings": {"number_of_shards": 1, "number_of_replicas": 0}},
+        )
+        if response.status_code not in {200, 400}:
+            response.raise_for_status()
 
     @staticmethod
     def _to_view(source: dict[str, object]) -> ProductView:

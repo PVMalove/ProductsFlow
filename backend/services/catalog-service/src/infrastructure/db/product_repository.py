@@ -122,7 +122,7 @@ class ProductRepository:
         price: float | None = None,
         category: str | None = None,
     ) -> Result[Product] | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -150,7 +150,7 @@ class ProductRepository:
     async def _toggle_active(
         self, product_id: ProductId, *, activate: bool
     ) -> Result[Product] | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -165,7 +165,7 @@ class ProductRepository:
         return Result[Product].ok(product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -303,8 +303,14 @@ class ProductRepository:
             ),
         )
 
-    async def _load(self, product_id: ProductId) -> tuple[ProductModel, Product] | None:
-        row = await self.session.get(ProductModel, product_id.value)
+    async def _load_for_update(
+        self, product_id: ProductId
+    ) -> tuple[ProductModel, Product] | None:
+        row = await self.session.scalar(
+            select(ProductModel)
+            .where(ProductModel.id == product_id.value)
+            .with_for_update()
+        )
         if row is None:
             return None
         return row, _to_domain(row)
