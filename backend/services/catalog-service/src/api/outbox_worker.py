@@ -7,7 +7,7 @@ from kernel_platform.outbox.publisher import OutboxPublisher
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from api.search_worker import declare_product_search_queue
+from api.search_worker import declare_search_events_queue
 from core.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ async def main() -> None:
             # The publisher owns the transport topology for Product snapshots so
             # a cold start cannot return a snapshot before the consumer process
             # gets its chance to declare the durable queue.
-            await declare_product_search_queue(channel)
+            await declare_search_events_queue(channel)
             publisher = OutboxPublisher(session_factory, exchange)
             listener_dsn = to_asyncpg_dsn(settings.catalog_database_url)
             async with OutboxListener(listener_dsn) as listener:

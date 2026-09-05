@@ -30,7 +30,10 @@ class OpenSearchProductSearch:
             json={
                 "query": {
                     "bool": {
-                        "filter": [{"term": {"is_active": True}}],
+                        "filter": [
+                            {"term": {"is_active": True}},
+                            {"term": {"owner_is_active": True}},
+                        ],
                         "must": [
                             {
                                 "multi_match": {
@@ -50,7 +53,9 @@ class OpenSearchProductSearch:
         hits = payload["hits"]["hits"]
         return [self._to_view(hit["_source"]) for hit in hits]
 
-    async def index(self, snapshot: ProductSearchSnapshot) -> None:
+    async def index(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None:
         await self._ensure_index()
         response = await self._client.put(
             f"/{self._index_name}/_doc/{snapshot.product_id}",
@@ -66,8 +71,29 @@ class OpenSearchProductSearch:
                 "category": snapshot.category,
                 "price": snapshot.price,
                 "is_active": snapshot.is_active,
+                "owner_is_active": owner_is_active,
             },
         )
+        response.raise_for_status()
+
+    async def set_owner_active(self, user_id: uuid.UUID, *, is_active: bool) -> None:
+        """Mass-updates every already-indexed Product of `user_id` in place,
+        so an owner lifecycle event doesn't wait for each Product's own event
+        to replay (issue #288 acceptance criterion 2)."""
+        response = await self._client.post(
+            f"/{self._index_name}/_update_by_query",
+            params={"conflicts": "proceed"},
+            json={
+                "query": {"term": {"user_id": str(user_id)}},
+                "script": {
+                    "source": "ctx._source.owner_is_active = params.is_active",
+                    "lang": "painless",
+                    "params": {"is_active": is_active},
+                },
+            },
+        )
+        if response.status_code == 404:
+            return
         response.raise_for_status()
 
     async def _ensure_index(self) -> None:
