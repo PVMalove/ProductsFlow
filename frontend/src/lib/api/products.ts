@@ -19,7 +19,7 @@ export async function getProducts(
   sort?: string | null
 ): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
-  const url = new URL(`${baseUrl}/api/v1/products`);
+  const url = new URL(`${baseUrl}/api/v1/products/search`);
   if (cursor) {
     url.searchParams.append('after', cursor);
   }

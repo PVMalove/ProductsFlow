@@ -1,12 +1,15 @@
 import { rest } from 'msw'
 
 export const handlers = [
-  rest.get('/api/v1/products', (req, res, ctx) => {
+  rest.get('/api/v1/products/search', (req, res, ctx) => {
     return res(
       ctx.status(200),
-      ctx.json([
-        { id: '1', name: 'Mocked Product' }
-      ])
+      ctx.json({
+        items: [
+          { id: '1', name: 'Mocked Product' }
+        ],
+        page_info: { has_more: false }
+      })
     )
   }),
 

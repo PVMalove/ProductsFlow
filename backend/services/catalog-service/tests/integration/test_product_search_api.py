@@ -119,7 +119,7 @@ async def test_public_search_returns_bff_envelope_with_active_text_matches(
     ]
 
 
-@pytest.mark.parametrize("params", [{}, {"q": "x"}, {"q": "x" * 101}])
+@pytest.mark.parametrize("params", [{"q": "x"}, {"q": "x" * 101}])
 async def test_public_search_rejects_missing_or_out_of_bounds_query_with_bff_error(
     catalog_client, params: dict[str, str]
 ) -> None:

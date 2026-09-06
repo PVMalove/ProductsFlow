@@ -174,7 +174,7 @@ class ProductSearchPort(Protocol):
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,

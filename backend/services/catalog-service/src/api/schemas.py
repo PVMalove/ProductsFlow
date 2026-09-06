@@ -158,7 +158,7 @@ class ProductSearchRequest(BaseModel):
     optional category/price filters, sort, and `search_after` cursor
     pagination (issue #291)."""
 
-    q: str = Query(min_length=2, max_length=100)
+    q: str | None = Query(default=None, min_length=2, max_length=100)
     category: str | None = Query(default=None)
     min_price: float | None = Query(default=None, ge=0)
     max_price: float | None = Query(default=None, ge=0)

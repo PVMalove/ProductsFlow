@@ -46,7 +46,7 @@ class OpenSearchProductSearch:
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,
@@ -69,27 +69,26 @@ class OpenSearchProductSearch:
                 price_range["lte"] = max_price
             filters.append({"range": {"price": price_range}})
 
+        bool_query: dict[str, object] = {"filter": filters}
+        if query:
+            bool_query["must"] = [
+                {
+                    "multi_match": {
+                        "query": query,
+                        "fields": [
+                            "name.ru^3",
+                            "name.en^3",
+                            "description.ru",
+                            "description.en",
+                        ],
+                        "fuzziness": "AUTO",
+                    }
+                }
+            ]
+
         body: dict[str, object] = {
             "size": limit + 1,
-            "query": {
-                "bool": {
-                    "filter": filters,
-                    "must": [
-                        {
-                            "multi_match": {
-                                "query": query,
-                                "fields": [
-                                    "name.ru^3",
-                                    "name.en^3",
-                                    "description.ru",
-                                    "description.en",
-                                ],
-                                "fuzziness": "AUTO",
-                            }
-                        }
-                    ],
-                }
-            },
+            "query": {"bool": bool_query},
             "sort": _SORT_CLAUSES[sort],
         }
         if cursor is not None:

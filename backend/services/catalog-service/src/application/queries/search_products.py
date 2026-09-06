@@ -12,7 +12,7 @@ from contracts.product import ProductView
 
 @dataclass(frozen=True)
 class SearchProductsQuery:
-    q: str
+    q: str | None = None
     category: str | None = None
     min_price: float | None = None
     max_price: float | None = None
