@@ -13,6 +13,9 @@ endif
 # ---- Переменные по умолчанию (можно переопределить: make check pkg=identity-service) ----
 pkg ?=
 service ?=
+no_cache ?= 0
+
+build_cache_flag = $(if $(filter 1 true yes,$(no_cache)),--no-cache,)
 
 member_dir = $(firstword $(wildcard libs/$(pkg)) $(wildcard services/$(pkg)))
 
@@ -49,8 +52,8 @@ coverage: _require-pkg ## Прогнать тесты пакета с coverage (
 	cd $(member_dir) && uv sync --all-packages
 	cd $(member_dir) && uv run pytest --cov=src --cov-report=term-missing .
 
-build: ## Пересобрать образы docker compose (make build service=identity-api)
-	docker compose build $(service)
+build: ## Пересобрать образы (make build service=identity-api [no_cache=1])
+	docker compose build $(build_cache_flag) $(service)
 
 keys: ## Сгенерировать локальную RS256-пару для identity (ADR 0011, dev-only, не в git)
 	cd services/identity-service && uv sync
@@ -93,20 +96,14 @@ down: ## Остановить все контейнеры (docker compose down)
 down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
 
-down: ## Остановить все контейнеры (docker compose down)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down
-
-down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
-
-setup: ## Поднять *-db + MinIO + RabbitMQ, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
-	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq
+setup: ## Поднять *-db + MinIO + RabbitMQ + search infrastructure, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
+	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq opensearch redis
 	docker compose run --rm --no-deps identity-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps catalog-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 	docker compose run --rm --no-deps support-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
 
-demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity-worker/catalog-worker, connectivity-check support)
-	docker compose up -d --wait --no-deps identity-worker catalog-worker support-worker
+demo: setup ## setup + сид каждого сервиса (супер-админ, 360 товаров через identity/catalog/search workers, connectivity-check support)
+	docker compose up -d --wait --no-deps identity-worker catalog-worker catalog-outbox-worker catalog-search-worker support-worker
 	docker compose run --rm --no-deps identity-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps catalog-bootstrap python -m api.bootstrap
 	docker compose run --rm --no-deps support-bootstrap python -m api.bootstrap
@@ -117,6 +114,7 @@ help: ## Показать список команд с описанием
 	@echo Переменные (переопределяются так: make [команда] [переменная]=[значение]):
 	@echo   pkg     - имя члена workspace для check/format/lint/test/db-* (текущее: $(pkg))
 	@echo   service - имя compose-сервиса для build/up_dev/up_prod (текущее: $(service))
+	@echo   no_cache - пересобирать без Docker-кэша: 1/true/yes (текущее: $(no_cache))
 
 # ---- Массовые операции по всем пакетам ----
 ALL_MEMBERS := $(notdir $(wildcard libs/* services/*))

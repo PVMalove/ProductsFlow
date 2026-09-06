@@ -65,6 +65,16 @@ class ProductListInvalidCursorError(ApplicationError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
+class ProductSearchInvalidCursorError(ApplicationError):
+    """Курсор поиска не удалось декодировать, либо он закодирован под
+    сортировку, отличную от текущего запроса — единая BFF-ошибка для обоих
+    случаев (issue #291)."""
+
+    code = "PRODUCT_SEARCH_INVALID_CURSOR"
+    message = "Некорректный курсор поиска"
+    status_code = HTTPStatus.BAD_REQUEST
+
+
 class ProductImageUnsupportedMediaTypeError(ApplicationError):
     """Тип содержимого загруженной картинки не входит в число допустимых форматов."""
 

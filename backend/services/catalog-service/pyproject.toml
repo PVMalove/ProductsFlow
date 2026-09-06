@@ -13,8 +13,10 @@ dependencies = [
     "kernel-domain",
     "kernel-platform",
     "observability",
+    "prometheus-client>=0.21.0",
     "pydantic-settings>=2.0.0",
     "python-multipart>=0.0.32",
+    "redis>=5.2.0",
     "sqlalchemy[asyncio]>=2.0",
     "uvicorn>=0.35.0",
 ]

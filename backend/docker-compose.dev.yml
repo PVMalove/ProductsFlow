@@ -25,6 +25,14 @@ services:
     ports:
       - "9014:8000"
 
+  opensearch:
+    ports:
+      - "9200:9200"
+
+  redis:
+    ports:
+      - "6379:6379"
+
   support-api:
     environment:
       APP_ENV: dev

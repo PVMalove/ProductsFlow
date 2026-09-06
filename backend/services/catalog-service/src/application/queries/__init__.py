@@ -13,6 +13,10 @@ from application.queries.list_products import (
     ListProductsQuery,
     ListProductsQueryHandler,
 )
+from application.queries.search_products import (
+    SearchProductsQuery,
+    SearchProductsQueryHandler,
+)
 
 __all__ = [
     "GetProductAuditQuery",
@@ -23,4 +27,6 @@ __all__ = [
     "GetProductQueryHandler",
     "ListProductsQuery",
     "ListProductsQueryHandler",
+    "SearchProductsQuery",
+    "SearchProductsQueryHandler",
 ]

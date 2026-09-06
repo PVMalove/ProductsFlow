@@ -38,6 +38,9 @@ class ProductModel(Base):
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    search_revision: Mapped[int] = mapped_column(
+        BigInteger, default=1, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
