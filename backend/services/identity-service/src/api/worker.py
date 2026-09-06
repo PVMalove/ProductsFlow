@@ -2,14 +2,30 @@ import asyncio
 import logging
 
 import aio_pika
+from aio_pika.abc import AbstractChannel
 from kernel_platform.outbox.listener import OutboxListener, to_asyncpg_dsn
 from kernel_platform.outbox.publisher import OutboxPublisher
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
+from kernel_platform.topology import declare_topology
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.settings import settings
 
 logger = logging.getLogger(__name__)
+
+_USER_EVENT_CONSUMERS = ("catalog-service", "support-service")
+
+
+async def _declare_user_event_consumer_topology(channel: AbstractChannel) -> None:
+    """Создаёт durable bindings всех проекций до публикации outbox.
+
+    Иначе seed-событие может получить publisher confirm от уже готовой
+    очереди одного consumer-а, пока очередь другого ещё не существует.
+    Такое событие нельзя доставить поздно стартовавшей проекции повторно:
+    оно уже отмечено published в outbox.
+    """
+    for service_name in _USER_EVENT_CONSUMERS:
+        await declare_topology(channel, service_name=service_name)
 
 
 async def main() -> None:
@@ -34,6 +50,7 @@ async def main() -> None:
         exchange = await channel.declare_exchange(
             EVENTS_EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True
         )
+        await _declare_user_event_consumer_topology(channel)
         publisher = OutboxPublisher(session_factory, exchange)
 
         listener_dsn = to_asyncpg_dsn(settings.identity_database_url)

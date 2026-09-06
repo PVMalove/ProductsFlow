@@ -11,10 +11,12 @@ from kernel_platform.topology import (
     declare_topology,
 )
 
-# amqp_connection/channel/events_exchange_exists (conftest.py) —
-# module/session-scoped, привязаны к session-scoped event loop; тесты и
-# фикстуры этого модуля должны идти на том же loop — см. identity-service's
-# tests/integration/test_outbox_publisher.py.
+# amqp_connection/channel (conftest.py) — module/session-scoped, привязаны к
+# session-scoped event loop; тесты и фикстуры этого модуля должны идти на
+# том же loop — см. identity-service's tests/integration/test_outbox_publisher.py.
+# `declare_topology` теперь объявляет `productsflow.events` сам (issue #317),
+# поэтому первый тест этого модуля неявно и проверяет создание с нуля, а
+# `test_declare_topology_is_idempotent` — что повторное объявление безопасно.
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 SERVICE_NAME = "kernel-topology-test"
