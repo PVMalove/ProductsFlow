@@ -8,17 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import axios from 'axios';
 import Link from 'next/link';
+
+import { useApiError } from '@/hooks/useApiError';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<RegisterRequest>();
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const { globalError, handleApiError, clearGlobalError } = useApiError<RegisterRequest>();
   const [success, setSuccess] = useState(false);
 
   const onSubmit = async (data: RegisterRequest) => {
-    setGlobalError(null);
+    clearGlobalError();
     setSuccess(false);
     try {
       await authApi.register(data);
@@ -27,22 +28,7 @@ export default function RegisterPage() {
         router.push('/login');
       }, 2000);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data?.error) {
-        const errorData = err.response.data.error;
-        if (errorData.details && Array.isArray(errorData.details)) {
-          errorData.details.forEach((detail: { field?: string, issue: string }) => {
-            if (detail.field) {
-              setError(detail.field as "email" | "password", { type: 'server', message: detail.issue });
-            } else {
-              setGlobalError(detail.issue);
-            }
-          });
-        } else {
-          setGlobalError(errorData.message || 'Registration failed');
-        }
-      } else {
-        setGlobalError('An unexpected error occurred');
-      }
+      handleApiError(err, setError, 'Registration failed');
     }
   };
 

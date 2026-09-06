@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { authApi, RegisterRequest } from '@/lib/api/auth';
@@ -9,17 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import axios from 'axios';
 import Link from 'next/link';
+
+import { useApiError } from '@/hooks/useApiError';
 
 export default function LoginPage() {
   const router = useRouter();
   const setActor = useAuthStore((state) => state.setActor);
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<RegisterRequest>();
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const { globalError, handleApiError, clearGlobalError } = useApiError<RegisterRequest>();
 
   const onSubmit = async (data: RegisterRequest) => {
-    setGlobalError(null);
+    clearGlobalError();
     try {
       await authApi.login(data);
       // Fetch user profile on success
@@ -27,22 +27,7 @@ export default function LoginPage() {
       setActor(user);
       router.push('/');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data?.error) {
-        const errorData = err.response.data.error;
-        if (errorData.details && Array.isArray(errorData.details)) {
-          errorData.details.forEach((detail: { field?: string, issue: string }) => {
-            if (detail.field) {
-              setError(detail.field as "email" | "password", { type: 'server', message: detail.issue });
-            } else {
-              setGlobalError(detail.issue);
-            }
-          });
-        } else {
-          setGlobalError(errorData.message || 'Login failed');
-        }
-      } else {
-        setGlobalError('An unexpected error occurred');
-      }
+      handleApiError(err, setError, 'Login failed');
     }
   };
 
