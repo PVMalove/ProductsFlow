@@ -1,7 +1,7 @@
 'use client';
 
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { getProducts, ProductView } from '@/lib/api/products';
+import { ProductView } from '@/lib/api/products';
+import { useCursorInfiniteQuery } from '@/hooks/useCursorInfiniteQuery';
 import { useInView } from 'react-intersection-observer';
 import { useEffect } from 'react';
 
@@ -12,12 +12,7 @@ export default function CatalogList() {
     hasNextPage,
     isFetchingNextPage,
     status,
-  } = useInfiniteQuery({
-    queryKey: ['products'],
-    queryFn: ({ pageParam }) => getProducts(pageParam),
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => lastPage.meta.next_cursor || null,
-  });
+  } = useCursorInfiniteQuery();
 
   const { ref, inView } = useInView();
 

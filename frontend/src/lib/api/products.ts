@@ -4,10 +4,8 @@ export interface ProductView {
   description: string;
   price: number;
   category: string;
+  user_id: string;
   is_active: boolean;
-  version: number;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface PageMeta {

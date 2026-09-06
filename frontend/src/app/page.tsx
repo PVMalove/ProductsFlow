@@ -1,15 +1,11 @@
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query';
-import { getProducts } from '@/lib/api/products';
 import CatalogList from '@/components/catalog/catalog-list';
+import { getCatalogQueryOptions } from '@/hooks/useCursorInfiniteQuery';
 
 export default async function Home() {
   const queryClient = new QueryClient();
 
-  await queryClient.prefetchInfiniteQuery({
-    queryKey: ['products'],
-    queryFn: () => getProducts(null),
-    initialPageParam: null as string | null,
-  });
+  await queryClient.prefetchInfiniteQuery(getCatalogQueryOptions());
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
