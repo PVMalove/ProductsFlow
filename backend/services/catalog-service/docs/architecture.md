@@ -36,12 +36,22 @@ inbox/version-guard'ы `owner_read_model` (ADR 0011): не read-then-write —
 `api/outbox_worker.py` публикует строки Catalog transactional outbox в topic
 exchange RabbitMQ. Индексируемые мутации `Product` несут полный
 `product.*.v2` snapshot и монотонный `search_revision`, сохранённые в той же
-транзакции, что и модель Товара. `api/search_worker.py` потребляет эти
-снимки отдельной очередью и пишет документ в OpenSearch с external versioning
-по revision. Публичный query handler зависит только от порта поисковой
-read-model; его OpenSearch-адаптер фильтрует деактивированные Товары. Состояние
-Владельца добавляется отдельной задачей, поэтому этот фундамент не делает
-поисковую выдачу видимой без дальнейшей owner-проекции.
+транзакции, что и модель Товара; удаление несёт только versioned tombstone
+`{product_id, user_id, search_revision}`. `api/search_worker.py` потребляет
+снимки и tombstone через quorum-очередь с ограниченной retry-лестницей и DLQ,
+поэтому poison-сообщение не блокирует последующие Товары. OpenSearch применяет
+external versioning: устаревшие snapshots и tombstone подтверждаются как уже
+превзойдённые и не могут изменить более свежий документ.
+
+`api/search_reindex.py` строит новое поколение индекса из PostgreSQL keyset
+snapshot'ов, дважды throttled-reconcile'ит их, а затем атомарно переключает
+публичный alias. Пока идёт bootstrap, worker зеркалирует Product, tombstone и
+Owner visibility updates в старое и новое поколения; это закрывает окно между
+снимком и alias switch. `--reconcile-only` подходит для ночной сверки, а
+`--product-id` — для точечного reindex после устранения причины DLQ; удалённый
+Товар вместо этого безопасно replay'ится его tombstone из DLQ. Публичный query
+handler зависит только от порта поисковой read-model; его OpenSearch-адаптер
+фильтрует деактивированные Товары.
 
 ## Кэш первой страницы и наблюдаемость поиска (issue #293)
 
@@ -62,9 +72,9 @@ read-model; его OpenSearch-адаптер фильтрует деактиви
 (RabbitMQ не даёт неразрушающе заглянуть в голову очереди); DLQ depth
 опрашивается через RabbitMQ Management API по имени `{queue}.dlq` — та же
 конвенция, что `kernel_platform.topology.declare_topology` использует для
-остальных consumer'ов платформы. Сама очередь `catalog.search-events.dlq`
-появится, когда issue #294 подключит к ней dead-lettering — до этого метрика
-корректно остаётся на нуле (404 от Management API).
+остальных consumer'ов платформы. `catalog.search-events.dlq` создаётся вместе
+с основной очередью; до старта worker метрика корректно остаётся на нуле (404
+от Management API).
 
 ## Изображения товара (ADR 0002, ADR 0003)
 

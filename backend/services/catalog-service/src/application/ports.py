@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 import enum
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -9,7 +10,7 @@ from kernel_domain.result import Result
 from kernel_platform.pagination import Page
 
 from application.search_cursor import ProductSortOption, SearchCursor
-from application.search_snapshot import ProductSearchSnapshot
+from application.search_snapshot import ProductSearchSnapshot, ProductSearchTombstone
 from contracts.product import ProductView
 from domain.entities.product import Product
 from domain.product_image import ProductImage
@@ -181,9 +182,39 @@ class ProductSearchIndexer(Protocol):
         self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
     ) -> None: ...
 
+    async def delete(self, tombstone: ProductSearchTombstone) -> None: ...
+
     async def set_owner_active(
         self, user_id: uuid.UUID, *, is_active: bool
     ) -> None: ...
+
+
+class ProductSearchReindexer(ProductSearchIndexer, Protocol):
+    """Index writer lifecycle for a zero-downtime rebuild."""
+
+    async def begin_reindex(self) -> None: ...
+
+    async def index_rebuild(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None: ...
+
+    async def complete_reindex(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class SearchSnapshotWithOwner:
+    snapshot: ProductSearchSnapshot
+    owner_is_active: bool
+
+
+class ProductSearchSnapshotSource(Protocol):
+    async def get(
+        self, product_id: uuid.UUID
+    ) -> SearchSnapshotWithOwner | None: ...
+
+    def stream_batches(
+        self, *, batch_size: int
+    ) -> AsyncIterator[list[SearchSnapshotWithOwner]]: ...
 
 
 @dataclass(frozen=True)
@@ -228,4 +259,7 @@ __all__ = [
     "ProductQueryPort",
     "ProductSearchPort",
     "ProductSearchIndexer",
+    "ProductSearchReindexer",
+    "ProductSearchSnapshotSource",
+    "SearchSnapshotWithOwner",
 ]
