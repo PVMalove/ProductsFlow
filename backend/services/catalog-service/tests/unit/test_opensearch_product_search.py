@@ -187,6 +187,67 @@ async def test_index_migrates_existing_index_and_reindexes_its_documents() -> No
 
 
 @pytest.mark.asyncio
+async def test_index_checks_an_existing_mapping_only_once_per_worker() -> None:
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        if request.url.path == "/catalog-products":
+            return httpx.Response(
+                400,
+                json={"error": {"type": "resource_already_exists_exception"}},
+            )
+        if request.url.path == "/catalog-products/_mapping":
+            return httpx.Response(
+                200,
+                json={
+                    "catalog-products": {
+                        "mappings": {
+                            "properties": (
+                                OpenSearchProductSearch._multilingual_properties()
+                            )
+                        }
+                    }
+                },
+            )
+        return httpx.Response(201, json={"result": "created"})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+    owner_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+    for product_id in (
+        uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        uuid.UUID("00000000-0000-0000-0000-000000000003"),
+    ):
+        await search.index(
+            ProductSearchSnapshot(
+                product_id=product_id,
+                user_id=owner_id,
+                name="Cordless drill",
+                description="18V brushless drill",
+                category="Tools",
+                price=99.0,
+                is_active=True,
+                search_revision=1,
+            ),
+            owner_is_active=True,
+        )
+
+    assert [(request.method, request.url.path) for request in request_log] == [
+        ("PUT", "/catalog-products"),
+        ("GET", "/catalog-products/_mapping"),
+        ("PUT", "/catalog-products/_doc/00000000-0000-0000-0000-000000000001"),
+        ("PUT", "/catalog-products/_doc/00000000-0000-0000-0000-000000000003"),
+    ]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_search_filters_by_active_product_and_active_owner() -> None:
     request_log: list[httpx.Request] = []
 
