@@ -38,7 +38,13 @@ class OpenSearchProductSearch:
                             {
                                 "multi_match": {
                                     "query": query,
-                                    "fields": ["name", "description"],
+                                    "fields": [
+                                        "name.ru^3",
+                                        "name.en^3",
+                                        "description.ru",
+                                        "description.en",
+                                    ],
+                                    "fuzziness": "AUTO",
                                 }
                             }
                         ],
@@ -99,7 +105,21 @@ class OpenSearchProductSearch:
     async def _ensure_index(self) -> None:
         response = await self._client.put(
             f"/{self._index_name}",
-            json={"settings": {"number_of_shards": 1, "number_of_replicas": 0}},
+            json={
+                "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+                "mappings": {
+                    "properties": {
+                        field: {
+                            "type": "text",
+                            "fields": {
+                                "ru": {"type": "text", "analyzer": "russian"},
+                                "en": {"type": "text", "analyzer": "english"},
+                            },
+                        }
+                        for field in ("name", "description")
+                    }
+                },
+            },
         )
         if response.status_code not in {200, 400}:
             response.raise_for_status()
