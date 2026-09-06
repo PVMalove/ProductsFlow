@@ -33,7 +33,9 @@ async def declare_topology(
 
     Side Effects:
         Создает эксчейнджи и очереди в брокере, если их там не было, вешает биндинги."""
-    events_exchange = await channel.get_exchange(EVENTS_EXCHANGE_NAME, ensure=True)
+    events_exchange = await channel.declare_exchange(
+        EVENTS_EXCHANGE_NAME, ExchangeType.TOPIC, durable=True
+    )
     dlx = await channel.declare_exchange(
         DLX_EXCHANGE_NAME, ExchangeType.DIRECT, durable=True
     )

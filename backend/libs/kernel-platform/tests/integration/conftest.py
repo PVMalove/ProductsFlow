@@ -8,8 +8,6 @@ import pytest_asyncio
 from aio_pika.abc import AbstractChannel, AbstractRobustConnection
 from testcontainers.community.rabbitmq import RabbitMqContainer
 
-from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
-
 # Заглушка вместо libs/test-support (issue #99) — этой библиотеки
 # ещё нет в дереве. Повторяет паттерн identity-service's
 # tests/integration/conftest.py (issue #103), только RabbitMQ-часть:
@@ -57,13 +55,3 @@ async def channel(
     finally:
         if not ch.is_closed:
             await ch.close()
-
-
-@pytest_asyncio.fixture(autouse=True, loop_scope="session")
-async def events_exchange_exists(channel: AbstractChannel) -> None:
-    """Симулирует объявление identity-service при своём старте :
-    `declare_topology` только passive-проверяет `productsflow.events` через
-    `get_exchange`, сам его не создаёт."""
-    await channel.declare_exchange(
-        EVENTS_EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True
-    )
