@@ -18,6 +18,7 @@ class ListProductsQuery:
     limit: int
     after: Cursor | None = None
     before: Cursor | None = None
+    category: str | None = None
 
 
 class ListProductsQueryHandler:
@@ -35,7 +36,10 @@ class ListProductsQueryHandler:
 
     async def execute(self, query: ListProductsQuery) -> Result[Page[ProductView]]:
         page = await self._repository.list(
-            limit=query.limit, after=query.after, before=query.before
+            limit=query.limit,
+            after=query.after,
+            before=query.before,
+            category=query.category,
         )
         items = [ProductView.from_domain(item) for item in page.items]
         return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

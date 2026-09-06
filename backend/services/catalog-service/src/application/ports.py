@@ -158,6 +158,7 @@ class ProductQueryPort(Protocol):
         limit: int,
         after: Cursor | None = None,
         before: Cursor | None = None,
+        category: str | None = None,
     ) -> ProductPage: ...
 
 

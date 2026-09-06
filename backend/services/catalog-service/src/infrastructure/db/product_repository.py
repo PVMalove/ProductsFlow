@@ -247,6 +247,7 @@ class ProductRepository:
         limit: int,
         after: Cursor | None = None,
         before: Cursor | None = None,
+        category: str | None = None,
     ) -> ProductPage:
         # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
         # — деактивированный Товар и Товар деактивированного (или ещё не
@@ -262,6 +263,8 @@ class ProductRepository:
                 ProductModel.is_active.is_(True), OwnerReadModelRow.is_active.is_(True)
             )
         )
+        if category is not None:
+            base_stmt = base_stmt.where(ProductModel.category == category)
         if before is not None:
             stmt = base_stmt.where(
                 tuple_(ProductModel.created_at, ProductModel.id)
