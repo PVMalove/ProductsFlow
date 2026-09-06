@@ -110,7 +110,7 @@ graph TD
 Разделяемый код — в `backend/libs/` (path-зависимости, без semver, HEAD-версии):
 - `kernel-domain` — без сторонних зависимостей: `Result`/`Error`, `Entity`, `DomainEvent`, `VisibilityPolicy`.
 - `kernel-platform` — BFF-конверт и обработка ошибок, `Actor`/RBAC, `IdentityClient`, transactional Outbox + `UnitOfWork`, keyset-пагинация.
-- `observability` — structured logging, `RequestContextMiddleware`. OTEL SDK пока не подключён — схема лога резервирует `trace_id`/`span_id` как `null`.
+- `observability` — structured logging, `RequestContextMiddleware`, OpenTelemetry SDK (трейсинг + Prometheus-метрики) во всех API/worker-процессах; `trace_id`/`span_id` в логе — реальные, а не зарезервированные `null` (см. раздел «Наблюдаемость» ниже).
 - `test-support` — dev-only testcontainers-фикстуры для интеграционных тестов.
 
 ## Устройство одного сервиса
@@ -182,7 +182,11 @@ Swagger UI каждого сервиса — по его собственном�
 
 ## Наблюдаемость (LGTM overlay, опционально)
 
-Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; более подробная схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+
+![Схема LGTM-оверлея: три независимых потока (метрики/логи/трейсы) от identity/catalog/support сходятся в Grafana](docs/architecture/diagrams/observability-lgtm-overlay.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/observability-lgtm-overlay.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ```bash
 cd backend
