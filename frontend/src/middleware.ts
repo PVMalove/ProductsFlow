@@ -6,7 +6,7 @@ import { jwtDecode } from 'jwt-decode';
 // Example: '/admin': ['admin']
 const ROLE_PROTECTED_ROUTES: Record<string, string[]> = {
   '/admin': ['admin'],
-  '/owner': ['owner'],
+  '/owner': ['user', 'admin'],
   '/support': ['user', 'admin'],
 };
 
@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
 
     try {
       const decoded = jwtDecode<{ role?: string }>(accessToken);
-      const userRole = decoded.role || 'user'; // default to user if not specified
+      const userRole = (decoded.role || 'user').toLowerCase(); // default to user if not specified
 
       if (!requiredRoles.includes(userRole)) {
         return new NextResponse(
