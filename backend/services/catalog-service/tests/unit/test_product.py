@@ -56,14 +56,19 @@ def test_create_raises_product_created_with_expected_fields() -> None:
     assert result.is_ok
     product = result.value
     assert product.is_active is True
+    assert product.search_revision == 1
 
     [event] = product.pull_events()
     assert isinstance(event, ProductCreated)
+    assert event.event_type == "product.created.v2"
     assert event.product_id.value == product.id.value
     assert event.user_id == owner_id
     assert event.name == "Название товара"
+    assert event.description == "Описание"
     assert event.category == "Категория"
     assert event.price == 10.0
+    assert event.is_active is True
+    assert event.search_revision == 1
 
 
 def test_create_rejects_too_short_name() -> None:
@@ -137,6 +142,11 @@ def test_update_changes_only_provided_fields() -> None:
     [event] = product.pull_events()
     assert isinstance(event, ProductUpdated)
     assert event.product_id == product.id
+    assert event.event_type == "product.updated.v2"
+    assert event.name == "Новое имя"
+    assert event.description == "Описание"
+    assert event.is_active is True
+    assert event.search_revision == 2
 
 
 def test_update_rejects_invalid_value_without_mutating_state() -> None:
@@ -192,6 +202,10 @@ def test_activate_deactivate_toggle_and_raise_events() -> None:
     assert isinstance(activated_event, ProductActivated)
     assert deactivated_event.product_id == product.id
     assert activated_event.product_id == product.id
+    assert deactivated_event.is_active is False
+    assert deactivated_event.search_revision == 2
+    assert activated_event.is_active is True
+    assert activated_event.search_revision == 3
 
 
 def test_activate_already_active_product_fails() -> None:
@@ -216,6 +230,7 @@ def test_deactivate_already_deactivated_product_fails() -> None:
 
 def test_mark_deleted_raises_product_deleted_event() -> None:
     product = _create()
+    expected_revision = product.search_revision + 1
 
     result = product.mark_deleted()
 
@@ -223,6 +238,14 @@ def test_mark_deleted_raises_product_deleted_event() -> None:
     [event] = product.pull_events()
     assert isinstance(event, ProductDeleted)
     assert event.product_id == product.id
+    assert event.user_id == product.user_id
+    assert event.search_revision == expected_revision
+    assert event.event_type == "product.deleted.v2"
+    assert event.to_payload() == {
+        "product_id": str(product.id.value),
+        "user_id": str(product.user_id),
+        "search_revision": expected_revision,
+    }
 
 
 def test_product_direct_construction_raises_runtime_error() -> None:

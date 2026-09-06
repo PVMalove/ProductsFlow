@@ -1,12 +1,17 @@
 # ruff: noqa: E501
 import enum
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from kernel_domain.result import Result
+from kernel_platform.pagination import Page
 
+from application.search_cursor import ProductSortOption, SearchCursor
+from application.search_snapshot import ProductSearchSnapshot, ProductSearchTombstone
+from contracts.product import ProductView
 from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import Cursor, ProductPage
@@ -156,6 +161,83 @@ class ProductQueryPort(Protocol):
     ) -> ProductPage: ...
 
 
+class ProductSearchPort(Protocol):
+    """Read-side port for the public Product search index."""
+
+    async def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        limit: int = 20,
+        cursor: SearchCursor | None = None,
+    ) -> Page[ProductView]: ...
+
+
+class ProductSearchIndexer(Protocol):
+    async def index(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None: ...
+
+    async def delete(self, tombstone: ProductSearchTombstone) -> None: ...
+
+    async def set_owner_active(
+        self, user_id: uuid.UUID, *, is_active: bool
+    ) -> None: ...
+
+
+class ProductSearchReindexer(ProductSearchIndexer, Protocol):
+    """Index writer lifecycle for a zero-downtime rebuild."""
+
+    async def begin_reindex(self) -> None: ...
+
+    async def index_rebuild(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None: ...
+
+    async def complete_reindex(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class SearchSnapshotWithOwner:
+    snapshot: ProductSearchSnapshot
+    owner_is_active: bool
+
+
+class ProductSearchSnapshotSource(Protocol):
+    async def get(self, product_id: uuid.UUID) -> SearchSnapshotWithOwner | None: ...
+
+    def stream_batches(
+        self, *, batch_size: int
+    ) -> AsyncIterator[list[SearchSnapshotWithOwner]]: ...
+
+
+@dataclass(frozen=True)
+class OwnerSearchState:
+    """Durable Owner visibility flag maintained by `catalog-search-worker`
+    from Identity lifecycle events (issue #288). A missing row means the
+    worker has not yet observed this owner and must be treated as inactive
+    (deny-by-default) — never resolved via a synchronous Identity call, unlike
+    `OwnerReadModel`."""
+
+    user_id: uuid.UUID
+    is_active: bool
+    last_applied_outbox_id: int
+
+
+class OwnerSearchStateStore(Protocol):
+    async def get(self, user_id: uuid.UUID) -> OwnerSearchState | None: ...
+
+    async def upsert(self, state: OwnerSearchState) -> bool:
+        """Returns whether `state` was actually applied — `False` for a
+        stale/duplicate event (see `last_applied_outbox_id` versioning,
+        ADR 0011)."""
+        ...
+
+
 __all__ = [
     "Actor",
     "IdentityGateway",
@@ -165,10 +247,17 @@ __all__ = [
     "OwnerProjectionWriter",
     "OwnerQueryPort",
     "OwnerSnapshot",
+    "OwnerSearchState",
+    "OwnerSearchStateStore",
     "ProductCommandPort",
     "ProductImage",
     "ProductImageStorage",
     "ProductAuditEntry",
     "ProductAuditReader",
     "ProductQueryPort",
+    "ProductSearchPort",
+    "ProductSearchIndexer",
+    "ProductSearchReindexer",
+    "ProductSearchSnapshotSource",
+    "SearchSnapshotWithOwner",
 ]

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
 from kernel_platform.http.match import match_created, match_page, match_result
+from kernel_platform.pagination import Page
 
 from api.dependencies import (
     ActivateProductDI,
@@ -16,6 +17,7 @@ from api.dependencies import (
     ListProductsDI,
     OptionalAuth,
     RequiredAuth,
+    SearchProductsDI,
     UpdateProductDI,
     to_actor,
 )
@@ -27,6 +29,7 @@ from api.schemas import (
     ProductDeleteRequest,
     ProductGetRequest,
     ProductListRequest,
+    ProductSearchRequest,
     ProductUpdateRequest,
 )
 from application.ports import ProductAuditEntry
@@ -57,6 +60,15 @@ async def list_products(
 ) -> ApiResponse[list[ProductView]]:
     query = request.to_query()
     result = await handler.execute(query)
+    return match_page(result)
+
+
+@router.get("/search", response_model=ApiResponse[list[ProductView]])
+async def search_products(
+    request: Annotated[ProductSearchRequest, Depends()],
+    handler: SearchProductsDI,
+) -> ApiResponse[list[ProductView]]:
+    result: Result[Page[ProductView]] = await handler.execute(request.to_query())
     return match_page(result)
 
 

@@ -23,6 +23,7 @@ from application.errors import (
     ProductImageUnsupportedMediaTypeError,
     ProductListCursorConflictError,
     ProductListInvalidCursorError,
+    ProductSearchInvalidCursorError,
 )
 from application.ports import Actor
 from application.queries import (
@@ -30,6 +31,12 @@ from application.queries import (
     GetProductImageQuery,
     GetProductQuery,
     ListProductsQuery,
+    SearchProductsQuery,
+)
+from application.search_cursor import (
+    InvalidSearchCursorError,
+    ProductSortOption,
+    decode_search_cursor,
 )
 
 _ALLOWED_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
@@ -124,6 +131,37 @@ class ProductListRequest(BaseModel):
             raise ProductListInvalidCursorError from exc
         return ListProductsQuery(
             limit=self.limit, after=after_cursor, before=before_cursor
+        )
+
+
+class ProductSearchRequest(BaseModel):
+    """Public search request with a bounded, required text query plus
+    optional category/price filters, sort, and `search_after` cursor
+    pagination (issue #291)."""
+
+    q: str = Query(min_length=2, max_length=100)
+    category: str | None = Query(default=None)
+    min_price: float | None = Query(default=None, ge=0)
+    max_price: float | None = Query(default=None, ge=0)
+    sort: ProductSortOption = Query(default=ProductSortOption.RELEVANCE)
+    limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    after: str | None = Query(default=None)
+
+    def to_query(self) -> SearchProductsQuery:
+        cursor = None
+        if self.after is not None:
+            try:
+                cursor = decode_search_cursor(self.after, expected_sort=self.sort)
+            except InvalidSearchCursorError as exc:
+                raise ProductSearchInvalidCursorError from exc
+        return SearchProductsQuery(
+            q=self.q,
+            category=self.category,
+            min_price=self.min_price,
+            max_price=self.max_price,
+            sort=self.sort,
+            limit=self.limit,
+            cursor=cursor,
         )
 
 

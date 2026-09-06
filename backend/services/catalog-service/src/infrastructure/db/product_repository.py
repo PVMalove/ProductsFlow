@@ -47,6 +47,8 @@ def _to_domain(row: ProductModel) -> Product:
         category=row.category,
         user_id=row.user_id,
         is_active=row.is_active,
+        search_revision=row.search_revision,
+        created_at=row.created_at,
     )
 
 
@@ -102,6 +104,8 @@ class ProductRepository:
                 category=product.category,
                 user_id=product.user_id,
                 is_active=product.is_active,
+                search_revision=product.search_revision,
+                created_at=product.created_at,
             )
         )
         await drain_events_to_outbox(self.session, product)
@@ -120,7 +124,7 @@ class ProductRepository:
         price: float | None = None,
         category: str | None = None,
     ) -> Result[Product] | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -135,6 +139,7 @@ class ProductRepository:
         row.description = product.description
         row.price = product.price
         row.category = product.category
+        row.search_revision = product.search_revision
         await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 
@@ -147,7 +152,7 @@ class ProductRepository:
     async def _toggle_active(
         self, product_id: ProductId, *, activate: bool
     ) -> Result[Product] | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -157,11 +162,12 @@ class ProductRepository:
             return Result[Product].fail(result.error)
 
         row.is_active = product.is_active
+        row.search_revision = product.search_revision
         await drain_events_to_outbox(self.session, product)
         return Result[Product].ok(product)
 
     async def delete(self, product_id: ProductId) -> Product | None:
-        loaded = await self._load(product_id)
+        loaded = await self._load_for_update(product_id)
         if loaded is None:
             return None
         row, product = loaded
@@ -299,8 +305,14 @@ class ProductRepository:
             ),
         )
 
-    async def _load(self, product_id: ProductId) -> tuple[ProductModel, Product] | None:
-        row = await self.session.get(ProductModel, product_id.value)
+    async def _load_for_update(
+        self, product_id: ProductId
+    ) -> tuple[ProductModel, Product] | None:
+        row = await self.session.scalar(
+            select(ProductModel)
+            .where(ProductModel.id == product_id.value)
+            .with_for_update()
+        )
         if row is None:
             return None
         return row, _to_domain(row)

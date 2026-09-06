@@ -17,6 +17,20 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     catalog_database_url: str = ""
     catalog_amqp_url: str = "amqp://guest:guest@localhost:5672/"
+    catalog_opensearch_url: str = "http://localhost:9200"
+    catalog_search_index_name: str = "catalog-products"
+    catalog_outbox_poll_interval_seconds: float = 5.0
+    catalog_redis_url: str = "redis://localhost:6379/0"
+    # Ровно 60с (issue #293 acceptance criterion 2) — TTL, не сложная
+    # адресная инвалидация, и есть контракт свежести первой страницы поиска.
+    catalog_search_cache_ttl_seconds: int = 60
+    catalog_search_worker_metrics_port: int = 9100
+    catalog_rabbitmq_management_url: str = "http://localhost:15672"
+    catalog_rabbitmq_management_user: str = "guest"
+    catalog_rabbitmq_management_password: str = "guest"
+    catalog_search_dlq_poll_interval_seconds: float = 5.0
+    catalog_search_reindex_batch_size: int = 500
+    catalog_search_reconcile_throttle_seconds: float = 0.05
     # Базовый URL identity-service для `IdentityClient` (JWKS-верификация,
     # `GET /api/v1/users/me`, ADR 0005/0011) — имя сервиса compose-сети
     # (`backend/docker-compose.yml`), не публичный хост.

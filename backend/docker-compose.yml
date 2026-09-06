@@ -116,6 +116,8 @@ services:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
       CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
+      CATALOG_OPENSEARCH_URL: ${CATALOG_OPENSEARCH_URL:-http://opensearch:9200}
+      CATALOG_SEARCH_INDEX_NAME: ${CATALOG_SEARCH_INDEX_NAME:-catalog-products}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9002}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
@@ -145,6 +147,9 @@ services:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
       CATALOG_IDENTITY_BASE_URL: ${CATALOG_IDENTITY_BASE_URL}
+      CATALOG_OPENSEARCH_URL: ${CATALOG_OPENSEARCH_URL:-http://opensearch:9200}
+      CATALOG_SEARCH_INDEX_NAME: ${CATALOG_SEARCH_INDEX_NAME:-catalog-products}
+      CATALOG_REDIS_URL: ${CATALOG_REDIS_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9002}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
@@ -155,6 +160,10 @@ services:
     depends_on:
       catalog-bootstrap:
         condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - backend-network
 
@@ -184,6 +193,109 @@ services:
     depends_on:
       catalog-db:
         condition: service_healthy
+    networks:
+      - backend-network
+
+  catalog-outbox-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command: ["python", "-m", "api.outbox_worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_AMQP_URL: ${CATALOG_AMQP_URL}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  catalog-search-worker:
+    restart: unless-stopped
+    # Owner Search State (issue #288) needs catalog-db; it can still race
+    # "alembic upgrade head" in catalog-bootstrap on a cold start, so retry
+    # with the same fixed backoff as catalog-worker.
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "for i in 1 2 3 4 5; do python -m api.search_worker && exit 0; echo \"catalog-search-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_AMQP_URL: ${CATALOG_AMQP_URL}
+      CATALOG_OPENSEARCH_URL: ${CATALOG_OPENSEARCH_URL:-http://opensearch:9200}
+      CATALOG_SEARCH_INDEX_NAME: ${CATALOG_SEARCH_INDEX_NAME:-catalog-products}
+      CATALOG_RABBITMQ_MANAGEMENT_URL: ${CATALOG_RABBITMQ_MANAGEMENT_URL:-http://rabbitmq:15672}
+      CATALOG_RABBITMQ_MANAGEMENT_USER: ${CATALOG_RABBITMQ_MANAGEMENT_USER:-guest}
+      CATALOG_RABBITMQ_MANAGEMENT_PASSWORD: ${CATALOG_RABBITMQ_MANAGEMENT_PASSWORD:-guest}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  catalog-search-reconciler:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do python -m api.search_reindex --reconcile-only; sleep 86400; done",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_OPENSEARCH_URL: ${CATALOG_OPENSEARCH_URL:-http://opensearch:9200}
+      CATALOG_SEARCH_INDEX_NAME: ${CATALOG_SEARCH_INDEX_NAME:-catalog-products}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  opensearch:
+    image: opensearchproject/opensearch:3.1.0
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - backend-network
+
+  redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - backend-network
 
@@ -320,3 +432,4 @@ volumes:
   identity_db_data:
   catalog_db_data:
   support_db_data:
+  opensearch_data:

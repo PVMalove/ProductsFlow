@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractQueue
@@ -15,6 +15,8 @@ async def declare_topology(
     service_name: str,
     *,
     retry_stage_ttl_ms: Mapping[str, int] | None = None,
+    queue_name: str | None = None,
+    routing_keys: Iterable[str] = ("user.*.v1",),
 ) -> AbstractQueue:
     """Идемпотентно объявляет топологию консьюмера с DLX и retry-ступенями.
 
@@ -33,13 +35,15 @@ async def declare_topology(
 
     Side Effects:
         Создает эксчейнджи и очереди в брокере, если их там не было, вешает биндинги."""
+    # Every worker owns the declaration it needs.  This makes a consumer safe
+    # to start before the producer which would otherwise create the exchange.
     events_exchange = await channel.declare_exchange(
         EVENTS_EXCHANGE_NAME, ExchangeType.TOPIC, durable=True
     )
     dlx = await channel.declare_exchange(
         DLX_EXCHANGE_NAME, ExchangeType.DIRECT, durable=True
     )
-    main_queue_name = f"{service_name}.user-events"
+    main_queue_name = queue_name or f"{service_name}.user-events"
     main_queue = await channel.declare_queue(
         main_queue_name,
         durable=True,
@@ -49,7 +53,8 @@ async def declare_topology(
             "x-dead-letter-routing-key": main_queue_name,
         },
     )
-    await main_queue.bind(events_exchange, routing_key="user.*.v1")
+    for routing_key in routing_keys:
+        await main_queue.bind(events_exchange, routing_key=routing_key)
     stage_ttl_ms = (
         RETRY_STAGE_TTL_MS if retry_stage_ttl_ms is None else retry_stage_ttl_ms
     )

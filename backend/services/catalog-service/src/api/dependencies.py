@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from application.commands import (
     ActivateProductCommandHandler,
@@ -15,6 +15,7 @@ from application.ports import (
     Actor,
     OwnerReadModel,
     ProductAuditReader,
+    ProductSearchPort,
 )
 from application.ports import (
     IdentityGateway as ApplicationIdentityGateway,
@@ -24,6 +25,7 @@ from application.queries import (
     GetProductImageQueryHandler,
     GetProductQueryHandler,
     ListProductsQueryHandler,
+    SearchProductsQueryHandler,
 )
 from core.settings import settings
 from domain.repositories import ProductRepository
@@ -108,6 +110,16 @@ def get_list_products_handler(
 
 
 ListProductsDI = Annotated[ListProductsQueryHandler, Depends(get_list_products_handler)]
+
+
+def get_search_products_handler(request: Request) -> SearchProductsQueryHandler:
+    search: ProductSearchPort = request.app.state.product_search
+    return SearchProductsQueryHandler(search)
+
+
+SearchProductsDI = Annotated[
+    SearchProductsQueryHandler, Depends(get_search_products_handler)
+]
 
 
 def get_product_handler(
@@ -241,6 +253,7 @@ __all__ = [
     "CatalogUnitOfWorkDI",
     "IdentityGatewayDI",
     "ListProductsDI",
+    "SearchProductsDI",
     "OptionalAuth",
     "RequiredAuth",
     "UpdateProductDI",
