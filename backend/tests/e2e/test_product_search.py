@@ -1,6 +1,7 @@
 import asyncio
 import time
 import uuid
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -19,34 +20,49 @@ async def _register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
     return str(login.json()["access_token"])
 
 
-async def _wait_for_search_result(
-    client: httpx.AsyncClient, *, query: str, product_id: str, expected: bool
-) -> None:
-    deadline = time.monotonic() + 30
-    while True:
-        response = await client.get("/api/v1/products/search", params={"q": query})
-        assert response.status_code == 200, response.text
-        found = product_id in {item["id"] for item in response.json()["data"]}
-        if found is expected:
-            return
-        if time.monotonic() >= deadline:
-            pytest.fail(f"search result for {product_id} did not become {expected}")
-        await asyncio.sleep(0.2)
-
-
-async def _wait_for_search_results(
-    client: httpx.AsyncClient, *, query: str, product_ids: set[str]
+async def _wait_for_search(
+    client: httpx.AsyncClient,
+    *,
+    query: str,
+    is_ready: Callable[[list[dict[str, object]]], bool],
+    expectation: str,
 ) -> list[dict[str, object]]:
     deadline = time.monotonic() + 30
     while True:
         response = await client.get("/api/v1/products/search", params={"q": query})
         assert response.status_code == 200, response.text
         products = response.json()["data"]
-        if product_ids.issubset({product["id"] for product in products}):
+        if is_ready(products):
             return products
         if time.monotonic() >= deadline:
-            pytest.fail(f"search results for {product_ids} did not become available")
+            pytest.fail(f"search result did not satisfy {expectation}")
         await asyncio.sleep(0.2)
+
+
+async def _wait_for_search_result(
+    client: httpx.AsyncClient, *, query: str, product_id: str, expected: bool
+) -> None:
+    await _wait_for_search(
+        client,
+        query=query,
+        is_ready=lambda products: (
+            (product_id in {str(product["id"]) for product in products}) is expected
+        ),
+        expectation=f"product {product_id} to be present={expected}",
+    )
+
+
+async def _wait_for_search_results(
+    client: httpx.AsyncClient, *, query: str, product_ids: set[str]
+) -> list[dict[str, object]]:
+    return await _wait_for_search(
+        client,
+        query=query,
+        is_ready=lambda products: product_ids.issubset(
+            {str(product["id"]) for product in products}
+        ),
+        expectation=f"products {product_ids} to become available",
+    )
 
 
 async def _create_product(

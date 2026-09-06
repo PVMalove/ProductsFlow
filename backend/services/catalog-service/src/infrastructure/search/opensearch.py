@@ -107,22 +107,65 @@ class OpenSearchProductSearch:
             f"/{self._index_name}",
             json={
                 "settings": {"number_of_shards": 1, "number_of_replicas": 0},
-                "mappings": {
-                    "properties": {
-                        field: {
-                            "type": "text",
-                            "fields": {
-                                "ru": {"type": "text", "analyzer": "russian"},
-                                "en": {"type": "text", "analyzer": "english"},
-                            },
-                        }
-                        for field in ("name", "description")
-                    }
-                },
+                "mappings": {"properties": self._multilingual_properties()},
             },
         )
-        if response.status_code not in {200, 400}:
+        if response.status_code == 200:
+            return
+        if response.status_code != 400:
             response.raise_for_status()
+        error = response.json().get("error", {})
+        if error.get("type") != "resource_already_exists_exception":
+            response.raise_for_status()
+
+        mapping_response = await self._client.get(f"/{self._index_name}/_mapping")
+        mapping_response.raise_for_status()
+        if self._has_multilingual_properties(mapping_response.json()):
+            return
+
+        update_mapping_response = await self._client.put(
+            f"/{self._index_name}/_mapping",
+            json={"properties": self._multilingual_properties()},
+        )
+        update_mapping_response.raise_for_status()
+        reindex_response = await self._client.post(
+            f"/{self._index_name}/_update_by_query",
+            params={"conflicts": "proceed", "refresh": "true"},
+            json={"query": {"match_all": {}}},
+        )
+        reindex_response.raise_for_status()
+
+    @staticmethod
+    def _multilingual_properties() -> dict[str, object]:
+        return {
+            field: {
+                "type": "text",
+                "fields": {
+                    "ru": {"type": "text", "analyzer": "russian"},
+                    "en": {"type": "text", "analyzer": "english"},
+                },
+            }
+            for field in ("name", "description")
+        }
+
+    def _has_multilingual_properties(self, payload: dict[str, object]) -> bool:
+        index = payload.get(self._index_name)
+        if not isinstance(index, dict):
+            return False
+        mappings = index.get("mappings")
+        if not isinstance(mappings, dict):
+            return False
+        properties = mappings.get("properties")
+        if not isinstance(properties, dict):
+            return False
+        for field in ("name", "description"):
+            definition = properties.get(field)
+            if not isinstance(definition, dict):
+                return False
+            subfields = definition.get("fields")
+            if not isinstance(subfields, dict) or not {"ru", "en"} <= subfields.keys():
+                return False
+        return True
 
     @staticmethod
     def _to_view(source: dict[str, object]) -> ProductView:
