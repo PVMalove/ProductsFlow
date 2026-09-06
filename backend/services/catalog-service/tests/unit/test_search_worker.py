@@ -1,18 +1,25 @@
+import asyncio
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import pytest
 from aio_pika.abc import AbstractIncomingMessage
 
 from api.search_worker import (
+    build_search_event_handler,
     handle_owner_event,
     handle_product_event,
     handle_search_event,
 )
 from application.ports import OwnerSearchState
 from application.search_snapshot import ProductSearchSnapshot
+from infrastructure.metrics.search_metrics import (
+    SEARCH_INDEXING_LAG,
+    SEARCH_OLDEST_PENDING_EVENT_AGE,
+    PendingEventTracker,
+)
 
 _CREATED_AT = datetime(2026, 1, 1, 12, 0, 0)
 
@@ -24,11 +31,13 @@ class FakeMessage:
         event_type: str,
         payload: dict[str, object],
         message_id: str | None = None,
+        timestamp: datetime | None = None,
     ) -> None:
         self.type = event_type
         self.routing_key = event_type
         self.body = json.dumps(payload).encode()
         self.message_id = message_id
+        self.timestamp = timestamp
 
 
 class RecordingIndexer:
@@ -67,12 +76,20 @@ class FakeOwnerSearchStateStore:
 
 
 def _product_message(
-    *, event_type: str, product_id: uuid.UUID, owner_id: uuid.UUID, revision: int = 4
+    *,
+    event_type: str,
+    product_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    revision: int = 4,
+    message_id: str | None = None,
+    timestamp: datetime | None = None,
 ) -> AbstractIncomingMessage:
     return cast(
         AbstractIncomingMessage,
         FakeMessage(
             event_type=event_type,
+            message_id=message_id,
+            timestamp=timestamp,
             payload={
                 "product_id": str(product_id),
                 "user_id": str(owner_id),
@@ -321,3 +338,119 @@ async def test_dispatcher_routes_product_and_owner_events_to_the_right_handler()
     [(snapshot, owner_is_active)] = indexer.snapshots
     assert snapshot.product_id == product_id
     assert owner_is_active is True
+
+
+def _histogram_count(histogram: object) -> float:
+    total = 0.0
+    for metric in histogram.collect():  # type: ignore[attr-defined]
+        for sample in metric.samples:
+            if sample.name.endswith("_count"):
+                total += sample.value
+    return total
+
+
+def _gauge_value(gauge: object) -> float:
+    for metric in gauge.collect():  # type: ignore[attr-defined]
+        for sample in metric.samples:
+            return sample.value
+    return 0.0
+
+
+class SlowRecordingIndexer(RecordingIndexer):
+    """Позволяет заморозить обработку на середине, чтобы проверить
+    `SEARCH_OLDEST_PENDING_EVENT_AGE` во время (issue #293), а не только
+    до/после."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def index(
+        self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
+    ) -> None:
+        self.started.set()
+        await self.release.wait()
+        await super().index(snapshot, owner_is_active=owner_is_active)
+
+
+@pytest.mark.asyncio
+async def test_handler_observes_indexing_lag_for_a_successful_product_event() -> None:
+    indexer = RecordingIndexer()
+    owner_states = FakeOwnerSearchStateStore()
+    handler = build_search_event_handler(indexer, owner_states, PendingEventTracker())
+    lag_before = _histogram_count(SEARCH_INDEXING_LAG)
+    occurred_at = datetime.now(UTC) - timedelta(seconds=2)
+
+    await handler(
+        _product_message(
+            event_type="product.created.v2",
+            product_id=uuid.uuid4(),
+            owner_id=uuid.uuid4(),
+            message_id="123",
+            timestamp=occurred_at,
+        )
+    )
+
+    assert _histogram_count(SEARCH_INDEXING_LAG) == lag_before + 1
+    assert _gauge_value(SEARCH_OLDEST_PENDING_EVENT_AGE) == 0
+
+
+@pytest.mark.asyncio
+async def test_handler_does_not_observe_indexing_lag_for_owner_events() -> None:
+    indexer = RecordingIndexer()
+    owner_states = FakeOwnerSearchStateStore()
+    handler = build_search_event_handler(indexer, owner_states, PendingEventTracker())
+    lag_before = _histogram_count(SEARCH_INDEXING_LAG)
+
+    await handler(
+        _owner_message(
+            event_type="user.activated.v1", user_id=uuid.uuid4(), message_id=1
+        )
+    )
+
+    assert _histogram_count(SEARCH_INDEXING_LAG) == lag_before
+
+
+@pytest.mark.asyncio
+async def test_handler_skips_metrics_when_message_lacks_id_or_timestamp() -> None:
+    indexer = RecordingIndexer()
+    owner_states = FakeOwnerSearchStateStore()
+    handler = build_search_event_handler(indexer, owner_states, PendingEventTracker())
+
+    await handler(
+        _product_message(
+            event_type="product.created.v2",
+            product_id=uuid.uuid4(),
+            owner_id=uuid.uuid4(),
+        )
+    )
+
+    assert len(indexer.snapshots) == 1
+
+
+@pytest.mark.asyncio
+async def test_oldest_pending_event_age_reflects_a_message_actively_in_flight() -> None:
+    indexer = SlowRecordingIndexer()
+    owner_states = FakeOwnerSearchStateStore()
+    handler = build_search_event_handler(indexer, owner_states, PendingEventTracker())
+    occurred_at = datetime.now(UTC) - timedelta(seconds=5)
+    task = asyncio.ensure_future(
+        handler(
+            _product_message(
+                event_type="product.created.v2",
+                product_id=uuid.uuid4(),
+                owner_id=uuid.uuid4(),
+                message_id="7",
+                timestamp=occurred_at,
+            )
+        )
+    )
+
+    await indexer.started.wait()
+    assert _gauge_value(SEARCH_OLDEST_PENDING_EVENT_AGE) >= 5
+
+    indexer.release.set()
+    await task
+
+    assert _gauge_value(SEARCH_OLDEST_PENDING_EVENT_AGE) == 0

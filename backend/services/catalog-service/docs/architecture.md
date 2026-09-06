@@ -43,6 +43,29 @@ read-model; его OpenSearch-адаптер фильтрует деактиви
 Владельца добавляется отдельной задачей, поэтому этот фундамент не делает
 поисковую выдачу видимой без дальнейшей owner-проекции.
 
+## Кэш первой страницы и наблюдаемость поиска (issue #293)
+
+`infrastructure/search/cache.py`'s `CachedProductSearch` — декоратор над
+`ProductSearchPort`, а не отдельная реализация: `api/main.py` оборачивает
+`OpenSearchProductSearch` им же, так что `SearchProductsQueryHandler` и HTTP-
+слой вообще не знают о существовании Redis. Кэшируется только страница без
+курсора, ключ — нормализованные `q`/`category`/`min_price`/`max_price`/
+`sort`/`limit`; протухание чисто по TTL, адресной инвалидации на Product-
+мутации нет. Сбой Redis (get/set) не роняет поиск — декоратор считает это
+промахом и логирует warning.
+
+`infrastructure/metrics/search_metrics.py` держит Prometheus-метрики
+для `catalog-api` (`GET /metrics`) и `catalog-search-worker` (свой
+`prometheus_client`-HTTP-сервер, т.к. это не FastAPI-процесс — порт
+`Settings.catalog_search_worker_metrics_port`). `PendingEventTracker`
+отслеживает возраст сообщений, которые воркер сейчас активно обрабатывает
+(RabbitMQ не даёт неразрушающе заглянуть в голову очереди); DLQ depth
+опрашивается через RabbitMQ Management API по имени `{queue}.dlq` — та же
+конвенция, что `kernel_platform.topology.declare_topology` использует для
+остальных consumer'ов платформы. Сама очередь `catalog.search-events.dlq`
+появится, когда issue #294 подключит к ней dead-lettering — до этого метрика
+корректно остаётся на нуле (404 от Management API).
+
 ## Изображения товара (ADR 0002, ADR 0003)
 
 `api/endpoints/product_images.py` устроен так же, как `products.py`: модели

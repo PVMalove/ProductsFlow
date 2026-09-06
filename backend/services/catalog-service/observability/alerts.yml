@@ -1,0 +1,51 @@
+# Prometheus alerting rules для публичного поиска Catalog (issue #293,
+# epic #283). Ни Prometheus, ни Alertmanager сейчас не развёрнуты в
+# docker-compose.yml (см. `docs/architecture.md` монолита — метрики/алертинг
+# запланированы отдельным эффортом) — этот файл декларирует именно те три
+# условия, что требует acceptance criteria issue #293, и подключается
+# `rule_files:` в тот момент, когда Prometheus появится в стеке.
+#
+# Метрики публикуют `catalog-api` (`GET /metrics`) и `catalog-search-worker`
+# (отдельный prometheus_client-HTTP-сервер, порт
+# `Settings.catalog_search_worker_metrics_port`) — см.
+# `src/infrastructure/observability/search_metrics.py`.
+groups:
+  - name: catalog-search.rules
+    rules:
+      - alert: CatalogSearchDlqNotEmpty
+        expr: catalog_search_dlq_depth > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DLQ catalog-search-worker не пуст"
+          description: >-
+            {{ $value }} сообщений в DLQ catalog-search-worker — поисковый
+            индекс расходится с Catalog, пока сообщения не разобраны вручную
+            (issue #294 targeted replay/reindex).
+
+      - alert: CatalogSearchIndexingLatencyHigh
+        expr: >-
+          histogram_quantile(0.99,
+            sum(rate(catalog_search_indexing_lag_seconds_bucket[5m])) by (le)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 задержки индексации поиска Catalog превышает 10с"
+          description: >-
+            Публичный поиск может не отражать последние изменения Товаров в
+            рамках заявленного SLA (epic #283: индексация ≤10с, кэш первой
+            страницы TTL 60с, суммарно ≤70с видимой задержки).
+
+      - alert: CatalogSearchOldestPendingEventTooOld
+        expr: catalog_search_oldest_pending_event_age_seconds > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Самое старое необработанное событие catalog-search-worker старше 10с"
+          description: >-
+            catalog-search-worker отстаёт от очереди RabbitMQ — проверьте
+            состояние воркера, OpenSearch и брокера.
