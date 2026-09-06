@@ -2,9 +2,22 @@ import asyncio
 import uuid
 
 import httpx
+from kernel_platform.pagination import Page, PageInfo
 
+from application.search_cursor import (
+    ProductSortOption,
+    SearchCursor,
+    encode_search_cursor,
+)
 from application.search_snapshot import ProductSearchSnapshot
 from contracts.product import ProductView
+
+_SORT_CLAUSES: dict[ProductSortOption, list[dict[str, str]]] = {
+    ProductSortOption.RELEVANCE: [{"_score": "desc"}, {"id": "asc"}],
+    ProductSortOption.PRICE_ASC: [{"price": "asc"}, {"id": "asc"}],
+    ProductSortOption.PRICE_DESC: [{"price": "desc"}, {"id": "asc"}],
+    ProductSortOption.NEWEST: [{"created_at": "desc"}, {"id": "asc"}],
+}
 
 
 class OpenSearchProductSearch:
@@ -27,40 +40,90 @@ class OpenSearchProductSearch:
         if self._owns_client:
             await self._client.aclose()
 
-    async def search(self, query: str) -> list[ProductView]:
-        response = await self._client.post(
-            f"/{self._index_name}/_search",
-            json={
-                "query": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"is_active": True}},
-                            {"term": {"owner_is_active": True}},
-                        ],
-                        "must": [
-                            {
-                                "multi_match": {
-                                    "query": query,
-                                    "fields": [
-                                        "name.ru^3",
-                                        "name.en^3",
-                                        "description.ru",
-                                        "description.en",
-                                    ],
-                                    "fuzziness": "AUTO",
-                                }
+    async def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        limit: int = 20,
+        cursor: SearchCursor | None = None,
+    ) -> Page[ProductView]:
+        filters: list[dict[str, object]] = [
+            {"term": {"is_active": True}},
+            {"term": {"owner_is_active": True}},
+        ]
+        if category is not None:
+            filters.append({"term": {"category": category}})
+        if min_price is not None or max_price is not None:
+            price_range: dict[str, float] = {}
+            if min_price is not None:
+                price_range["gte"] = min_price
+            if max_price is not None:
+                price_range["lte"] = max_price
+            filters.append({"range": {"price": price_range}})
+
+        body: dict[str, object] = {
+            "size": limit + 1,
+            "query": {
+                "bool": {
+                    "filter": filters,
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": [
+                                    "name.ru^3",
+                                    "name.en^3",
+                                    "description.ru",
+                                    "description.en",
+                                ],
+                                "fuzziness": "AUTO",
                             }
-                        ],
-                    }
+                        }
+                    ],
                 }
             },
-        )
+            "sort": _SORT_CLAUSES[sort],
+        }
+        if cursor is not None:
+            body["search_after"] = [cursor.sort_value, str(cursor.product_id)]
+
+        response = await self._client.post(f"/{self._index_name}/_search", json=body)
         if response.status_code == 404:
-            return []
+            return Page(
+                items=[],
+                page_info=PageInfo(
+                    next_cursor=None, prev_cursor=None, has_more=False, has_prev=False
+                ),
+            )
         response.raise_for_status()
-        payload = response.json()
-        hits = payload["hits"]["hits"]
-        return [self._to_view(hit["_source"]) for hit in hits]
+        hits = response.json()["hits"]["hits"]
+        has_more = len(hits) > limit
+        page_hits = hits[:limit]
+        items = [self._to_view(hit["_source"]) for hit in page_hits]
+
+        next_cursor = None
+        if has_more and page_hits:
+            sort_values = page_hits[-1]["sort"]
+            next_cursor = encode_search_cursor(
+                SearchCursor(
+                    sort=sort,
+                    sort_value=float(sort_values[0]),
+                    product_id=uuid.UUID(str(sort_values[1])),
+                )
+            )
+        return Page(
+            items=items,
+            page_info=PageInfo(
+                next_cursor=next_cursor,
+                prev_cursor=None,
+                has_more=has_more,
+                has_prev=False,
+            ),
+        )
 
     async def index(
         self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
@@ -81,6 +144,7 @@ class OpenSearchProductSearch:
                 "price": snapshot.price,
                 "is_active": snapshot.is_active,
                 "owner_is_active": owner_is_active,
+                "created_at": snapshot.created_at.isoformat(),
             },
         )
         response.raise_for_status()
@@ -114,8 +178,16 @@ class OpenSearchProductSearch:
             response = await self._client.put(
                 f"/{self._index_name}",
                 json={
-                    "settings": {"number_of_shards": 1, "number_of_replicas": 0},
-                    "mappings": {"properties": self._multilingual_properties()},
+                    "settings": {
+                        "number_of_shards": 1,
+                        "number_of_replicas": 0,
+                        "analysis": {
+                            "normalizer": {
+                                "lowercase": {"type": "custom", "filter": ["lowercase"]}
+                            }
+                        },
+                    },
+                    "mappings": {"properties": self._index_properties()},
                 },
             )
             if response.status_code == 200:
@@ -129,10 +201,10 @@ class OpenSearchProductSearch:
 
             mapping_response = await self._client.get(f"/{self._index_name}/_mapping")
             mapping_response.raise_for_status()
-            if not self._has_multilingual_properties(mapping_response.json()):
+            if not self._has_current_mapping(mapping_response.json()):
                 update_mapping_response = await self._client.put(
                     f"/{self._index_name}/_mapping",
-                    json={"properties": self._multilingual_properties()},
+                    json={"properties": self._index_properties()},
                 )
                 update_mapping_response.raise_for_status()
                 reindex_response = await self._client.post(
@@ -156,7 +228,17 @@ class OpenSearchProductSearch:
             for field in ("name", "description")
         }
 
-    def _has_multilingual_properties(self, payload: dict[str, object]) -> bool:
+    @staticmethod
+    def _index_properties() -> dict[str, object]:
+        return {
+            **OpenSearchProductSearch._multilingual_properties(),
+            "id": {"type": "keyword"},
+            "category": {"type": "keyword", "normalizer": "lowercase"},
+            "price": {"type": "double"},
+            "created_at": {"type": "date"},
+        }
+
+    def _has_current_mapping(self, payload: dict[str, object]) -> bool:
         index = payload.get(self._index_name)
         if not isinstance(index, dict):
             return False
@@ -166,6 +248,18 @@ class OpenSearchProductSearch:
         properties = mappings.get("properties")
         if not isinstance(properties, dict):
             return False
+        return self._has_multilingual_properties(properties) and all(
+            properties.get(field) == expected
+            for field, expected in (
+                ("id", {"type": "keyword"}),
+                ("category", {"type": "keyword", "normalizer": "lowercase"}),
+                ("price", {"type": "double"}),
+                ("created_at", {"type": "date"}),
+            )
+        )
+
+    @staticmethod
+    def _has_multilingual_properties(properties: dict[str, object]) -> bool:
         for field in ("name", "description"):
             definition = properties.get(field)
             if not isinstance(definition, dict):

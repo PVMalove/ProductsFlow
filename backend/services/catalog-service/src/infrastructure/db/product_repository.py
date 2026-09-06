@@ -48,6 +48,7 @@ def _to_domain(row: ProductModel) -> Product:
         user_id=row.user_id,
         is_active=row.is_active,
         search_revision=row.search_revision,
+        created_at=row.created_at,
     )
 
 
@@ -104,6 +105,7 @@ class ProductRepository:
                 user_id=product.user_id,
                 is_active=product.is_active,
                 search_revision=product.search_revision,
+                created_at=product.created_at,
             )
         )
         await drain_events_to_outbox(self.session, product)

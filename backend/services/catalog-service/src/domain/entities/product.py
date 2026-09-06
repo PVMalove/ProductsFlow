@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from typing import TypedDict, cast
 
 from kernel_domain import PRIVATE_MARKER
@@ -33,6 +34,7 @@ class _SnapshotEventFields(TypedDict):
     price: float
     is_active: bool
     search_revision: int
+    created_at: datetime
 
 
 def _validate(*, name: str, category: str, price: float) -> Error | None:
@@ -71,6 +73,7 @@ class Product(Entity[ProductId]):
         user_id: uuid.UUID,
         is_active: bool,
         search_revision: int = 1,
+        created_at: datetime = cast("datetime", _MISSING),
     ) -> None:
         super().__init__(marker, id=id)
         self.name = name
@@ -80,6 +83,7 @@ class Product(Entity[ProductId]):
         self.user_id = user_id
         self.is_active = is_active
         self.search_revision = search_revision
+        self.created_at = created_at
 
     @classmethod
     def create(
@@ -106,6 +110,7 @@ class Product(Entity[ProductId]):
             user_id=user_id,
             is_active=True,
             search_revision=1,
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
         product.add_domain_event(
             ProductCreated(
@@ -126,6 +131,7 @@ class Product(Entity[ProductId]):
         user_id: uuid.UUID,
         is_active: bool,
         search_revision: int = 1,
+        created_at: datetime,
     ) -> "Product":
         return cls(
             PRIVATE_MARKER,
@@ -137,6 +143,7 @@ class Product(Entity[ProductId]):
             user_id=user_id,
             is_active=is_active,
             search_revision=search_revision,
+            created_at=created_at,
         )
 
     def update(
@@ -209,4 +216,5 @@ class Product(Entity[ProductId]):
             "price": self.price,
             "is_active": self.is_active,
             "search_revision": self.search_revision,
+            "created_at": self.created_at,
         }

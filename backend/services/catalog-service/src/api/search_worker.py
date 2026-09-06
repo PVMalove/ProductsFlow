@@ -3,6 +3,7 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 import aio_pika
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractQueue
@@ -86,6 +87,7 @@ def _parse_product_snapshot(body: bytes) -> ProductSearchSnapshot:
         price = payload["price"]
         is_active = payload["is_active"]
         search_revision = payload["search_revision"]
+        created_at_raw = payload["created_at"]
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Product event payload is incomplete") from exc
     if (
@@ -98,8 +100,13 @@ def _parse_product_snapshot(body: bytes) -> ProductSearchSnapshot:
         or isinstance(search_revision, bool)
         or not isinstance(search_revision, int)
         or search_revision < 1
+        or not isinstance(created_at_raw, str)
     ):
         raise ValueError("Product event payload has invalid field types")
+    try:
+        created_at = datetime.fromisoformat(created_at_raw)
+    except ValueError as exc:
+        raise ValueError("Product event payload has an invalid created_at") from exc
     return ProductSearchSnapshot(
         product_id=product_id,
         user_id=user_id,
@@ -109,6 +116,7 @@ def _parse_product_snapshot(body: bytes) -> ProductSearchSnapshot:
         price=float(price),
         is_active=is_active,
         search_revision=search_revision,
+        created_at=created_at,
     )
 
 
