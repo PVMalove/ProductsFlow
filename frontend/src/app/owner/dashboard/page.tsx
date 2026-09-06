@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { isAxiosError } from 'axios';
 import { getProduct, ProductView } from '@/lib/api/products';
 import { Button } from '@/components/ui/button';
+import { ProductEditForm } from '@/components/catalog/product-edit-form';
 
 export default function OwnerDashboard() {
   const [productId, setProductId] = useState('');
@@ -64,22 +65,10 @@ export default function OwnerDashboard() {
         )}
 
         {product && (
-          <div className="mt-6 border-t pt-4">
-            <h3 className="font-semibold text-lg">{product.name}</h3>
-            <div className="mt-2 space-y-2 text-sm text-gray-600">
-              <p><span className="font-medium text-gray-900">ID:</span> {product.id}</p>
-              <p><span className="font-medium text-gray-900">Status:</span> 
-                <span className={`ml-2 px-2 py-1 rounded-full text-xs ${product.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {product.is_active ? 'Active' : 'Deactivated'}
-                </span>
-              </p>
-              <p><span className="font-medium text-gray-900">Price:</span> ${product.price}</p>
-              <p><span className="font-medium text-gray-900">Category:</span> {product.category}</p>
-              <p><span className="font-medium text-gray-900">Description:</span> {product.description}</p>
-            </div>
-          </div>
+          <ProductEditForm product={product} onUpdate={(updated) => setProduct(updated)} />
         )}
       </div>
     </div>
   );
 }
+

@@ -44,3 +44,24 @@ export async function getProduct(id: string): Promise<ProductView> {
   const res = await apiClient.get<ApiResponse<ProductView>>(`/v1/products/${id}`);
   return res.data.data;
 }
+
+export async function patchProduct(id: string, data: Partial<ProductView>): Promise<ProductView> {
+  const res = await apiClient.patch<ApiResponse<ProductView>>(`/v1/products/${id}`, data);
+  return res.data.data;
+}
+
+export async function uploadProductImage(id: string, file: File): Promise<{ image_url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiClient.post<ApiResponse<{ image_url: string }>>(`/v1/products/${id}/image`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return res.data.data;
+}
+
+export async function getProductImage(id: string): Promise<{ image_url: string }> {
+  const res = await apiClient.get<ApiResponse<{ image_url: string }>>(`/v1/products/${id}/image`);
+  return res.data.data;
+}
