@@ -7,6 +7,7 @@ from kernel_platform.outbox.listener import OutboxListener, to_asyncpg_dsn
 from kernel_platform.outbox.publisher import OutboxPublisher
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
+from observability.tracing import configure_tracing
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.settings import settings
@@ -35,6 +36,7 @@ async def main() -> None:
     (issue #102), 5-секундный poll (issue #100, happy path) остаётся
     страховкой на случай потерянного `NOTIFY`.
     """
+    configure_tracing("identity-worker")
     engine = create_async_engine(
         settings.identity_database_url,
         pool_pre_ping=True,

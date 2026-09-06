@@ -5,6 +5,7 @@ import aio_pika
 from kernel_platform.outbox.listener import OutboxListener, to_asyncpg_dsn
 from kernel_platform.outbox.publisher import OutboxPublisher
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
+from observability.tracing import configure_tracing
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.search_worker import declare_search_events_queue
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     """Publishes Catalog's transactional-outbox rows to RabbitMQ."""
+    configure_tracing("catalog-outbox-worker")
     engine = create_async_engine(
         settings.catalog_database_url,
         pool_pre_ping=True,

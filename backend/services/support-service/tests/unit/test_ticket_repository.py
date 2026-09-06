@@ -1,8 +1,10 @@
+import json
 import uuid
 from datetime import UTC, datetime
 
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
+from opentelemetry.sdk.trace import TracerProvider
 
 from domain.entities.ticket import (
     InvalidStatusTransitionError,
@@ -59,13 +61,16 @@ async def test_create_adds_ticket_message_and_outbox_without_committing() -> Non
         author_id=uuid.uuid4(), subject="Subject", first_message="Message"
     ).value
 
-    await SqlTicketRepository(session).create(ticket)  # type: ignore[arg-type]
+    with TracerProvider().get_tracer("test").start_as_current_span("http_request"):
+        await SqlTicketRepository(session).create(ticket)  # type: ignore[arg-type]
 
     assert {type(item).__name__ for item in session.added} == {
         "TicketModel",
         "TicketMessageModel",
         "OutboxMessage",
     }
+    outbox = next(item for item in session.added if isinstance(item, OutboxMessage))
+    assert "traceparent" in json.loads(outbox.trace_context or "")
 
 
 def _stored_ticket(
