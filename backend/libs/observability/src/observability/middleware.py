@@ -5,12 +5,18 @@ import uuid
 from contextvars import Token
 from typing import Any, Protocol
 
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from observability.context import actor_id_var, request_id_var
+from observability.context import (
+    actor_id_var,
+    request_id_var,
+    span_id_var,
+    trace_id_var,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +46,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     и в одну access-log-строку на запрос . Middleware не знает,
     какой `TokenVerifier` ему подсунули."""
 
-    def __init__(self, app: ASGIApp, verifier: TokenVerifier) -> None:
+    def __init__(self, app: ASGIApp, verifier: TokenVerifier | None = None) -> None:
         """Сетапит мидлварь.
 
         Args:
@@ -71,6 +77,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         request_id_reset = request_id_var.set(request_id)
         actor_id_reset = await self._set_actor_id(request)
+        trace_id_reset, span_id_reset = self._set_trace_context()
         started_at = time.perf_counter()
         status_code = 500
         try:
@@ -102,6 +109,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request_id_var.reset(request_id_reset)
             if actor_id_reset is not None:
                 actor_id_var.reset(actor_id_reset)
+            if trace_id_reset is not None:
+                trace_id_var.reset(trace_id_reset)
+            if span_id_reset is not None:
+                span_id_var.reset(span_id_reset)
 
     async def _set_actor_id(self, request: Request) -> Token[int | str | None] | None:
         """Хелпер. Выковыривает токен, валидирует через `verifier` и сетит `actor_id_var`.
@@ -113,6 +124,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         Returns:
             Token[int | str | None] | None: Токен contextvar для последующего отката, или None если нет хидера/упала валидация."""
+        if self._verifier is None:
+            return None
+
         auth_header = request.headers.get("authorization", "")
         if not auth_header.lower().startswith("bearer "):
             return None
@@ -129,3 +143,16 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         except Exception:
             logger.warning("Не удалось верифицировать bearer-токен", exc_info=True)
             return None
+
+    @staticmethod
+    def _set_trace_context() -> tuple[
+        Token[str | None] | None, Token[str | None] | None
+    ]:
+        span = trace.get_current_span()
+        span_context = span.get_span_context()
+        if not span_context.is_valid:
+            return None, None
+        return (
+            trace_id_var.set(trace.format_trace_id(span_context.trace_id)),
+            span_id_var.set(trace.format_span_id(span_context.span_id)),
+        )

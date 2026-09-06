@@ -1,6 +1,8 @@
 # ruff: noqa: E501
 import json
 import logging
+import os
+import sys
 from datetime import UTC, datetime
 from typing import Any
 
@@ -100,6 +102,25 @@ def select_formatter(app_env: str, service: str) -> logging.Formatter:
 
     Returns:
         logging.Formatter: Сконфигурированный инстанс форматтера."""
-    if app_env == "dev":
+    requested_format = os.getenv("OBSERVABILITY_LOG_FORMAT", "").lower()
+    if requested_format == "json":
+        return JsonFormatter(service)
+    if requested_format in {"color", "text"} or app_env == "dev":
         return ColorFormatter(_DEV_FMT)
     return JsonFormatter(service)
+
+
+def configure_logging(
+    app_env: str,
+    service: str,
+    *,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Attach the selected formatter to a process logger once."""
+    target = logger if logger is not None else logging.getLogger()
+    if target.handlers:
+        return
+    target.setLevel(logging.INFO)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(select_formatter(app_env, service))
+    target.addHandler(handler)
