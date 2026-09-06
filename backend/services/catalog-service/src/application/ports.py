@@ -208,9 +208,7 @@ class SearchSnapshotWithOwner:
 
 
 class ProductSearchSnapshotSource(Protocol):
-    async def get(
-        self, product_id: uuid.UUID
-    ) -> SearchSnapshotWithOwner | None: ...
+    async def get(self, product_id: uuid.UUID) -> SearchSnapshotWithOwner | None: ...
 
     def stream_batches(
         self, *, batch_size: int

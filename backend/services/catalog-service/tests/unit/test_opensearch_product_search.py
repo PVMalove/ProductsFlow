@@ -49,7 +49,7 @@ async def test_index_uses_product_revision_for_opensearch_external_versioning() 
         owner_is_active=True,
     )
 
-    create_index, alias, request = request_log
+    create_index, alias, request, rebuild_request = request_log
     assert create_index.url.path == "/catalog-products-v1"
     assert json.loads(create_index.content)["settings"] == {
         "number_of_shards": 1,
@@ -77,6 +77,7 @@ async def test_index_uses_product_revision_for_opensearch_external_versioning() 
         "owner_is_active": True,
         "created_at": _CREATED_AT.isoformat(),
     }
+    assert rebuild_request.url.path == f"/catalog-products-rebuild/_doc/{product_id}"
     await client.aclose()
 
 
@@ -104,10 +105,11 @@ async def test_delete_uses_tombstone_revision_and_acks_a_stale_delete() -> None:
         )
     )
 
-    [request] = request_log
+    request, rebuild_request = request_log
     assert request.method == "DELETE"
     assert request.url.path == f"/catalog-products/_doc/{product_id}"
     assert dict(request.url.params) == {"version": "2", "version_type": "external_gte"}
+    assert rebuild_request.url.path == f"/catalog-products-rebuild/_doc/{product_id}"
     await client.aclose()
 
 
@@ -149,19 +151,18 @@ async def test_reindex_mirrors_live_writes_then_switches_the_alias_atomically() 
     ]
     assert methods_and_paths[2][0] == "PUT"
     assert methods_and_paths[2][1].startswith("/catalog-products-v")
-    live_write, mirrored_write = request_log[3:5]
+    rebuild_alias_action = json.loads(request_log[3].content)
+    live_write, mirrored_write = request_log[4:6]
     assert live_write.url.path == (
         "/catalog-products/_doc/00000000-0000-0000-0000-000000000001"
     )
-    assert mirrored_write.url.path.startswith("/catalog-products-v")
+    assert mirrored_write.url.path.startswith("/catalog-products-rebuild/")
     assert mirrored_write.url.path.endswith(
         "/_doc/00000000-0000-0000-0000-000000000001"
     )
-    live_owner_update, mirrored_owner_update = request_log[5:7]
+    live_owner_update, mirrored_owner_update = request_log[6:8]
     assert live_owner_update.url.path == "/catalog-products/_update_by_query"
-    assert mirrored_owner_update.url.path.startswith(
-        "/catalog-products-v"
-    )
+    assert mirrored_owner_update.url.path.startswith("/catalog-products-rebuild/")
     assert json.loads(mirrored_owner_update.content)["script"]["params"] == {
         "is_active": False
     }
@@ -170,8 +171,9 @@ async def test_reindex_mirrors_live_writes_then_switches_the_alias_atomically() 
         "remove": {"index": "*", "alias": "catalog-products"}
     }
     assert final_switch["actions"][1]["add"]["alias"] == "catalog-products"
-    assert final_switch["actions"][1]["add"]["index"] == (
-        mirrored_write.url.path.split("/")[1]
+    assert (
+        final_switch["actions"][1]["add"]["index"]
+        == (rebuild_alias_action["actions"][0]["add"]["index"])
     )
     await client.aclose()
 
@@ -213,7 +215,7 @@ async def test_search_configures_multilingual_fields_and_weighted_fuzzy_matching
     )
     await search.search("дрел")
 
-    create_index, _, _, search_request = request_log
+    create_index, _, _, _, search_request = request_log
     assert json.loads(create_index.content)["mappings"] == {
         "properties": {
             **{
@@ -306,6 +308,10 @@ async def test_index_migrates_existing_index_and_reindexes_its_documents() -> No
         ("PUT", "/catalog-products-v1/_mapping"),
         ("POST", "/catalog-products-v1/_update_by_query"),
         ("PUT", "/catalog-products/_doc/00000000-0000-0000-0000-000000000001"),
+        (
+            "PUT",
+            "/catalog-products-rebuild/_doc/00000000-0000-0000-0000-000000000001",
+        ),
     ]
     assert json.loads(request_log[3].content) == {"query": {"match_all": {}}}
     await client.aclose()
@@ -366,7 +372,15 @@ async def test_index_checks_an_existing_mapping_only_once_per_worker() -> None:
         ("PUT", "/catalog-products-v1"),
         ("GET", "/catalog-products-v1/_mapping"),
         ("PUT", "/catalog-products/_doc/00000000-0000-0000-0000-000000000001"),
+        (
+            "PUT",
+            "/catalog-products-rebuild/_doc/00000000-0000-0000-0000-000000000001",
+        ),
         ("PUT", "/catalog-products/_doc/00000000-0000-0000-0000-000000000003"),
+        (
+            "PUT",
+            "/catalog-products-rebuild/_doc/00000000-0000-0000-0000-000000000003",
+        ),
     ]
     await client.aclose()
 
@@ -432,12 +446,13 @@ async def test_set_owner_active_updates_every_indexed_product_of_the_owner() -> 
 
     await search.set_owner_active(user_id, is_active=False)
 
-    [request] = request_log
+    request, rebuild_request = request_log
     assert request.method == "POST"
     assert request.url.path == "/catalog-products/_update_by_query"
     body = json.loads(request.content)
     assert body["query"] == {"term": {"user_id": str(user_id)}}
     assert body["script"]["params"] == {"is_active": False}
+    assert rebuild_request.url.path == "/catalog-products-rebuild/_update_by_query"
     await client.aclose()
 
 

@@ -38,6 +38,7 @@ class OpenSearchProductSearch:
         self._index_ready = False
         self._index_ready_lock = asyncio.Lock()
         self._reindex_target: str | None = None
+        self._rebuild_alias = f"{index_name}-rebuild"
 
     async def close(self) -> None:
         if self._owns_client:
@@ -138,12 +139,14 @@ class OpenSearchProductSearch:
         await self._write_snapshot(
             self._index_name, snapshot, owner_is_active=owner_is_active
         )
-        # During a rebuild, live events are written to both generations.  The
-        # target is not publicly searchable until the alias swap.
-        if self._reindex_target is not None:
-            await self._write_snapshot(
-                self._reindex_target, snapshot, owner_is_active=owner_is_active
-            )
+        # The rebuild alias makes mirroring visible to independently-running
+        # worker processes too.  Outside a rebuild it simply resolves to 404.
+        await self._write_snapshot(
+            self._rebuild_alias,
+            snapshot,
+            owner_is_active=owner_is_active,
+            ignore_missing=True,
+        )
 
     async def index_rebuild(
         self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
@@ -167,6 +170,13 @@ class OpenSearchProductSearch:
             },
         )
         response.raise_for_status()
+        mirror_alias_response = await self._client.post(
+            "/_aliases",
+            json={
+                "actions": [{"add": {"index": target, "alias": self._rebuild_alias}}]
+            },
+        )
+        mirror_alias_response.raise_for_status()
         self._reindex_target = target
 
     async def complete_reindex(self) -> None:
@@ -179,6 +189,7 @@ class OpenSearchProductSearch:
                 "actions": [
                     {"remove": {"index": "*", "alias": self._index_name}},
                     {"add": {"index": target, "alias": self._index_name}},
+                    {"remove": {"index": target, "alias": self._rebuild_alias}},
                 ]
             },
         )
@@ -191,6 +202,7 @@ class OpenSearchProductSearch:
         snapshot: ProductSearchSnapshot,
         *,
         owner_is_active: bool,
+        ignore_missing: bool = False,
     ) -> None:
         async with observe_opensearch_latency("index"):
             response = await self._client.put(
@@ -213,7 +225,7 @@ class OpenSearchProductSearch:
             )
         # A delayed snapshot must not retry forever after external versioning
         # rejected it: the newer document is already the desired state.
-        if response.status_code != 409:
+        if response.status_code not in ({404, 409} if ignore_missing else {409}):
             response.raise_for_status()
 
     async def delete(self, tombstone: ProductSearchTombstone) -> None:
@@ -222,9 +234,7 @@ class OpenSearchProductSearch:
         ``external_gte`` makes this operation idempotent and ensures a late
         deletion cannot erase a document written at a higher revision.
         """
-        targets = [self._index_name]
-        if self._reindex_target is not None:
-            targets.append(self._reindex_target)
+        targets = [self._index_name, self._rebuild_alias]
         for index_name in targets:
             async with observe_opensearch_latency("delete"):
                 response = await self._client.delete(
@@ -243,9 +253,7 @@ class OpenSearchProductSearch:
         """Mass-updates every already-indexed Product of `user_id` in place,
         so an owner lifecycle event doesn't wait for each Product's own event
         to replay (issue #288 acceptance criterion 2)."""
-        targets = [self._index_name]
-        if self._reindex_target is not None:
-            targets.append(self._reindex_target)
+        targets = [self._index_name, self._rebuild_alias]
         for index_name in targets:
             response = await self._client.post(
                 f"/{index_name}/_update_by_query",
@@ -324,9 +332,7 @@ class OpenSearchProductSearch:
             "number_of_shards": 1,
             "number_of_replicas": 0,
             "analysis": {
-                "normalizer": {
-                    "lowercase": {"type": "custom", "filter": ["lowercase"]}
-                }
+                "normalizer": {"lowercase": {"type": "custom", "filter": ["lowercase"]}}
             },
         }
 

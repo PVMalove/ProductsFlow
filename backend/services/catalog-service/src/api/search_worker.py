@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 
 import aio_pika
@@ -287,7 +287,12 @@ def build_search_event_handler(
 SEARCH_EVENTS_QUEUE_NAME = "catalog.search-events"
 
 
-async def declare_search_events_queue(channel: AbstractChannel) -> AbstractQueue:
+async def declare_search_events_queue(
+    channel: AbstractChannel,
+    *,
+    retry_stage_ttl_ms: Mapping[str, int] | None = None,
+    queue_name: str = SEARCH_EVENTS_QUEUE_NAME,
+) -> AbstractQueue:
     """Declare the search consumer's retry ladder and its DLQ.
 
     The shared consumer acknowledges a failed message after forwarding it to
@@ -298,8 +303,9 @@ async def declare_search_events_queue(channel: AbstractChannel) -> AbstractQueue
     return await declare_topology(
         channel,
         service_name="catalog",
-        queue_name=SEARCH_EVENTS_QUEUE_NAME,
+        queue_name=queue_name,
         routing_keys=("product.*.v2", *OWNER_EVENT_TYPES),
+        retry_stage_ttl_ms=retry_stage_ttl_ms,
     )
 
 
