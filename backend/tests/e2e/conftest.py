@@ -19,6 +19,7 @@ _COMPOSE_FILES = (
 _COMPOSE_PROJECT = "productsflow-e2e"
 _ADMIN_EMAIL = "e2e-admin@example.test"
 _ADMIN_PASSWORD = "E2e-admin-password-123"
+_SEARCH_EVENTS_QUEUE = "catalog.search-events"
 _READINESS_DEADLINE_SECONDS = 30.0
 _MIN_RETRY_DELAY_SECONDS = 0.1
 _MAX_RETRY_DELAY_SECONDS = 2.0
@@ -51,6 +52,44 @@ def _run_compose(*args: str, environment: dict[str, str]) -> None:
             f"docker compose {' '.join(args)} failed with {result.returncode}:\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
+
+
+def _search_events_queue_is_declared(environment: dict[str, str]) -> bool:
+    """Checks RabbitMQ through the isolated Compose stack rather than
+    assuming that a started worker has already declared its bindings."""
+    result = subprocess.run(
+        _compose_command(
+            "exec", "-T", "rabbitmq", "rabbitmqctl", "list_queues", "name"
+        ),
+        cwd=_BACKEND_DIR,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0 and any(
+        line.strip() == _SEARCH_EVENTS_QUEUE for line in result.stdout.splitlines()
+    )
+
+
+async def _wait_for_search_events_queue(environment: dict[str, str]) -> None:
+    """Avoid publishing an owner-registration event before the durable search
+    queue has been bound; RabbitMQ otherwise discards it during cold start."""
+    deadline = time.monotonic() + _READINESS_DEADLINE_SECONDS
+    delay = _MIN_RETRY_DELAY_SECONDS
+    while True:
+        is_ready = await asyncio.to_thread(
+            _search_events_queue_is_declared, environment
+        )
+        if is_ready:
+            return
+        if time.monotonic() >= deadline:
+            pytest.fail(
+                "Timed out waiting for RabbitMQ queue "
+                f"{_SEARCH_EVENTS_QUEUE!r} to be declared"
+            )
+        await asyncio.sleep(min(_MAX_RETRY_DELAY_SECONDS, delay))
+        delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
 
 
 async def _wait_for_response(
@@ -161,6 +200,7 @@ async def gateway_client() -> AsyncIterator[httpx.AsyncClient]:
 
     try:
         _run_compose("up", "--build", "--detach", "--wait", environment=environment)
+        await _wait_for_search_events_queue(environment)
         async with httpx.AsyncClient(
             base_url=f"http://127.0.0.1:{port}",
             timeout=15.0,
