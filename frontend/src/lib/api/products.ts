@@ -8,19 +8,8 @@ export interface ProductView {
   is_active: boolean;
 }
 
-export interface PageMeta {
-  next_cursor: string | null;
-  prev_cursor: string | null;
-  has_more: boolean;
-  has_prev: boolean;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  meta: PageMeta;
-}
-
 import { apiClient } from '../apiClient';
+import { ApiResponse } from './types';
 
 export async function getProducts(cursor?: string | null): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';

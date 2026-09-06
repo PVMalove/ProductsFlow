@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { isAxiosError } from 'axios';
 import { createTicket } from '@/lib/api/tickets';
@@ -13,23 +12,23 @@ interface TicketFormValues {
 }
 
 export default function NewTicketPage() {
-  const router = useRouter();
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<TicketFormValues>();
 
   const onSubmit = async (data: TicketFormValues) => {
     setError('');
+    setSuccess(false);
     try {
-      const ticket = await createTicket(data.subject, data.first_message);
-      // Wait, what should happen after creation?
-      // Redirect to the ticket details or dashboard.
-      // For now, maybe just redirect to a success state or ticket list.
-      router.push(`/support/tickets/${ticket.id}`);
+      await createTicket(data.subject, data.first_message);
+      setSuccess(true);
+      reset();
     } catch (err) {
       if (isAxiosError(err)) {
         setError(err.response?.data?.message || 'Failed to create ticket');
@@ -54,8 +53,6 @@ export default function NewTicketPage() {
               type="text"
               {...register('subject', { 
                 required: 'Subject is required',
-                minLength: { value: 1, message: 'Subject must not be empty' },
-                maxLength: { value: 200, message: 'Subject cannot exceed 200 characters' }
               })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Brief summary of the issue"
@@ -73,8 +70,6 @@ export default function NewTicketPage() {
               id="first_message"
               {...register('first_message', { 
                 required: 'Message is required',
-                minLength: { value: 1, message: 'Message must not be empty' },
-                maxLength: { value: 10000, message: 'Message is too long' }
               })}
               rows={5}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -91,15 +86,13 @@ export default function NewTicketPage() {
             </div>
           )}
 
+          {success && (
+            <div className="p-3 bg-green-50 text-green-700 rounded-md">
+              Ticket submitted successfully.
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-6">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => router.back()}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Submitting...' : 'Submit Ticket'}
             </Button>

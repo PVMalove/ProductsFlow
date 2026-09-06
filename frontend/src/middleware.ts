@@ -7,6 +7,7 @@ import { jwtDecode } from 'jwt-decode';
 const ROLE_PROTECTED_ROUTES: Record<string, string[]> = {
   '/admin': ['admin'],
   '/owner': ['owner'],
+  '/support': ['user', 'admin'],
 };
 
 export function middleware(request: NextRequest) {
