@@ -380,6 +380,43 @@ async def test_search_filters_by_category_and_inclusive_price_range() -> None:
 
 
 @pytest.mark.parametrize(
+    ("min_price", "max_price", "expected_range"),
+    [
+        (10.0, None, {"gte": 10.0}),
+        (None, 99.0, {"lte": 99.0}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_search_price_range_filter_supports_an_open_ended_bound(
+    min_price: float | None,
+    max_price: float | None,
+    expected_range: dict[str, float],
+) -> None:
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        return httpx.Response(200, json={"hits": {"hits": []}})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.search("drill", min_price=min_price, max_price=max_price)
+
+    [request] = request_log
+    assert json.loads(request.content)["query"]["bool"]["filter"] == [
+        {"term": {"is_active": True}},
+        {"term": {"owner_is_active": True}},
+        {"range": {"price": expected_range}},
+    ]
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
     ("sort", "expected_clause"),
     [
         (ProductSortOption.RELEVANCE, [{"_score": "desc"}, {"id": "asc"}]),
@@ -412,8 +449,19 @@ async def test_search_sort_clause_ends_with_product_id_tie_breaker(
     await client.aclose()
 
 
+@pytest.mark.parametrize(
+    "sort",
+    [
+        ProductSortOption.RELEVANCE,
+        ProductSortOption.PRICE_ASC,
+        ProductSortOption.PRICE_DESC,
+        ProductSortOption.NEWEST,
+    ],
+)
 @pytest.mark.asyncio
-async def test_search_forwards_cursor_as_opensearch_search_after() -> None:
+async def test_search_forwards_cursor_as_opensearch_search_after(
+    sort: ProductSortOption,
+) -> None:
     request_log: list[httpx.Request] = []
 
     async def _handler(request: httpx.Request) -> httpx.Response:
@@ -430,10 +478,8 @@ async def test_search_forwards_cursor_as_opensearch_search_after() -> None:
 
     await search.search(
         "drill",
-        sort=ProductSortOption.PRICE_ASC,
-        cursor=SearchCursor(
-            sort=ProductSortOption.PRICE_ASC, sort_value=42.5, product_id=product_id
-        ),
+        sort=sort,
+        cursor=SearchCursor(sort=sort, sort_value=42.5, product_id=product_id),
     )
 
     [request] = request_log
@@ -441,8 +487,19 @@ async def test_search_forwards_cursor_as_opensearch_search_after() -> None:
     await client.aclose()
 
 
+@pytest.mark.parametrize(
+    "sort",
+    [
+        ProductSortOption.RELEVANCE,
+        ProductSortOption.PRICE_ASC,
+        ProductSortOption.PRICE_DESC,
+        ProductSortOption.NEWEST,
+    ],
+)
 @pytest.mark.asyncio
-async def test_search_builds_next_cursor_from_the_last_hit_when_more_remain() -> None:
+async def test_search_builds_next_cursor_from_the_last_hit_when_more_remain(
+    sort: ProductSortOption,
+) -> None:
     product_ids = [f"00000000-0000-0000-0000-{index:012d}" for index in range(1, 4)]
 
     async def _handler(_request: httpx.Request) -> httpx.Response:
@@ -476,7 +533,7 @@ async def test_search_builds_next_cursor_from_the_last_hit_when_more_remain() ->
         base_url="http://opensearch", index_name="catalog-products", client=client
     )
 
-    page = await search.search("drill", sort=ProductSortOption.PRICE_ASC, limit=2)
+    page = await search.search("drill", sort=sort, limit=2)
 
     assert [item.id for item in page.items] == [
         uuid.UUID(product_ids[0]),
@@ -484,9 +541,7 @@ async def test_search_builds_next_cursor_from_the_last_hit_when_more_remain() ->
     ]
     assert page.page_info.has_more is True
     assert page.page_info.next_cursor is not None
-    cursor = decode_search_cursor(
-        page.page_info.next_cursor, expected_sort=ProductSortOption.PRICE_ASC
-    )
+    cursor = decode_search_cursor(page.page_info.next_cursor, expected_sort=sort)
     assert cursor.sort_value == 11.0
     assert cursor.product_id == uuid.UUID(product_ids[1])
     await client.aclose()

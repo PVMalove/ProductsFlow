@@ -168,6 +168,40 @@ async def test_public_search_passes_each_supported_sort_option(
     assert search.calls[0]["sort"] == ProductSortOption(sort)
 
 
+async def test_public_search_combines_category_price_sort_and_cursor_in_one_request(
+    catalog_client,
+) -> None:
+    product_id = uuid.UUID("00000000-0000-0000-0000-000000000077")
+    cursor = SearchCursor(
+        sort=ProductSortOption.PRICE_DESC, sort_value=42.0, product_id=product_id
+    )
+    token = encode_search_cursor(cursor)
+    search = FakeProductSearch()
+    with _overridden_search(search):
+        response = await catalog_client.get(
+            "/api/v1/products/search",
+            params={
+                "q": "drill",
+                "category": "Tools",
+                "min_price": 10,
+                "max_price": 99,
+                "sort": "price_desc",
+                "after": token,
+            },
+        )
+
+    assert response.status_code == 200
+    assert search.calls[0] == {
+        "query": "drill",
+        "category": "Tools",
+        "min_price": 10.0,
+        "max_price": 99.0,
+        "sort": ProductSortOption.PRICE_DESC,
+        "limit": 20,
+        "cursor": cursor,
+    }
+
+
 async def test_public_search_rejects_an_unsupported_sort_value(catalog_client) -> None:
     with _overridden_search(FakeProductSearch()):
         response = await catalog_client.get(
