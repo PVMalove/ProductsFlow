@@ -118,6 +118,7 @@ class ProductListRequest(BaseModel):
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)
     before: str | None = Query(default=None)
+    category: str | None = Query(default=None)
 
     def to_query(self) -> ListProductsQuery:
         if self.after is not None and self.before is not None:
@@ -130,7 +131,10 @@ class ProductListRequest(BaseModel):
         except InvalidCursorError as exc:
             raise ProductListInvalidCursorError from exc
         return ListProductsQuery(
-            limit=self.limit, after=after_cursor, before=before_cursor
+            limit=self.limit,
+            after=after_cursor,
+            before=before_cursor,
+            category=self.category,
         )
 
 

@@ -11,11 +11,14 @@ export interface ProductView {
 import { apiClient } from '../apiClient';
 import { ApiResponse } from './types';
 
-export async function getProducts(cursor?: string | null): Promise<ApiResponse<ProductView[]>> {
+export async function getProducts(cursor?: string | null, category?: string | null): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const url = new URL(`${baseUrl}/api/v1/products`);
   if (cursor) {
     url.searchParams.append('after', cursor);
+  }
+  if (category) {
+    url.searchParams.append('category', category);
   }
   
   const res = await fetch(url.toString(), {
