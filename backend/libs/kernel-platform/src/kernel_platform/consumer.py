@@ -13,6 +13,7 @@ from opentelemetry import propagate, trace
 from opentelemetry.context import Context
 from opentelemetry.trace import SpanKind
 
+from kernel_platform.outbox.trace_context import w3c_carrier
 from kernel_platform.topology import RETRY_STAGE_TTL_MS
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,7 @@ def _extract_message_context(headers: HeadersType) -> Context:
     returned context empty, so `start_as_current_span` below starts a new
     root span instead of raising.
     """
-    carrier = {key: value for key, value in headers.items() if isinstance(value, str)}
-    return propagate.extract(carrier)
+    return propagate.extract(w3c_carrier(dict(headers)))
 
 
 def next_stage_index(headers: HeadersType, stage_queue_names: Sequence[str]) -> int:
