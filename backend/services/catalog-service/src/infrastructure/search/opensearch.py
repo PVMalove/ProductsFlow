@@ -11,6 +11,7 @@ from application.search_cursor import (
 )
 from application.search_snapshot import ProductSearchSnapshot
 from contracts.product import ProductView
+from infrastructure.metrics.search_metrics import observe_opensearch_latency
 
 _SORT_CLAUSES: dict[ProductSortOption, list[dict[str, str]]] = {
     ProductSortOption.RELEVANCE: [{"_score": "desc"}, {"id": "asc"}],
@@ -91,7 +92,10 @@ class OpenSearchProductSearch:
         if cursor is not None:
             body["search_after"] = [cursor.sort_value, str(cursor.product_id)]
 
-        response = await self._client.post(f"/{self._index_name}/_search", json=body)
+        async with observe_opensearch_latency("search"):
+            response = await self._client.post(
+                f"/{self._index_name}/_search", json=body
+            )
         if response.status_code == 404:
             return Page(
                 items=[],
@@ -129,24 +133,25 @@ class OpenSearchProductSearch:
         self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
     ) -> None:
         await self._ensure_index()
-        response = await self._client.put(
-            f"/{self._index_name}/_doc/{snapshot.product_id}",
-            params={
-                "version": snapshot.search_revision,
-                "version_type": "external_gte",
-            },
-            json={
-                "id": str(snapshot.product_id),
-                "user_id": str(snapshot.user_id),
-                "name": snapshot.name,
-                "description": snapshot.description,
-                "category": snapshot.category,
-                "price": snapshot.price,
-                "is_active": snapshot.is_active,
-                "owner_is_active": owner_is_active,
-                "created_at": snapshot.created_at.isoformat(),
-            },
-        )
+        async with observe_opensearch_latency("index"):
+            response = await self._client.put(
+                f"/{self._index_name}/_doc/{snapshot.product_id}",
+                params={
+                    "version": snapshot.search_revision,
+                    "version_type": "external_gte",
+                },
+                json={
+                    "id": str(snapshot.product_id),
+                    "user_id": str(snapshot.user_id),
+                    "name": snapshot.name,
+                    "description": snapshot.description,
+                    "category": snapshot.category,
+                    "price": snapshot.price,
+                    "is_active": snapshot.is_active,
+                    "owner_is_active": owner_is_active,
+                    "created_at": snapshot.created_at.isoformat(),
+                },
+            )
         response.raise_for_status()
 
     async def set_owner_active(self, user_id: uuid.UUID, *, is_active: bool) -> None:

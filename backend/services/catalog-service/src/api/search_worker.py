@@ -3,12 +3,13 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aio_pika
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractQueue
 from kernel_platform.consumer import consume
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
+from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from application.ports import (
@@ -19,6 +20,11 @@ from application.ports import (
 from application.search_snapshot import ProductSearchSnapshot
 from core.settings import settings
 from infrastructure.db.search_owner_state import SqlOwnerSearchStateStore
+from infrastructure.metrics.search_metrics import (
+    SEARCH_INDEXING_LAG,
+    PendingEventTracker,
+    poll_dlq_depth,
+)
 from infrastructure.search.opensearch import OpenSearchProductSearch
 
 logger = logging.getLogger(__name__)
@@ -197,19 +203,51 @@ async def handle_search_event(
         await handle_owner_event(message, indexer, owner_states)
 
 
+def _tracking_key(message: AbstractIncomingMessage) -> tuple[int, datetime] | None:
+    """Возвращает `(message_id, occurred_at)` для отслеживания в
+    `PendingEventTracker` (issue #293), либо `None`, если у сообщения нет
+    того, что для этого нужно — тогда обработка идёт как обычно, просто без
+    метрик наблюдаемости для этого конкретного сообщения."""
+    try:
+        message_id = _message_id(message)
+    except ValueError:
+        return None
+    occurred_at = message.timestamp
+    if occurred_at is None:
+        return None
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=UTC)
+    return message_id, occurred_at
+
+
 def build_search_event_handler(
     indexer: ProductSearchIndexer,
     owner_states: OwnerSearchStateStore,
+    tracker: PendingEventTracker,
 ) -> Callable[[AbstractIncomingMessage], Awaitable[None]]:
     async def _handler(message: AbstractIncomingMessage) -> None:
-        await handle_search_event(message, indexer, owner_states)
+        tracking_key = _tracking_key(message)
+        if tracking_key is not None:
+            await tracker.mark_received(*tracking_key)
+        try:
+            await handle_search_event(message, indexer, owner_states)
+        finally:
+            if tracking_key is not None:
+                await tracker.mark_done(tracking_key[0])
+        if tracking_key is not None and _event_type(message) in PRODUCT_EVENT_TYPES:
+            _, occurred_at = tracking_key
+            lag_seconds = (datetime.now(UTC) - occurred_at).total_seconds()
+            SEARCH_INDEXING_LAG.observe(max(lag_seconds, 0.0))
 
     return _handler
 
 
+SEARCH_EVENTS_QUEUE_NAME = "catalog.search-events"
+
+
 async def declare_search_events_queue(channel: AbstractChannel) -> AbstractQueue:
     exchange = await channel.get_exchange(EVENTS_EXCHANGE_NAME, ensure=True)
-    queue = await channel.declare_queue("catalog.search-events", durable=True)
+    queue = await channel.declare_queue(SEARCH_EVENTS_QUEUE_NAME, durable=True)
     await queue.bind(exchange, routing_key="product.*.v2")
     # Bound here (not only by identity's own topology) so an owner event
     # published before catalog-search-worker finishes starting isn't lost —
@@ -236,14 +274,28 @@ async def main() -> None:
         base_url=settings.catalog_opensearch_url,
         index_name=settings.catalog_search_index_name,
     )
+    tracker = PendingEventTracker()
+    start_http_server(settings.catalog_search_worker_metrics_port)
+    dlq_poll_task = asyncio.create_task(
+        poll_dlq_depth(
+            management_url=settings.catalog_rabbitmq_management_url,
+            username=settings.catalog_rabbitmq_management_user,
+            password=settings.catalog_rabbitmq_management_password,
+            queue_name=SEARCH_EVENTS_QUEUE_NAME,
+            interval_seconds=settings.catalog_search_dlq_poll_interval_seconds,
+        )
+    )
     try:
         async with connection:
             channel = await connection.channel()
             queue = await declare_search_events_queue(channel)
-            await consume(queue, build_search_event_handler(indexer, owner_states))
+            await consume(
+                queue, build_search_event_handler(indexer, owner_states, tracker)
+            )
             logger.info("catalog-search-worker: search event consumer started")
             await asyncio.Future()
     finally:
+        dlq_poll_task.cancel()
         await indexer.close()
         await engine.dispose()
 

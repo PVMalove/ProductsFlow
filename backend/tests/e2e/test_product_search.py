@@ -20,6 +20,14 @@ async def _register_and_login(client: httpx.AsyncClient, *, email: str) -> str:
     return str(login.json()["access_token"])
 
 
+# Кэш первой страницы поиска (issue #293) допускает суммарную видимую
+# задержку до 70с (10с indexing SLA + 60с Redis TTL): первый опрос под этим
+# запросом может закэшировать ещё не проиндексированный (пустой) результат,
+# и следующий опрос увидит актуальные данные только после протухания записи
+# по TTL — 30с дедлайна тут уже недостаточно.
+_SEARCH_VISIBILITY_DEADLINE_SECONDS = 75
+
+
 async def _wait_for_search(
     client: httpx.AsyncClient,
     *,
@@ -27,7 +35,7 @@ async def _wait_for_search(
     is_ready: Callable[[list[dict[str, object]]], bool],
     expectation: str,
 ) -> list[dict[str, object]]:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + _SEARCH_VISIBILITY_DEADLINE_SECONDS
     while True:
         response = await client.get("/api/v1/products/search", params={"q": query})
         assert response.status_code == 200, response.text
@@ -171,3 +179,43 @@ async def test_public_search_applies_multilingual_relevance_and_safe_fuzziness(
     await _wait_for_search_result(
         gateway_client, query="co", product_id=english_id, expected=False
     )
+
+
+@pytest.mark.asyncio
+async def test_public_search_first_page_cache_preserves_bff_contract_on_hit_and_miss(
+    gateway_client: httpx.AsyncClient,
+) -> None:
+    """Issue #293: Redis кэширует первую страницу — оборачивающий декоратор
+    не должен менять форму BFF-конверта ни на промахе (первое обращение к
+    ещё не закэшированному ключу), ни на попадании (повтор в пределах TTL)."""
+    suffix = uuid.uuid4().hex
+    token = await _register_and_login(
+        gateway_client, email=f"e2e-search-cache-{suffix}@example.test"
+    )
+    ready_query = f"readytoken{suffix}"
+    cache_query = f"cachetoken{suffix}"
+    product_id = await _create_product(
+        gateway_client,
+        token=token,
+        name=f"Product {ready_query} {cache_query}",
+        description="Catalog search cache hit/miss BFF contract test",
+    )
+    # Ждём готовности через отдельный, ранее не запрошенный термин — сам
+    # запрос под `cache_query` ещё не делался ни разу, так что следующий
+    # вызов ниже будет настоящим первым обращением (промахом), а не уже
+    # прогретым кэшем.
+    await _wait_for_search_result(
+        gateway_client, query=ready_query, product_id=product_id, expected=True
+    )
+
+    miss_response = await gateway_client.get(
+        "/api/v1/products/search", params={"q": cache_query}
+    )
+    hit_response = await gateway_client.get(
+        "/api/v1/products/search", params={"q": cache_query}
+    )
+
+    assert miss_response.status_code == 200, miss_response.text
+    assert hit_response.status_code == 200, hit_response.text
+    assert miss_response.json() == hit_response.json()
+    assert product_id in {str(product["id"]) for product in hit_response.json()["data"]}
