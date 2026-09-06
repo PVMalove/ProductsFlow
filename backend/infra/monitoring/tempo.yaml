@@ -1,0 +1,30 @@
+# Однопроцессный Tempo (issue #328, ADR 0015), хранилище трейсов —
+# существующий MinIO (bucket MINIO_BUCKET_NAME_TEMPO, создаётся
+# monitoring-minio-init до старта этого сервиса). Принимает только OTLP/gRPC
+# от `observability.tracing` (backend/libs/observability) — HTTP-приёмник не
+# нужен, инструментированные процессы всегда экспортируют по gRPC.
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          # Дефолт биндится на localhost — недостижим для других контейнеров
+          # (app-процессы шлют на tempo:4317), нужен явный 0.0.0.0.
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: ${MINIO_BUCKET_NAME_TEMPO}
+      endpoint: minio:9000
+      access_key: ${MINIO_ROOT_USER}
+      secret_key: ${MINIO_ROOT_PASSWORD}
+      insecure: true
+      forcepathstyle: true
+    wal:
+      path: /var/tempo/wal

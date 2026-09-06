@@ -32,6 +32,10 @@ backend/
 ├── docker-compose.dev.yml       # Override: gateway публикует 8080:80 (единственный порт), APP_ENV=dev
 ├── docker-compose.prod.yml      # Override: gateway публикует 80:80 (единственный порт), APP_ENV=prod, restart: unless-stopped
 ├── docker-compose.e2e.yml       # Override: Nginx Gateway, только для E2E-фикстуры (не для dev/prod)
+├── docker-compose.monitoring.yml # Opt-in overlay: Prometheus/Loki/Promtail/Tempo/Grafana (ADR 0015)
+├── infra/
+│   ├── gateway/                  # nginx.conf прод/dev Gateway'я + смоук-тест
+│   └── monitoring/               # Конфиги Prometheus/Loki/Tempo/Promtail/Grafana-провижининга
 ├── tests/e2e/                   # Межсервисные black-box сценарии + nginx.conf Gateway'я
 │
 ├── libs/                        # Shared Kernel — path-зависимости, HEAD, без semver
@@ -46,7 +50,7 @@ backend/
     └── support-service/          # Тикеты, user_projection
 ```
 
-Никакого `infra/` или общего `gateway/`-каталога на уровне `backend/` нет — все compose-файлы лежат в корне `backend/`, а Nginx для E2E — в `backend/tests/e2e/`.
+`backend/infra/` содержит только статические конфиги для Compose-сервисов (`gateway/nginx.conf`, `monitoring/*`) — сами compose-файлы лежат в корне `backend/`. Nginx для E2E — отдельно, в `backend/tests/e2e/`.
 
 **Окружение — общий workspace-lock, не изоляция по пакету.** Каждый пакет (`libs/*`, `services/*`) объявляет свои зависимости и `[dependency-groups] dev` в собственном `pyproject.toml`, но резолвятся они в один `backend/uv.lock`/`backend/.venv` — отдельных `uv.lock` внутри `libs/*`/`services/*` нет. Это реинтегрированный workspace (`[tool.uv.workspace] members = ["libs/*", "services/*"]` в `backend/pyproject.toml`), понадобившийся для `backend/tests/e2e/` — межсервисного набора тестов, не принадлежащего ни одному пакету и которому нужно одно связное окружение (`httpx`, `pytest`, `pytest-asyncio`). `make check`/`test`/`format pkg=<member>` делают `cd libs/<member>|services/<member> && uv sync --all-packages` — `cd` только выбирает, какой пакет линтуется/тестируется, а не какое окружение резолвится: оно всегда одно на весь `backend/`. Editable path-зависимость на kernel-пакеты — в dev; `--no-editable` — в production-образе каждого сервиса (у Dockerfile своя, изолированная сборка). Ломающее изменение в любом kernel-пакете красит CI-матрицу у всех потребителей сразу — это и есть защитный механизм вместо версионирования kernel semver'ом.
 

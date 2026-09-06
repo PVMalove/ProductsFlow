@@ -97,7 +97,7 @@ services:
 
   catalog-bootstrap:
     # One-off bootstrap step (ADR 0001, issue #208): alembic upgrade head,
-    # then ensure_minio_buckets, then a bounded wait for catalog-worker to
+    # then ensure_minio_bucket, then a bounded wait for catalog-worker to
     # project identity's admin user into OwnerReadModel before seeding 360
     # demo products through the real CreateProductCommand/
     # UpsertProductImageCommand handlers. Deliberately NOT a dependency of
@@ -123,8 +123,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
       MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
-      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
-      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
       # Дефолт в Settings резолвится относительно файла самого
       # установленного пакета (site-packages в этом образе) —
       # переопределяем туда, куда Dockerfile реально копирует ассет
@@ -155,8 +153,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
       MINIO_BUCKET_NAME_PRODUCT: ${MINIO_BUCKET_NAME_PRODUCT:-product-chunks}
-      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
-      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
     depends_on:
       catalog-bootstrap:
         condition: service_completed_successfully

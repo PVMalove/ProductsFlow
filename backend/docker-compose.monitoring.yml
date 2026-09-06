@@ -1,0 +1,155 @@
+# Opt-in LGTM overlay (issue #328, ADR 0015): Prometheus + Loki + Promtail +
+# Tempo + Grafana поверх уже поднятого backend-стека. Использует
+# существующий MinIO как S3-хранилище Loki/Tempo — своей БД/бакета не
+# заводит. Наружу публикуется только Grafana; всё остальное — во внутренней
+# backend-network. Не вводит новый Make target (см. ADR 0015) — запускается
+# явной командой:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# Смоук-процедура — в README.md, раздел «Наблюдаемость (LGTM overlay)».
+x-minio-credentials: &minio-credentials
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-secret-key}
+
+services:
+  # Каждому инструментированному процессу (HTTP + async-воркеры) нужен адрес
+  # OTLP/gRPC-коллектора — без него `observability.tracing` остаётся no-op
+  # (см. ADR 0015: экспорт трейсов best-effort). OBSERVABILITY_LOG_FORMAT
+  # выставлен только трём *-api: только их main.py вызывает
+  # `configure_logging` (`observability.formatters`/`core.logging_config`) —
+  # *-worker процессы её не читают, так что там это был бы no-op.
+  identity-api:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OBSERVABILITY_LOG_FORMAT: json
+
+  identity-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+
+  catalog-api:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OBSERVABILITY_LOG_FORMAT: json
+
+  catalog-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+
+  catalog-outbox-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+
+  catalog-search-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+
+  support-api:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OBSERVABILITY_LOG_FORMAT: json
+
+  support-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+
+  # Одноразовый идемпотентный инициализатор — заводит buckets Loki/Tempo в
+  # уже существующем MinIO до старта самих Loki/Tempo (AC #328). Осознанно
+  # не часть catalog-bootstrap: их жизненный цикл принадлежит monitoring
+  # overlay, а не Catalog (ADR 0015).
+  monitoring-minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - >
+        mc alias set minio http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing "minio/$$MINIO_BUCKET_NAME_LOKI" &&
+        mc mb --ignore-existing "minio/$$MINIO_BUCKET_NAME_TEMPO"
+    environment:
+      <<: *minio-credentials
+      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
+      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - monitoring_prometheus_data:/prometheus
+    networks:
+      - backend-network
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki-config.yaml", "-config.expand-env=true"]
+    environment:
+      <<: *minio-credentials
+      MINIO_BUCKET_NAME_LOKI: ${MINIO_BUCKET_NAME_LOKI:-loki-chunks}
+    volumes:
+      - ./infra/monitoring/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - monitoring_loki_data:/loki
+    depends_on:
+      monitoring-minio-init:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    environment:
+      <<: *minio-credentials
+      MINIO_BUCKET_NAME_TEMPO: ${MINIO_BUCKET_NAME_TEMPO:-tempo-traces}
+    volumes:
+      - ./infra/monitoring/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - monitoring_tempo_data:/var/tempo
+    depends_on:
+      monitoring-minio-init:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/promtail-config.yaml", "-config.expand-env=true"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-product_flow-backend}
+    volumes:
+      - ./infra/monitoring/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - monitoring_promtail_positions:/var/promtail
+    depends_on:
+      - loki
+    networks:
+      - backend-network
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - monitoring_grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    ports:
+      - "3300:3000"
+    networks:
+      - backend-network
+
+volumes:
+  monitoring_prometheus_data:
+  monitoring_loki_data:
+  monitoring_tempo_data:
+  monitoring_promtail_positions:
+  monitoring_grafana_data:

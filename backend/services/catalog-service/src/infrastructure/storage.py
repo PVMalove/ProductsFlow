@@ -101,10 +101,9 @@ def get_storage() -> S3Storage:
 StorageDI = Annotated[S3Storage, Depends(get_storage)]
 
 
-async def ensure_minio_buckets() -> None:
+async def ensure_minio_bucket() -> None:
     storage = get_storage()
-    for bucket_name in settings.minio_bucket_names:
-        await storage.ensure_bucket_exists(bucket_name)
+    await storage.ensure_bucket_exists(settings.minio_bucket_name_product)
 
 
-__all__ = ["S3Storage", "StorageDI", "ensure_minio_buckets", "get_storage"]
+__all__ = ["S3Storage", "StorageDI", "ensure_minio_bucket", "get_storage"]

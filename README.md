@@ -179,6 +179,35 @@ Swagger UI каждого сервиса — по его собственном�
 - catalog-service: http://localhost:9011/docs
 - support-service: http://localhost:9012/docs
 
+## Наблюдаемость (LGTM overlay, опционально)
+
+Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015). Использует существующий MinIO как S3-хранилище Loki/Tempo, ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+
+```bash
+cd backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up -d
+```
+
+Grafana — http://localhost:3300 (логин/пароль по умолчанию `admin`/`admin`, переопределяются `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`).
+
+**Смоук-проверка** (подтверждает связку HTTP-запрос → Loki-лог → Tempo-трейс):
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"smoke@example.test","password":"Smoke-Test-Pass-123"}'
+```
+
+1. В Grafana → Explore → Loki: `{compose_service="identity-api"}` — найти строку `POST /api/v1/auth/register` и её JSON-поле `trace_id`.
+2. По этой же строке кликнуть derived-field-ссылку «Открыть трейс в Tempo» (или открыть трейс по `trace_id` напрямую в Explore → Tempo).
+3. В трейсе должны быть: HTTP-спан `POST /api/v1/auth/register` (identity-service), `publish_message` (identity-worker, Outbox-паблишер) и `consume_message` (catalog-worker/catalog-search-worker/support-worker — все три консьюмера `user.registered.v1`).
+
+Остановить оверлей (данные в томах и в MinIO сохраняются):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml stop prometheus loki tempo promtail grafana
+```
+
 ## Тестирование
 
 Тесты запускаются изолированно по пакетам — свой `uv`-run, но единое окружение:
