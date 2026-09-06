@@ -1,4 +1,3 @@
-import { render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 
 describe('MSW Setup Test', () => {

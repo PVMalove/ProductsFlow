@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { TextDecoder, TextEncoder } = require('node:util')
 const { ReadableStream, TransformStream } = require('node:stream/web')
 const { MessageChannel, MessagePort } = require('node:worker_threads')
