@@ -39,7 +39,7 @@ export default function CatalogList() {
         {data.pages.map((page, i) => (
           <div key={i} className="contents">
             {page.data.map((product: ProductView) => {
-              const canEdit = actor?.id === product.user_id || actor?.role === 'ADMIN';
+              const canEdit = actor?.id === product.user_id || actor?.role === 'admin';
 
               return (
                 <div key={product.id} className="border rounded-lg p-4 shadow-sm flex flex-col gap-2 bg-white dark:bg-zinc-900">

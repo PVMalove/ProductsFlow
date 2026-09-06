@@ -32,7 +32,7 @@ export const handlers = [
         ctx.json({
           data: {
             id: 'user-new',
-            role: 'USER',
+            role: 'user',
             email: body.email
           },
           meta: {}
@@ -118,7 +118,7 @@ export const handlers = [
       ctx.status(200),
       ctx.json({
         id: 'user-123',
-        role: 'USER',
+        role: 'user',
         email: 'user@example.com'
       })
     );

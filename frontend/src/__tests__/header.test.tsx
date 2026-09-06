@@ -30,7 +30,7 @@ describe('Header', () => {
 
   it('renders User links when authenticated as USER', () => {
     useAuthStore.setState({
-      actor: { id: '1', role: 'USER', email: 'user@example.com' },
+      actor: { id: '1', role: 'user', email: 'user@example.com' },
     });
     render(<Header />);
     expect(screen.getByText('Мои товары')).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('Header', () => {
 
   it('renders Admin link when authenticated as ADMIN', () => {
     useAuthStore.setState({
-      actor: { id: '2', role: 'ADMIN', email: 'admin@example.com' },
+      actor: { id: '2', role: 'admin', email: 'admin@example.com' },
     });
     render(<Header />);
     expect(screen.getByText('Админка')).toBeInTheDocument();
@@ -51,7 +51,7 @@ describe('Header', () => {
 
   it('calls logout API and clears store on logout click', async () => {
     useAuthStore.setState({
-      actor: { id: '1', role: 'USER', email: 'user@example.com' },
+      actor: { id: '1', role: 'user', email: 'user@example.com' },
     });
     
     (apiClient.post as jest.Mock).mockResolvedValueOnce({});

@@ -41,7 +41,7 @@ export function Header() {
                 <Link href="/support" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Поддержка
                 </Link>
-                {actor.role === 'ADMIN' && (
+                {actor.role === 'admin' && (
                   <Link href="/admin" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
                     Админка
                   </Link>
