@@ -20,6 +20,8 @@ export interface ApiResponse<T> {
   meta: PageMeta;
 }
 
+import { apiClient } from '../apiClient';
+
 export async function getProducts(cursor?: string | null): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const url = new URL(`${baseUrl}/api/v1/products`);
@@ -36,4 +38,9 @@ export async function getProducts(cursor?: string | null): Promise<ApiResponse<P
   }
   
   return res.json();
+}
+
+export async function getProduct(id: string): Promise<ProductView> {
+  const res = await apiClient.get<ApiResponse<ProductView>>(`/v1/products/${id}`);
+  return res.data.data;
 }

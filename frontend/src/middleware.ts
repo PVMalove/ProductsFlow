@@ -6,10 +6,10 @@ import { jwtDecode } from 'jwt-decode';
 // Example: '/admin': ['admin']
 const ROLE_PROTECTED_ROUTES: Record<string, string[]> = {
   '/admin': ['admin'],
-  // Add other protected routes here
+  '/owner': ['owner'],
 };
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const requiredRoles = Object.entries(ROLE_PROTECTED_ROUTES).find(([route]) =>
