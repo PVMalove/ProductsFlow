@@ -24,84 +24,9 @@ ProductsFlow — распределённая микросервисная пл�
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. **Единая точка входа — Nginx Gateway**: и в dev (`8080:80`), и в prod (`80:80`) это единственный сервис, публикующий порт наружу; `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Отдельно от него — изолированная E2E-тестовая инфраструктура (свой Nginx-Gateway), поднимаемая и уничтожаемая pytest-фикстурой на время прогона.
 
-<details>
-<summary><b>Показать схему макро-архитектуры (Mermaid)</b></summary>
+![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity](docs/architecture/diagrams/macro-architecture.png)
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    Client(["Web / BFF Clients"])
-
-    Client -->|"HTTP :8080 (dev) / :80 (prod)"| GW["gateway (Nginx)"]
-
-    GW --> IS["identity-service"]
-    GW --> CS["catalog-service"]
-    GW --> SS["support-service"]
-
-    subgraph APP["Polyrepo Workspace (backend/)"]
-        direction TB
-
-        subgraph SERVICES["Микросервисы (FastAPI)"]
-            IS
-            CS
-            SS
-        end
-
-        subgraph WORKERS["Async-воркеры (тот же образ, другая точка входа)"]
-            IdentityWorker["identity-worker<br/>(единственный Outbox producer)"]
-            CatalogWorker["catalog-worker"]
-            SupportWorker["support-worker"]
-        end
-
-        subgraph LIBS["Shared Kernel (libs/)"]
-            KernelDomain["kernel-domain<br/>(Result, Entity, DomainEvent)"]
-            KernelPlatform["kernel-platform<br/>(Outbox, UnitOfWork, Actor, HTTP-конверт)"]
-            OBS["observability<br/>(structured logging)"]
-        end
-
-        IS -.-> KernelDomain & KernelPlatform & OBS
-        CS -.-> KernelDomain & KernelPlatform & OBS
-        SS -.-> KernelDomain & KernelPlatform & OBS
-        CS -. "IdentityClient: JWKS + sync fallback" .-> IS
-    end
-
-    subgraph DATA["Данные и обмен сообщениями"]
-        IdentityDB[("identity-db<br/>(своя БД)")]
-        CatalogDB[("catalog-db<br/>(своя БД)")]
-        SupportDB[("support-db<br/>(своя БД)")]
-        RabbitNode(("RabbitMQ<br/>productsflow.events (topic)"))
-        MinIO[("MinIO (S3)<br/>картинки товаров, приватный bucket")]
-    end
-
-    IS --> IdentityDB
-    CS --> CatalogDB
-    SS --> SupportDB
-
-    IdentityWorker -.->|"LISTEN/NOTIFY + poll"| IdentityDB
-    IdentityWorker --->|Publish| RabbitNode
-    RabbitNode -->|"user.*.v1"| CatalogWorker
-    RabbitNode -->|"user.*.v1"| SupportWorker
-    CatalogWorker --> CatalogDB
-    SupportWorker --> SupportDB
-
-    CS --->|"presigned URL"| MinIO
-
-    style Client fill:#1f2937,stroke:#9ca3af,color:#fff
-    style GW fill:#581c87,stroke:#c084fc,color:#fff
-    style IS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style CS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style SS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style KernelDomain fill:#14532d,stroke:#4ade80,color:#fff
-    style KernelPlatform fill:#14532d,stroke:#4ade80,color:#fff
-    style OBS fill:#14532d,stroke:#4ade80,color:#fff
-    style IdentityDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style CatalogDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style SupportDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style RabbitNode fill:#7c2d12,stroke:#fb923c,color:#fff
-    style MinIO fill:#7c2d12,stroke:#fb923c,color:#fff
-```
-
-</details>
+[Открыть интерактивную схему](docs/architecture/diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория; подробная схема с воркерами и Shared Kernel — [backend_architecture.md §3](docs/architecture/backend_architecture.md)).
 
 - **`identity-service`** — учётные записи, ролевая модель (`user`/`admin`), выдача stateless JWT (RS256), единственный producer доменных событий.
 - **`catalog-service`** — товары, видимость, картинки (MinIO); проверяет JWT через JWKS-кэш (`IdentityClient`) и делает синхронный добор к identity на холодном старте read-модели и на админской ветке.
@@ -115,32 +40,9 @@ graph TD
 
 ## Устройство одного сервиса
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    subgraph "Service Boundary"
-        subgraph "1. api/ — тонкие роутеры"
-            Routers["FastAPI Routers<br/>(DTO → handler → match_result)"]
-            AMQPConsumer["RabbitMQ Consumer"]
-        end
-        subgraph "2. application/ — CQRS"
-            Commands["Command Handlers"]
-            Queries["Query Handlers"]
-        end
-        subgraph "3. domain/"
-            Entities["Entities<br/>(create / reconstitute)"]
-            Ports["Repository Ports (Protocol)"]
-            UoW["UnitOfWork Protocol"]
-        end
-        subgraph "4. infrastructure/"
-            Repos["SQLAlchemy Repository"]
-        end
-        Routers --> Commands & Queries
-        AMQPConsumer --> Commands
-        Commands --> Entities & Ports & UoW
-        Repos -. implements .-> Ports
-    end
-```
+![Устройство одного сервиса: FastAPI Routers/RabbitMQ Consumer → Command/Query Handlers → Entities/Repository Ports → SQL Repository, направление зависимостей строго внутрь](docs/architecture/diagrams/micro-architecture.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/micro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ## Стек технологий
 
@@ -245,27 +147,9 @@ make architecture-check          # CQRS-аудит + направление за
   - `Owner` деактивирует товар (меняет статус `is_active=False`).
   - Проверка: `Owner` по-прежнему видит свой товар (HTTP 200), а для `Viewer` этот же URL отдаёт HTTP 404 (товар скрыт от посторонних).
   
-  ```mermaid
-  sequenceDiagram
-      participant Owner
-      participant Viewer
-      participant Gateway
-      participant Catalog
-  
-      Owner->>Gateway: POST /products (Создать товар)
-      Gateway->>Catalog: маршрутизация
-      Owner->>Gateway: PATCH /products/{id}/deactivate
-      Gateway->>Catalog: маршрутизация
-      Catalog-->>Owner: 200 OK (Деактивирован)
-      
-      Viewer->>Gateway: GET /products/{id}
-      Gateway->>Catalog: Попытка просмотра
-      Catalog-->>Viewer: 404 Not Found (Скрыт)
-      
-      Owner->>Gateway: GET /products/{id}
-      Gateway->>Catalog: Просмотр владельцем
-      Catalog-->>Owner: 200 OK (Виден автору)
-  ```
+![Деактивированный товар остаётся виден Owner (200), но скрыт от Viewer (404)](docs/architecture/diagrams/e2e-product-visibility.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/e2e-product-visibility.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
   
   **2. Защита периметра (API Gateway)**
   (`test_gateway_denies_a_path_outside_its_allow_list`)
@@ -282,26 +166,9 @@ make architecture-check          # CQRS-аудит + направление за
   - Воркер службы поддержки ловит событие, анонимизирует автора тикета (заменяя ID на `null`), переводит тикет в `CLOSED` и оставляет системное сообщение.
   - Тест авторизуется под Администратором и поллит API поддержки, ожидая подтверждения, что тикет закрыт и анонимизирован.
   
-  ```mermaid
-  sequenceDiagram
-      participant User
-      participant Identity API
-      participant Support API
-      participant RabbitMQ
-      participant Support Worker
-  
-      User->>Support API: POST /tickets (Создать тикет)
-      User->>Identity API: DELETE /users/me (Удалить аккаунт)
-      Identity API-->>User: 200 OK (Аккаунт удален)
-      
-      Identity API-)RabbitMQ: Publish event user.deleted.v1
-      RabbitMQ-)Support Worker: Consume event user.deleted.v1
-      
-      Note over Support Worker: Анонимизирует тикет,<br>закрывает его (CLOSED)
-      
-      User->>Identity API: GET /users/me
-      Identity API-->>User: 403 Forbidden (Токен отозван)
-  ```
+![Самоудаление пользователя: identity публикует user.deleted.v1 в RabbitMQ, support-worker асинхронно анонимизирует и закрывает тикет пользователя](docs/architecture/diagrams/e2e-choreography.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/e2e-choreography.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
   Подробности E2E инфраструктуры — в [ADR 0013](docs/adr/0013-testing-strategy.md).
 
 ## Переменные окружения

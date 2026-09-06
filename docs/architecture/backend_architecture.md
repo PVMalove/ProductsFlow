@@ -79,60 +79,9 @@ backend/services/<service>/
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. Клиент обращается к сервисам только через единый Nginx Gateway (см. глоссарий); синхронные межсервисные вызовы сведены к двум узким точкам в catalog ([ADR 0011](../adr/0011-catalog-service-event-integration.md)).
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    Client(["Web / BFF Clients"])
+![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity](diagrams/macro-architecture.png)
 
-    Client -->|"HTTP :80"| GW["gateway (Nginx)"]
-
-    GW --> IS["identity-service"]
-    GW --> CS["catalog-service"]
-    GW --> SS["support-service"]
-
-    subgraph "Polyrepo Workspace (backend/)"
-        direction TB
-
-        subgraph "Independent Microservices"
-            IS
-            CS
-            SS
-        end
-
-        subgraph "Shared Packages (libs/)"
-            KD["kernel-domain"]
-            KP["kernel-platform"]
-            OBS["observability"]
-        end
-
-        IS -. "uses" .-> KD & KP & OBS
-        CS -. "uses" .-> KD & KP & OBS
-        SS -. "uses" .-> KD & KP & OBS
-        CS -. "IdentityClient (JWKS + sync fallback)" .-> IS
-    end
-
-    subgraph "Infrastructure Layer"
-        DB[("PostgreSQL<br/>(своя БД на сервис)")]
-        MQ(("RabbitMQ<br/>(productsflow.events)"))
-        S3[("MinIO<br/>(картинки товаров)")]
-    end
-
-    IS --> DB & MQ
-    CS --> DB & MQ & S3
-    SS --> DB & MQ
-
-    style Client fill:#1f2937,stroke:#9ca3af,color:#fff
-    style GW fill:#581c87,stroke:#c084fc,color:#fff
-    style IS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style CS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style SS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style KD fill:#14532d,stroke:#4ade80,color:#fff
-    style KP fill:#14532d,stroke:#4ade80,color:#fff
-    style OBS fill:#14532d,stroke:#4ade80,color:#fff
-    style DB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style MQ fill:#7c2d12,stroke:#fb923c,color:#fff
-    style S3 fill:#7c2d12,stroke:#fb923c,color:#fff
-```
+[Открыть интерактивную схему](diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 `support-service` не изображён со стрелкой к identity: он не делает синхронных HTTP-вызовов к identity вовсе (deny-by-default, [ADR 0012](../adr/0012-support-service-event-integration.md)) — единственный канал его зависимости от identity — доставка событий через RabbitMQ.
 
@@ -140,102 +89,17 @@ graph TD
 
 ## 4. Микро-архитектура (устройство отдельного сервиса)
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    subgraph "Service Boundary"
-        direction TB
+![Микро-архитектура одного сервиса: FastAPI Routers/RabbitMQ Consumer → Command/Query Handlers → Entities/Repository Ports → SQL Repository, направление зависимостей строго внутрь](diagrams/micro-architecture.png)
 
-        subgraph "1. api/ (Primary Adapters)"
-            Routers["FastAPI Routers<br/>(3 строки: DTO → handler → match_result)"]
-            Schemas["Pydantic request-схемы"]
-            AMQPConsumer["RabbitMQ Consumer"]
-        end
-
-        subgraph "2. application/ (Use Cases, CQRS)"
-            Commands["Command Handlers<br/>(мутации + Unit of Work)"]
-            Queries["Query Handlers<br/>(чтение read model)"]
-        end
-
-        subgraph "3. domain/ (Core)"
-            Entities["Entities & Value Objects<br/>(create / reconstitute)"]
-            Events["Domain Events"]
-            Ports["Repository Ports<br/>(Protocol)"]
-            UoW["UnitOfWork Protocol"]
-        end
-
-        subgraph "4. infrastructure/ (Secondary Adapters)"
-            Repos["SQLAlchemy Repository"]
-            Models["ORM Models"]
-            ExternalAPI["IdentityClient / S3Storage"]
-        end
-
-        Routers --> Commands & Queries
-        AMQPConsumer --> Commands
-
-        Commands --> Entities
-        Commands --> Ports
-        Commands --> UoW
-        Queries -- "read model, не через Ports" --> Repos
-
-        Repos -. "implements" .-> Ports
-        Repos --> Models
-    end
-
-    style Routers fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style AMQPConsumer fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style Commands fill:#4c1d95,stroke:#a78bfa,color:#fff
-    style Queries fill:#4c1d95,stroke:#a78bfa,color:#fff
-    style Entities fill:#14532d,stroke:#4ade80,color:#fff
-    style Ports fill:#14532d,stroke:#4ade80,color:#fff
-    style UoW fill:#14532d,stroke:#4ade80,color:#fff
-    style Repos fill:#7c2d12,stroke:#fb923c,color:#fff
-```
+[Открыть интерактивную схему](diagrams/micro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 Направление зависимостей — `api → application → domain`; `infrastructure` реализует порты `domain`/`application`. Это проверяется автоматически `python backend/scripts/check_architecture.py --strict` (тот же gate — `make -C backend architecture-check`, и в CI), а не только код-ревью.
 
 ### Доменная модель: базовые абстракции и события
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-classDiagram
-    class Entity {
-        <<kernel-domain>>
-        -list _domain_events
-        +pull_events() list~DomainEvent~
-    }
+![Базовые доменные абстракции: User наследует буфер событий Entity, генерирует DomainEvent, drain_events_to_outbox() переносит их в OutboxMessage](diagrams/domain-model.png)
 
-    class DomainEvent {
-        <<kernel-domain>>
-        +event_type: str
-        +aggregate_type: str
-        +aggregate_id() UUID
-        +to_payload() dict
-    }
-
-    class User {
-        <<identity-service>>
-        +UUID id
-        +String email
-        +create(email, password)$ Result~User~
-        +reconstitute(row)$ User
-        +change_password(new_pwd)
-        +delete()
-    }
-
-    class OutboxMessage {
-        <<kernel-platform>>
-        +bigserial id
-        +UUID aggregate_id
-        +String event_type
-        +JSONB payload
-        +DateTime published_at
-    }
-
-    Entity <|-- User : наследует буфер событий
-    User ..> DomainEvent : генерирует при мутациях
-    DomainEvent ..> OutboxMessage : drain_events_to_outbox(session, entity)
-```
+[Открыть интерактивную схему](diagrams/domain-model.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 `kernel-platform` не содержит SQLAlchemy-миксина, автоматически перехватывающего мутации ORM-модели: `drain_events_to_outbox(session, entity)` — explicit-вызов в точке мутации repository-метода (`save()`/`delete()`), не автоматический сбор из `session.new`/`session.dirty` ([ADR 0006](../adr/0006-service-internal-architecture-baseline.md), [ADR 0010](../adr/0010-identity-service-event-integration.md)).
 
@@ -247,33 +111,9 @@ classDiagram
 
 `identity-service` подписывает токены RS256 и публикует `GET /.well-known/jwks.json`. Дальше механизм проверки **не одинаков** для двух других сервисов ([ADR 0005](../adr/0005-security-auth-actor-contract.md)):
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant IS as identity-service
-    participant CS as catalog-service
-    participant SS as support-service
+![Проверка JWT: login у identity-service, catalog проверяет подпись через JWKS-кэш (промах — сеть к identity), support — статическим публичным ключом локально, без сети к identity](diagrams/jwt-verification.png)
 
-    C->>IS: POST /api/v1/auth/login
-    IS-->>C: 200 {"access_token": "...", ...} (RS256, kid=thumbprint)
-
-    rect rgb(20, 83, 45)
-        note over CS: JWKS-кэш (IdentityClient), TTL 10 мин
-        C->>CS: GET /api/v1/products/my (Bearer JWT)
-        CS->>IS: GET /.well-known/jwks.json (только на промах кэша/kid)
-        IS-->>CS: JWKS
-        CS-->>C: 200 {"data": [...], "meta": {}}
-    end
-
-    rect rgb(124, 45, 18)
-        note over SS: Статический публичный ключ из своей конфигурации
-        C->>SS: GET /api/v1/tickets (Bearer JWT)
-        note right of SS: Проверка подписи локально, без сети к identity
-        SS-->>C: 200 {"data": [...], "meta": {}}
-    end
-```
+[Открыть интерактивную схему](diagrams/jwt-verification.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 `catalog-service` дополнительно делает синхронный вызов `IdentityClient.fetch_current_user()` на холодном старте read-модели и на админской ветке; `support-service` не делает ни одного синхронного вызова к identity — deny-by-default вместо этого ([ADR 0011](../adr/0011-catalog-service-event-integration.md), [ADR 0012](../adr/0012-support-service-event-integration.md)).
 
@@ -281,81 +121,17 @@ sequenceDiagram
 
 Гарантирует, что система не окажется в неконсистентном состоянии, если после записи в БД RabbitMQ временно недоступен ([ADR 0010](../adr/0010-identity-service-event-integration.md)).
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph LR
-    subgraph "identity-service (API)"
-        API["FastAPI Command Handler"] -- "1. Одна транзакция (Unit of Work)" --> DB[("PostgreSQL")]
-        note1["UPDATE users ...<br/>drain_events_to_outbox() → INSERT INTO outbox_messages"] -.-> DB
-    end
+![Transactional Outbox: Command Handler пишет бизнес-таблицу и outbox_messages в одной транзакции, Outbox Publisher вычитывает через LISTEN/NOTIFY и публикует в RabbitMQ, catalog-worker/support-worker потребляют идемпотентно](diagrams/outbox.png)
 
-    subgraph "identity-service (Worker)"
-        DB -. "2. LISTEN/NOTIFY + polling 5s (страховка)" .-> Relay["Outbox Publisher"]
-    end
-
-    subgraph "RabbitMQ"
-        Relay -- "3. Publish, message_id = outbox_messages.id" --> EX(("productsflow.events<br/>(topic exchange)"))
-        EX -- "4. user.deleted.v1" --> Q1["catalog.user-events"]
-        EX -- "4. user.deleted.v1" --> Q2["support.user-events"]
-    end
-
-    subgraph "Target Services"
-        Q1 -. "5. Consume (processed_messages,<br/>last_applied_outbox_id)" .-> CC["catalog-worker"]
-        Q2 -. "5. Consume (processed_messages,<br/>last_applied_outbox_id)" .-> SC["support-worker"]
-    end
-
-    style API fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style Relay fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style EX fill:#7c2d12,stroke:#fb923c,color:#fff
-    style CC fill:#14532d,stroke:#4ade80,color:#fff
-    style SC fill:#14532d,stroke:#4ade80,color:#fff
-```
+[Открыть интерактивную схему](diagrams/outbox.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ### 5.3. Наблюдаемость (LGTM overlay)
 
 Opt-in Compose overlay (`backend/docker-compose.monitoring.yml`, [ADR 0015](../adr/0015-observability-and-asynchronous-trace-propagation.md)) — три независимых пути данных из одних и тех же процессов, сходящихся в Grafana:
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph LR
-    subgraph "identity/catalog/support — *-api, *-worker"
-        APP["FastAPI / consumer-процессы"]
-    end
+![Схема LGTM-оверлея: три независимых потока (метрики/логи/трейсы) от identity/catalog/support сходятся в Grafana](diagrams/observability-lgtm-overlay.png)
 
-    subgraph "Метрики"
-        APP -- "1. GET /metrics (scrape 15s)" --> Prom[("Prometheus")]
-    end
-
-    subgraph "Логи"
-        APP -- "2a. JSON на stdout (OBSERVABILITY_LOG_FORMAT=json, только *-api)" --> Docker[["Docker log driver"]]
-        Docker -- "2b. Docker API (docker_sd_configs)" --> Promtail["Promtail"]
-        Promtail -- "2c. push, лейблы: container/compose_service" --> Loki[("Loki")]
-    end
-
-    subgraph "Трейсы"
-        APP -- "3a. OTLP/gRPC :4317" --> Tempo[("Tempo")]
-        Tempo -. "3b. кэш поиска (frontend-search)" .-> Redis[("monitoring-redis")]
-    end
-
-    subgraph "Хранилище"
-        Loki -- "чанки → bucket loki-chunks" --> MinIO[("MinIO<br/>(тот же, что у catalog)")]
-        Tempo -- "блоки → bucket tempo-traces" --> MinIO
-        Init["monitoring-minio-init<br/>(один раз, до старта Loki/Tempo)"] -.-> MinIO
-    end
-
-    subgraph "Grafana"
-        Prom --> G["Datasources: Prometheus/Loki/Tempo"]
-        Loki --> G
-        Tempo --> G
-        G -- "4. derived field: «trace_id» в строке лога → трейс" --> User(("localhost:3300"))
-    end
-
-    style APP fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style Prom fill:#7c2d12,stroke:#fb923c,color:#fff
-    style Loki fill:#7c2d12,stroke:#fb923c,color:#fff
-    style Tempo fill:#7c2d12,stroke:#fb923c,color:#fff
-    style G fill:#14532d,stroke:#4ade80,color:#fff
-```
+[Открыть интерактивную схему](diagrams/observability-lgtm-overlay.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 - Метрики, логи и трейсы — три отдельных, не зависящих друг от друга канала: падение Tempo не мешает сбору логов, недоступность Loki не рвёт трейсинг (best-effort экспорт, ADR 0015).
 - `trace_id` — единственная связка между Loki и Tempo, и появляется он только в JSON-логах трёх `*-api` (только их `main.py` вызывает `configure_logging`, см. `backend/libs/observability`); `*-worker`-процессы пишут неструктурированный лог и в Loki отдельным трейсом не кликабельны — их спаны (`publish_message`/`consume_message`) видны через сам трейс в Tempo, а не через связку из Loki.
@@ -369,62 +145,17 @@ graph LR
 
 Каждому сервису — своя база и своя таблица `alembic_version`; никакой сервис не мигрирует другой.
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    autonumber
-    actor Dev as Developer
-    participant Make as backend/Makefile
-    participant UV as uv (изолированное окружение пакета)
-    participant AL as Alembic (контекст сервиса)
-    participant DB as PostgreSQL
+![Изолированные миграции Alembic: разработчик запускает make db-upgrade, Alembic в изолированном окружении пакета читает/обновляет alembic_version своего сервиса](diagrams/migrations.png)
 
-    Dev->>Make: make db-upgrade pkg=catalog-service
-
-    rect rgb(30, 58, 138)
-        Make->>UV: cd services/catalog-service && uv run alembic upgrade head
-    end
-
-    rect rgb(20, 83, 45)
-        AL->>DB: SELECT version_num FROM alembic_version
-        DB-->>AL: текущая ревизия
-        AL->>DB: применение непримененных ревизий
-        AL->>DB: UPDATE alembic_version
-    end
-
-    AL-->>Dev: миграции применены
-```
+[Открыть интерактивную схему](diagrams/migrations.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 В production/dev-профилях миграции не выполняются внутри `lifespan` FastAPI — они идут через one-off `*-bootstrap`-сервисы Compose, до старта `*-api`/`*-worker` ([ADR 0001](../adr/0001-platform-topology-and-bounded-contexts.md), раздел «Безопасный старт»).
 
 ### 6.2. CI/CD: матричное тестирование
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph LR
-    PR(("Push / PR")) --> Checkout["Checkout Code"]
-    Checkout --> SetupUV["Setup uv & Cache"]
+![CI/CD: push/PR → checkout → setup uv, затем параллельная матрица (backend-lint/backend-test/architecture-check по каждому пакету), все три обязательны перед backend-build](diagrams/ci-matrix.png)
 
-    SetupUV --> Matrix
-
-    subgraph "Параллельная матрица (одна джоба на пакет: 3 сервиса + kernel-domain + kernel-platform)"
-        direction TB
-        Matrix{"backend-lint / backend-test"}
-        Matrix --> Lint["make check pkg=&lt;member&gt;<br/>(ruff, mypy, vulture)"]
-        Matrix --> Test["make test pkg=&lt;member&gt;<br/>(pytest, своё изолированное окружение)"]
-        Matrix --> Arch["architecture-check<br/>(check_architecture.py --strict)"]
-    end
-
-    Lint --> Build
-    Test --> Build
-    Arch --> Build
-
-    Build["backend-build:<br/>docker compose build"] --> Done(("Pipeline Success"))
-
-    style PR fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style Done fill:#14532d,stroke:#4ade80,color:#fff
-    style Matrix fill:#7c2d12,stroke:#fb923c,color:#fff
-```
+[Открыть интерактивную схему](diagrams/ci-matrix.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ---
 
@@ -438,48 +169,9 @@ graph LR
 
 Роутеры в `api/` — три строки: собрать command/query из зависимости, вызвать handler, вернуть `match_result`/`match_created`. Repository-порты (`UserRepository`, `ProductRepository`, `TicketRepository`) — `Protocol` в `domain/repositories.py` каждого сервиса.
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    subgraph "api/ (Тонкий роутер)"
-        Router["FastAPI Router"]
-    end
+![CQRS: тонкий FastAPI Router разводит запись в Command Handler (мутирует Entity через UnitOfWork/Repository Port) и чтение в Query Handler (читает read model напрямую через SQLAlchemy Repository)](diagrams/cqrs.png)
 
-    subgraph "application/ (CQRS)"
-        CH["Command Handler<br/>(например, CreateProductCommandHandler)"]
-        QH["Query Handler<br/>(например, GetProductQueryHandler)"]
-    end
-
-    subgraph "domain/"
-        Port["Repository Port<br/>(Protocol, ProductRepository)"]
-        Entity["Product (Entity)"]
-        UoW["UnitOfWork Protocol"]
-    end
-
-    subgraph "infrastructure/"
-        RepoImpl["SqlAlchemy ProductRepository"]
-        DB[("PostgreSQL")]
-    end
-
-    Router -- "запись" --> CH
-    Router -- "чтение" --> QH
-
-    CH -- "мутирует" --> Entity
-    CH -- "через" --> UoW
-    UoW -- "агрегирует" --> Port
-    QH -- "читает read model" --> RepoImpl
-
-    RepoImpl -. "implements" .-> Port
-    RepoImpl --> DB
-
-    style Router fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style CH fill:#4c1d95,stroke:#a78bfa,color:#fff
-    style QH fill:#4c1d95,stroke:#a78bfa,color:#fff
-    style Port fill:#14532d,stroke:#4ade80,color:#fff
-    style Entity fill:#14532d,stroke:#4ade80,color:#fff
-    style UoW fill:#14532d,stroke:#4ade80,color:#fff
-    style RepoImpl fill:#7c2d12,stroke:#fb923c,color:#fff
-```
+[Открыть интерактивную схему](diagrams/cqrs.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ### 7.2. Идентификаторы агрегатов — GUID
 
@@ -495,32 +187,9 @@ graph TD
 
 `catalog-service` хранит не более одной картинки на товар в MinIO ([ADR 0008](../adr/0008-catalog-service-domain-model.md)). Бакет — **приватный**; клиент получает временную подписанную ссылку, не прямой публичный URL объекта.
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant API as catalog-service (Command Handler)
-    participant S3 as MinIO (приватный bucket)
-    participant DB as PostgreSQL
+![Картинка товара: PutObject в приватный MinIO по стабильному ключу, затем один Unit of Work (upsert + audit + outbox) и presigned URL в ответе клиенту](diagrams/product-image.png)
 
-    C->>API: POST /api/v1/products/{id}/image (файл)
-
-    rect rgb(30, 58, 138)
-        API->>S3: PutObject(key="products/{id}/image") — стабильный ключ, перезаписывается при замене
-        S3-->>API: 200 OK
-    end
-
-    rect rgb(20, 83, 45)
-        note over API,DB: Unit of Work: upsert ProductImage + явный audit + drain_events_to_outbox
-        API->>DB: INSERT ... ON CONFLICT (product_id) DO UPDATE
-        API->>DB: INSERT ProductAuditLog(IMAGE_UPDATED) — в обход ORM-событий
-        API->>DB: INSERT OutboxMessage(ProductImageUpdated)
-    end
-
-    API->>S3: generate_presigned_url(key)
-    API-->>C: 200 {"data": {"url": "https://minio/...&Signature=..."}, "meta": {}}
-```
+[Открыть интерактивную схему](diagrams/product-image.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ### 7.4. Тикеты (support-service)
 
@@ -545,74 +214,17 @@ sequenceDiagram
    - `pagination` — общий keyset-контракт (`Cursor`, `PageInfo`, `encode_cursor`/`decode_cursor`).
 3. **`observability`** — выделен из `kernel-platform`: `RequestContextMiddleware`, JSON/цветной форматтер логов, `actor_id_var`/`request_id_var`.
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    subgraph "Слой микросервиса (напр. identity-service)"
-        DomainService["domain/<br/>(бизнес-логика)"]
-        InfraService["infrastructure/, api/<br/>(БД, сеть, HTTP)"]
-    end
+![Shared Kernel: domain/ импортирует kernel-domain (pure Python), infrastructure/+api/ импортируют kernel-platform и observability; kernel-platform зависит от контракта DomainEvent из kernel-domain](diagrams/shared-kernel.png)
 
-    subgraph "Shared Kernel (libs/)"
-        KD["kernel-domain<br/>(pure Python, zero deps)"]
-        KP["kernel-platform<br/>(FastAPI, SQLAlchemy, httpx, PyJWT)"]
-        OBS["observability"]
-    end
-
-    DomainService -- "импортирует" --> KD
-    InfraService -- "импортирует" --> KP & OBS
-    KP -- "зависит от контракта DomainEvent" --> KD
-
-    style DomainService fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style InfraService fill:#7c2d12,stroke:#fb923c,color:#fff
-    style KD fill:#14532d,stroke:#4ade80,color:#fff
-    style KP fill:#4c1d95,stroke:#a78bfa,color:#fff
-    style OBS fill:#14532d,stroke:#4ade80,color:#fff
-```
+[Открыть интерактивную схему](diagrams/shared-kernel.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ### 8.2. Межсервисная хореография
 
 Сервисы общаются между собой асинхронно через доменные события — паттерн Choreography, без центрального оркестратора. Самый показательный сквозной поток — удаление пользователя ([ADR 0007](../adr/0007-identity-service-domain-model.md), [ADR 0010](../adr/0010-identity-service-event-integration.md)–[0012](../adr/0012-support-service-event-integration.md)):
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    autonumber
-    actor C as Client (User)
-    participant IS as identity-service
-    participant MQ as RabbitMQ (productsflow.events)
-    participant CS as catalog-worker
-    participant SS as support-worker
+![Межсервисная хореография на удаление пользователя: identity анонимизирует и публикует user.deleted.v1, RabbitMQ доставляет fan-out'ом в catalog-worker (скрыть товары) и support-worker (анонимизировать тикеты)](diagrams/choreography.png)
 
-    C->>IS: DELETE /api/v1/users/me
-
-    rect rgb(30, 58, 138)
-        note over IS: Unit of Work (одна транзакция)
-        IS->>IS: User → анонимизированное надгробие (is_deleted=True)
-        IS->>IS: drain_events_to_outbox() → INSERT OutboxMessage(user.deleted.v1)
-    end
-
-    IS-->>C: 200 {"data": null, "meta": {}}
-
-    note over IS,MQ: Outbox Publisher асинхронно вычитывает БД (LISTEN/NOTIFY + poll)
-    IS->>MQ: Publish routing key "user.deleted.v1"
-
-    par Fan-out (topic exchange, wildcard-биндинг user.*.v1)
-        MQ-->>CS: catalog.user-events
-        MQ-->>SS: support.user-events
-    end
-
-    rect rgb(20, 83, 45)
-        note over CS: OwnerReadModel — upsert с last_applied_outbox_id
-        CS->>CS: Скрытие товаров этого владельца из выдачи
-    end
-
-    rect rgb(124, 45, 18)
-        note over SS: user_projection.deleted = True (tombstone)
-        SS->>SS: Анонимизация Тикетов и Сообщений
-        SS->>SS: Активные Тикеты → CLOSED + системное сообщение
-    end
-```
+[Открыть интерактивную схему](diagrams/choreography.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 Если `catalog-worker`/`support-worker` в момент удаления недоступен, событие остаётся в очереди RabbitMQ (quorum, с retry-лестницей и DLQ, [ADR 0010](../adr/0010-identity-service-event-integration.md)) — как только воркер поднимется, он прочитает событие и применит эффект. Eventual consistency без риска каскадного отказа, ценой окна рассинхронизации в секунды.
 
@@ -624,76 +236,14 @@ sequenceDiagram
 
 ### 9.1. Классовая структура
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-classDiagram
-    direction BT
+![Классовая структура Unit of Work: CatalogUnitOfWork расширяет протокол UnitOfWork, SqlAlchemyUnitOfWork/SqlCatalogUnitOfWork — их конкретные SQLAlchemy-реализации](diagrams/uow-classes.png)
 
-    class UnitOfWork {
-        <<Protocol, kernel-platform>>
-        +__aenter__() Self
-        +__aexit__(exc) None
-        +commit() None
-        +rollback() None
-    }
-
-    class CatalogUnitOfWork {
-        <<Protocol, catalog-service>>
-        +ProductRepository products
-    }
-
-    class SqlAlchemyUnitOfWork {
-        <<kernel-platform>>
-        -AsyncSession _session
-        +__aenter__()
-        +__aexit__(exc)
-        +commit()
-        +rollback()
-    }
-
-    class SqlCatalogUnitOfWork {
-        <<catalog-service>>
-        +SqlProductRepository products
-    }
-
-    CatalogUnitOfWork --|> UnitOfWork : extends
-    SqlAlchemyUnitOfWork ..|> UnitOfWork : implements
-    SqlCatalogUnitOfWork --|> SqlAlchemyUnitOfWork : extends
-    SqlCatalogUnitOfWork ..|> CatalogUnitOfWork : implements
-```
+[Открыть интерактивную схему](diagrams/uow-classes.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ### 9.2. Жизненный цикл в Command Handler
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-sequenceDiagram
-    participant API as FastAPI Router
-    participant Handler as Command Handler
-    participant UoW as SqlCatalogUnitOfWork
-    participant Repo as ProductRepository
-    participant DB as PostgreSQL (AsyncSession)
+![Жизненный цикл Unit of Work (успешный путь): Command Handler открывает UoW, Repository мутирует и дренирует Outbox, затем один commit() фиксирует обе записи](diagrams/uow-lifecycle.png)
 
-    API->>Handler: execute(Command)
-
-    Handler->>UoW: async with (открытие блока)
-    activate UoW
-    UoW-->>Handler: __aenter__()
-
-    Handler->>Repo: create(product)
-    Repo->>DB: session.add(entity)
-    Repo->>DB: drain_events_to_outbox(session, product)
-
-    alt Доменная ошибка (Result.is_err)
-        Handler-->>API: return Result.fail(error)
-        Note right of UoW: commit не вызван
-        UoW->>DB: session.rollback() (из __aexit__, по умолчанию)
-    else Успешное выполнение
-        Handler->>UoW: commit()
-        UoW->>DB: session.commit()
-        Note over DB: Мутация агрегата и Outbox-строка фиксируются одной транзакцией
-        Handler-->>API: return Result.ok(ProductView)
-    end
-    deactivate UoW
-```
+[Открыть интерактивную схему](diagrams/uow-lifecycle.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 Rollback — поведение по умолчанию: если `commit()` не вызван явно на успешном пути, транзакция откатывается при выходе из `async with`. Repository-методы не вызывают `session.commit()` самостоятельно.
