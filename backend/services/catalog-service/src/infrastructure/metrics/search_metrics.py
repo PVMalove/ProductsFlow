@@ -30,7 +30,7 @@ SEARCH_CACHE_REQUESTS = Counter(
 OPENSEARCH_REQUEST_LATENCY = Histogram(
     "catalog_opensearch_request_duration_seconds",
     "Латентность обращений catalog-service к OpenSearch.",
-    ["operation"],  # search | index
+    ["operation"],  # search | index | delete
 )
 
 SEARCH_INDEXING_LAG = Histogram(

@@ -16,3 +16,12 @@ class ProductSearchSnapshot:
     is_active: bool
     search_revision: int
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class ProductSearchTombstone:
+    """The minimum state required to remove a Product from search safely."""
+
+    product_id: uuid.UUID
+    user_id: uuid.UUID
+    search_revision: int

@@ -77,4 +77,20 @@ class ProductDeactivated(ProductSnapshotEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ProductDeleted(ProductEvent):
-    event_type: str = "product.deleted.v1"
+    """Privacy-minimising search tombstone.
+
+    A deletion must win over every earlier snapshot without retaining the
+    searchable Product data in the outbox.  ``search_revision`` is therefore
+    the sole ordering value the projection needs.
+    """
+
+    user_id: uuid.UUID
+    search_revision: int
+    event_type: str = "product.deleted.v2"
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            **super().to_payload(),
+            "user_id": str(self.user_id),
+            "search_revision": self.search_revision,
+        }

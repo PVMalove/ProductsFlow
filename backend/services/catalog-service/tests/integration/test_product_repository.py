@@ -227,8 +227,13 @@ async def test_delete_removes_row_and_writes_outbox_row(
     outbox_rows = await _outbox_rows_for(db_session, created.id.value)
     assert [row.event_type for row in outbox_rows] == [
         "product.created.v2",
-        "product.deleted.v1",
+        "product.deleted.v2",
     ]
+    assert outbox_rows[-1].payload == {
+        "product_id": str(created.id.value),
+        "user_id": str(created.user_id),
+        "search_revision": 2,
+    }
 
     audit_rows = await _audit_rows_for(db_session, created.id.value)
     assert [row.action for row in audit_rows] == ["created", "deleted"]

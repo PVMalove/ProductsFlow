@@ -247,6 +247,30 @@ services:
     networks:
       - backend-network
 
+  catalog-search-reconciler:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do python -m api.search_reindex --reconcile-only; sleep 86400; done",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
+      CATALOG_OPENSEARCH_URL: ${CATALOG_OPENSEARCH_URL:-http://opensearch:9200}
+      CATALOG_SEARCH_INDEX_NAME: ${CATALOG_SEARCH_INDEX_NAME:-catalog-products}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    networks:
+      - backend-network
+
   opensearch:
     image: opensearchproject/opensearch:3.1.0
     environment:

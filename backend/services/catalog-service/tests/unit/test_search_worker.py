@@ -11,10 +11,11 @@ from api.search_worker import (
     build_search_event_handler,
     handle_owner_event,
     handle_product_event,
+    handle_product_tombstone,
     handle_search_event,
 )
 from application.ports import OwnerSearchState
-from application.search_snapshot import ProductSearchSnapshot
+from application.search_snapshot import ProductSearchSnapshot, ProductSearchTombstone
 from infrastructure.metrics.search_metrics import (
     SEARCH_INDEXING_LAG,
     SEARCH_OLDEST_PENDING_EVENT_AGE,
@@ -43,12 +44,16 @@ class FakeMessage:
 class RecordingIndexer:
     def __init__(self) -> None:
         self.snapshots: list[tuple[ProductSearchSnapshot, bool]] = []
+        self.tombstones: list[ProductSearchTombstone] = []
         self.owner_updates: list[tuple[uuid.UUID, bool]] = []
 
     async def index(
         self, snapshot: ProductSearchSnapshot, *, owner_is_active: bool
     ) -> None:
         self.snapshots.append((snapshot, owner_is_active))
+
+    async def delete(self, tombstone: ProductSearchTombstone) -> None:
+        self.tombstones.append(tombstone)
 
     async def set_owner_active(self, user_id: uuid.UUID, *, is_active: bool) -> None:
         self.owner_updates.append((user_id, is_active))
@@ -118,6 +123,22 @@ def _owner_message(
     )
 
 
+def _tombstone_message(
+    *, product_id: uuid.UUID, owner_id: uuid.UUID, revision: int
+) -> AbstractIncomingMessage:
+    return cast(
+        AbstractIncomingMessage,
+        FakeMessage(
+            event_type="product.deleted.v2",
+            payload={
+                "product_id": str(product_id),
+                "user_id": str(owner_id),
+                "search_revision": revision,
+            },
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_worker_indexes_a_complete_v2_product_snapshot() -> None:
     product_id = uuid.uuid4()
@@ -172,6 +193,24 @@ async def test_product_event_for_an_unknown_owner_indexes_as_owner_inactive() ->
 
     [(_snapshot, owner_is_active)] = indexer.snapshots
     assert owner_is_active is False
+
+
+@pytest.mark.asyncio
+async def test_worker_applies_a_minimal_versioned_product_tombstone() -> None:
+    product_id = uuid.uuid4()
+    owner_id = uuid.uuid4()
+    indexer = RecordingIndexer()
+
+    await handle_product_tombstone(
+        _tombstone_message(product_id=product_id, owner_id=owner_id, revision=9),
+        indexer,
+    )
+
+    assert indexer.tombstones == [
+        ProductSearchTombstone(
+            product_id=product_id, user_id=owner_id, search_revision=9
+        )
+    ]
 
 
 @pytest.mark.asyncio

@@ -2,13 +2,13 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 
 import aio_pika
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractQueue
 from kernel_platform.consumer import consume
-from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
+from kernel_platform.topology import declare_topology
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -17,7 +17,7 @@ from application.ports import (
     OwnerSearchStateStore,
     ProductSearchIndexer,
 )
-from application.search_snapshot import ProductSearchSnapshot
+from application.search_snapshot import ProductSearchSnapshot, ProductSearchTombstone
 from core.settings import settings
 from infrastructure.db.search_owner_state import SqlOwnerSearchStateStore
 from infrastructure.metrics.search_metrics import (
@@ -35,6 +35,7 @@ PRODUCT_EVENT_TYPES = frozenset(
         "product.updated.v2",
         "product.activated.v2",
         "product.deactivated.v2",
+        "product.deleted.v2",
     }
 )
 
@@ -140,6 +141,32 @@ def _parse_owner_user_id(body: bytes) -> uuid.UUID:
         raise ValueError(f"Invalid owner user id: {raw_user_id!r}") from exc
 
 
+def _parse_product_tombstone(body: bytes) -> ProductSearchTombstone:
+    try:
+        payload: object = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Product tombstone payload is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Product tombstone payload must be a JSON object")
+    try:
+        product_id = uuid.UUID(str(payload["product_id"]))
+        user_id = uuid.UUID(str(payload["user_id"]))
+        search_revision = payload["search_revision"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Product tombstone payload is incomplete") from exc
+    if (
+        isinstance(search_revision, bool)
+        or not isinstance(search_revision, int)
+        or search_revision < 1
+    ):
+        raise ValueError("Product tombstone payload has invalid search_revision")
+    return ProductSearchTombstone(
+        product_id=product_id,
+        user_id=user_id,
+        search_revision=search_revision,
+    )
+
+
 async def handle_product_event(
     message: AbstractIncomingMessage,
     indexer: ProductSearchIndexer,
@@ -161,6 +188,19 @@ async def handle_product_event(
         snapshot.product_id,
         snapshot.search_revision,
         owner_is_active,
+    )
+
+
+async def handle_product_tombstone(
+    message: AbstractIncomingMessage, indexer: ProductSearchIndexer
+) -> None:
+    _event_type(message)
+    tombstone = _parse_product_tombstone(message.body)
+    await indexer.delete(tombstone)
+    logger.info(
+        "catalog-search-worker: deleted product %s at revision %s",
+        tombstone.product_id,
+        tombstone.search_revision,
     )
 
 
@@ -197,7 +237,9 @@ async def handle_search_event(
     owner_states: OwnerSearchStateStore,
 ) -> None:
     event_type = _event_type(message)
-    if event_type in PRODUCT_EVENT_TYPES:
+    if event_type == "product.deleted.v2":
+        await handle_product_tombstone(message, indexer)
+    elif event_type in PRODUCT_EVENT_TYPES:
         await handle_product_event(message, indexer, owner_states)
     else:
         await handle_owner_event(message, indexer, owner_states)
@@ -245,24 +287,26 @@ def build_search_event_handler(
 SEARCH_EVENTS_QUEUE_NAME = "catalog.search-events"
 
 
-async def declare_search_events_queue(channel: AbstractChannel) -> AbstractQueue:
-    # Non-passive declare (idempotent, not just a passive existence check) —
-    # issue #317: identity-worker is otherwise the only process that creates
-    # this exchange, and it starts in parallel with this worker, not before
-    # it; a passive `get_exchange(ensure=True)` crashes with
-    # ChannelNotFoundEntity if this worker wins that race.
-    exchange = await channel.declare_exchange(
-        EVENTS_EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True
+async def declare_search_events_queue(
+    channel: AbstractChannel,
+    *,
+    retry_stage_ttl_ms: Mapping[str, int] | None = None,
+    queue_name: str = SEARCH_EVENTS_QUEUE_NAME,
+) -> AbstractQueue:
+    """Declare the search consumer's retry ladder and its DLQ.
+
+    The shared consumer acknowledges a failed message after forwarding it to
+    a bounded TTL retry stage.  Once the stages are exhausted, RabbitMQ sends
+    it to ``catalog.search-events.dlq``; later valid deliveries continue on
+    the main queue instead of being blocked by the poison message.
+    """
+    return await declare_topology(
+        channel,
+        service_name="catalog",
+        queue_name=queue_name,
+        routing_keys=("product.*.v2", *OWNER_EVENT_TYPES),
+        retry_stage_ttl_ms=retry_stage_ttl_ms,
     )
-    queue = await channel.declare_queue(SEARCH_EVENTS_QUEUE_NAME, durable=True)
-    await queue.bind(exchange, routing_key="product.*.v2")
-    # Bound here (not only by identity's own topology) so an owner event
-    # published before catalog-search-worker finishes starting isn't lost —
-    # same cold-start rationale as `catalog-outbox-worker` pre-declaring this
-    # queue for Product events.
-    for event_type in OWNER_EVENT_TYPES:
-        await queue.bind(exchange, routing_key=event_type)
-    return queue
 
 
 async def main() -> None:

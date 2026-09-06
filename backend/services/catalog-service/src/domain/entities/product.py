@@ -200,7 +200,14 @@ class Product(Entity[ProductId]):
         """Удаление — не переход состояния агрегата (строка просто исчезает
         из БД, CONTEXT.md «Удаление»), но само событие всё равно должно уйти
         в Outbox — репозиторий вызывает это перед `session.delete()`."""
-        self.add_domain_event(ProductDeleted(product_id=self.id))
+        self._advance_search_revision()
+        self.add_domain_event(
+            ProductDeleted(
+                product_id=self.id,
+                user_id=self.user_id,
+                search_revision=self.search_revision,
+            )
+        )
         return Result[None].ok(None)
 
     def _advance_search_revision(self) -> None:
