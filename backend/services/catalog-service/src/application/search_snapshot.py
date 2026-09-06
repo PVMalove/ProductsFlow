@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -14,3 +15,4 @@ class ProductSearchSnapshot:
     price: float
     is_active: bool
     search_revision: int
+    created_at: datetime

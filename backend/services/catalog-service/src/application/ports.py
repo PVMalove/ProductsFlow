@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import Protocol
 
 from kernel_domain.result import Result
+from kernel_platform.pagination import Page
 
+from application.search_cursor import ProductSortOption, SearchCursor
 from application.search_snapshot import ProductSearchSnapshot
 from contracts.product import ProductView
 from domain.entities.product import Product
@@ -161,7 +163,17 @@ class ProductQueryPort(Protocol):
 class ProductSearchPort(Protocol):
     """Read-side port for the public Product search index."""
 
-    async def search(self, query: str) -> list[ProductView]: ...
+    async def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        limit: int = 20,
+        cursor: SearchCursor | None = None,
+    ) -> Page[ProductView]: ...
 
 
 class ProductSearchIndexer(Protocol):

@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime
 from typing import cast
 
 import pytest
@@ -12,6 +13,8 @@ from api.search_worker import (
 )
 from application.ports import OwnerSearchState
 from application.search_snapshot import ProductSearchSnapshot
+
+_CREATED_AT = datetime(2026, 1, 1, 12, 0, 0)
 
 
 class FakeMessage:
@@ -79,6 +82,7 @@ def _product_message(
                 "price": 99.0,
                 "is_active": True,
                 "search_revision": revision,
+                "created_at": _CREATED_AT.isoformat(),
             },
         ),
     )
@@ -127,6 +131,7 @@ async def test_worker_indexes_a_complete_v2_product_snapshot() -> None:
         price=99.0,
         is_active=True,
         search_revision=4,
+        created_at=_CREATED_AT,
     )
     assert owner_is_active is True
 

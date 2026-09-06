@@ -100,6 +100,7 @@ async def test_create_persists_product_and_writes_outbox_row_in_same_transaction
         "price": 9.99,
         "is_active": True,
         "search_revision": 1,
+        "created_at": product.created_at.isoformat(),
     }
 
     audit_rows = await _audit_rows_for(db_session, product.id.value)

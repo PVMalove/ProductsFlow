@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from kernel_domain.domain_event import DomainEvent
@@ -38,6 +39,7 @@ class ProductSnapshotEvent(ProductEvent):
     price: float
     is_active: bool
     search_revision: int
+    created_at: datetime
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -49,6 +51,7 @@ class ProductSnapshotEvent(ProductEvent):
             "price": self.price,
             "is_active": self.is_active,
             "search_revision": self.search_revision,
+            "created_at": self.created_at.isoformat(),
         }
 
 

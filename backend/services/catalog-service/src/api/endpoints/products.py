@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
 from kernel_platform.http.match import match_created, match_page, match_result
+from kernel_platform.pagination import Page
 
 from api.dependencies import (
     ActivateProductDI,
@@ -67,8 +68,8 @@ async def search_products(
     request: Annotated[ProductSearchRequest, Depends()],
     handler: SearchProductsDI,
 ) -> ApiResponse[list[ProductView]]:
-    result: Result[list[ProductView]] = await handler.execute(request.to_query())
-    return match_result(result)
+    result: Result[Page[ProductView]] = await handler.execute(request.to_query())
+    return match_page(result)
 
 
 @router.get("/{product_id}", response_model=ApiResponse[ProductView])
