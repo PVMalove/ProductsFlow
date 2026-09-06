@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import Image from 'next/image';
 import { ProductView, patchProduct, uploadProductImage, getProductImage } from '@/lib/api/products';
 import { Button } from '@/components/ui/button';
 
@@ -99,7 +100,9 @@ export function ProductEditForm({ product, onUpdate }: ProductEditFormProps) {
             <span className="text-gray-400">Uploading...</span>
           </div>
         ) : imageUrl ? (
-          <img src={imageUrl} alt={product.name} className="w-48 h-48 object-cover rounded-md mb-4 border" />
+          <div className="relative w-48 h-48 mb-4 border rounded-md overflow-hidden">
+            <Image src={imageUrl} alt={product.name} fill className="object-cover" unoptimized />
+          </div>
         ) : (
           <div className="w-48 h-48 bg-gray-100 rounded-md flex items-center justify-center mb-4 border border-dashed border-gray-300">
             <span className="text-gray-400">No image</span>
