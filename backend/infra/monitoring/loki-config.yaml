@@ -22,6 +22,8 @@ common:
       secret_access_key: ${MINIO_ROOT_PASSWORD}
       insecure: true
       s3forcepathstyle: true
+      http_config:
+        response_header_timeout: 10s
 
 schema_config:
   configs:

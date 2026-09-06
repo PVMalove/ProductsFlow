@@ -79,7 +79,7 @@ services:
       - backend-network
 
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.5.0
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - monitoring_prometheus_data:/prometheus
@@ -87,7 +87,7 @@ services:
       - backend-network
 
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:3.5.1
     command: ["-config.file=/etc/loki/loki-config.yaml", "-config.expand-env=true"]
     environment:
       <<: *minio-credentials
@@ -102,7 +102,7 @@ services:
       - backend-network
 
   tempo:
-    image: grafana/tempo:2.6.1
+    image: grafana/tempo:2.8.0
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
     environment:
       <<: *minio-credentials
@@ -117,7 +117,7 @@ services:
       - backend-network
 
   promtail:
-    image: grafana/promtail:3.3.2
+    image: grafana/promtail:3.5.1
     command: ["-config.file=/etc/promtail/promtail-config.yaml", "-config.expand-env=true"]
     environment:
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-product_flow-backend}
@@ -131,7 +131,7 @@ services:
       - backend-network
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.1.0
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
