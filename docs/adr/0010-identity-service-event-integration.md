@@ -37,7 +37,7 @@ Routing key = `user.<событие>.v1`, exchange `productsflow.events` (topic,
 ## RabbitMQ-топология, которую identity объявляет
 
 - **Exchange:** `productsflow.events` (topic, durable) — объявляется identity на старте.
-- **Основные очереди потребителей** — `catalog.user-events`, `support.user-events`: quorum (только они поддерживают `x-delivery-limit`), wildcard-биндинг `user.*.v1`. Одна очередь на сервис, не на тип события — все типы событий одного пользователя должны применяться к одной read-модели в предсказуемом порядке.
+- **Основные очереди потребителей** — `catalog.user-events`, `support.user-events`: quorum (только они поддерживают `x-delivery-limit`), wildcard-биндинг `user.*.v1`. Identity-worker идемпотентно создаёт оба binding до первого outbox publish, поэтому seed-события сохраняются в durable очереди, даже если consumer запустится позднее. Одна очередь на сервис, не на тип события — все типы событий одного пользователя должны применяться к одной read-модели в предсказуемом порядке.
 - **DLQ.** Общий DLX `productsflow.dlx` (direct), отдельная очередь на сервис (`catalog.user-events.dlq`, `support.user-events.dlq`).
 - **Retry-лестница — три TTL-ступени на сервис (5с/30с/2мин), не настоящий exponential backoff.** Механизм — управляется потребителем (чтение `x-death`, публикация в нужную ступень через default exchange, `ack` исходной доставки), не declarative DLX-цепочкой. После трёх попыток — `reject(requeue=False)`, срабатывает статический DLX очереди. `x-delivery-limit` (RabbitMQ-дефолт 20) — страховка от бага в подсчёте ступеней, не основной механизм.
 - **`message_id` = `outbox_messages.id`** — идемпотентность потребителя по `processed_messages` без отдельного механизма.
