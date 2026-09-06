@@ -111,6 +111,7 @@ services:
   catalog-search-worker:
     environment:
       APP_ENV: e2e
+      CATALOG_DATABASE_URL: postgresql+asyncpg://admin:admin@catalog-db:5432/catalog
       CATALOG_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
       CATALOG_OPENSEARCH_URL: http://opensearch:9200
       CATALOG_SEARCH_INDEX_NAME: catalog-products

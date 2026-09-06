@@ -129,9 +129,9 @@ class ProductListRequest(BaseModel):
 
 
 class ProductSearchRequest(BaseModel):
-    """Public search request; validation refinements arrive with issue #290."""
+    """Public search request with a bounded, required text query."""
 
-    q: str = Query()
+    q: str = Query(min_length=2, max_length=100)
 
     def to_query(self) -> SearchProductsQuery:
         return SearchProductsQuery(q=self.q)
