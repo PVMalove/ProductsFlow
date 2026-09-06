@@ -11,7 +11,7 @@ from opentelemetry.context import Context
 _TRACE_CONTEXT_KEYS = frozenset({"traceparent", "tracestate"})
 
 
-def _w3c_carrier(carrier: dict[str, Any]) -> dict[str, str]:
+def w3c_carrier(carrier: dict[str, Any]) -> dict[str, str]:
     return {
         key: value
         for key, value in carrier.items()
@@ -23,7 +23,7 @@ def serialize_trace_context() -> str | None:
     """Serialize the current W3C context for storage in an Outbox row."""
     carrier: dict[str, str] = {}
     propagate.inject(carrier)
-    carrier = _w3c_carrier(carrier)
+    carrier = w3c_carrier(carrier)
     if "traceparent" not in carrier:
         return None
     return json.dumps(carrier, separators=(",", ":"), sort_keys=True)
@@ -42,7 +42,7 @@ def deserialize_trace_context(value: str | None) -> dict[str, str]:
         return {"traceparent": decoded}
     if not isinstance(decoded, dict):
         return {}
-    return _w3c_carrier(decoded)
+    return w3c_carrier(decoded)
 
 
 def extract_trace_context(value: str | None) -> Context:
@@ -54,4 +54,4 @@ def inject_trace_context() -> dict[str, str]:
     """Inject the current W3C context into an AMQP-compatible carrier."""
     carrier: dict[str, str] = {}
     propagate.inject(carrier)
-    return _w3c_carrier(carrier)
+    return w3c_carrier(carrier)

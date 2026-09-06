@@ -9,12 +9,26 @@ from aio_pika.abc import (
     ConsumerTag,
     HeadersType,
 )
+from opentelemetry import propagate, trace
+from opentelemetry.context import Context
+from opentelemetry.trace import SpanKind
 
+from kernel_platform.outbox.trace_context import w3c_carrier
 from kernel_platform.topology import RETRY_STAGE_TTL_MS
 
 logger = logging.getLogger(__name__)
 MessageHandler = Callable[[AbstractIncomingMessage], Awaitable[None]]
 _RETRY_STAGE_NAMES = tuple(RETRY_STAGE_TTL_MS)
+
+
+def _extract_message_context(headers: HeadersType) -> Context:
+    """Extracts the W3C parent context carried in AMQP headers.
+
+    Missing or malformed `traceparent`/`tracestate` values leave the
+    returned context empty, so `start_as_current_span` below starts a new
+    root span instead of raising.
+    """
+    return propagate.extract(w3c_carrier(dict(headers)))
 
 
 def next_stage_index(headers: HeadersType, stage_queue_names: Sequence[str]) -> int:
@@ -70,14 +84,24 @@ async def consume(queue: AbstractQueue, handler: MessageHandler) -> ConsumerTag:
     stage_queue_names = tuple(
         (f"{queue.name}.{suffix}" for suffix in _RETRY_STAGE_NAMES)
     )
+    tracer = trace.get_tracer(__name__)
 
     async def _on_message(message: AbstractIncomingMessage) -> None:
         """Внутренний коллбэк для маппинга входящего сообщения на хэндлер и логику ретраев.
 
+        Хэндлер выполняется под спаном `consume_message`, продолжающим трейс
+        паблишера через W3C-заголовки сообщения (ADR 0015); retry/ack/reject
+        логика ниже не меняется.
+
         Args:
             message (AbstractIncomingMessage): Сырое сообщение из RabbitMQ."""
         try:
-            await handler(message)
+            with tracer.start_as_current_span(
+                "consume_message",
+                context=_extract_message_context(message.headers),
+                kind=SpanKind.CONSUMER,
+            ):
+                await handler(message)
         except Exception:
             retry_stage_index = next_stage_index(message.headers, stage_queue_names)
             if retry_stage_index >= len(stage_queue_names):

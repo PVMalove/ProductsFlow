@@ -9,6 +9,7 @@ import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 from kernel_platform.consumer import consume
 from kernel_platform.topology import declare_topology
+from observability.tracing import configure_tracing
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from application.commands import (
@@ -189,6 +190,7 @@ def build_user_event_handler(
 
 async def main() -> None:
     """Запускает консьюмер проекции user-событий и удаления Support."""
+    configure_tracing("support-worker")
     if not settings.support_database_url:
         raise RuntimeError("SUPPORT_DATABASE_URL must be configured")
     engine = create_async_engine(
