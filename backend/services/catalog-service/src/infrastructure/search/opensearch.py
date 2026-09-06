@@ -9,6 +9,7 @@ from application.search_cursor import (
     ProductSortOption,
     SearchCursor,
     encode_search_cursor,
+    resolve_search_sort,
 )
 from application.search_snapshot import ProductSearchSnapshot, ProductSearchTombstone
 from contracts.product import ProductView
@@ -51,10 +52,11 @@ class OpenSearchProductSearch:
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]:
+        resolved_sort = resolve_search_sort(query, sort)
         filters: list[dict[str, object]] = [
             {"term": {"is_active": True}},
             {"term": {"owner_is_active": True}},
@@ -89,7 +91,7 @@ class OpenSearchProductSearch:
         body: dict[str, object] = {
             "size": limit + 1,
             "query": {"bool": bool_query},
-            "sort": _SORT_CLAUSES[sort],
+            "sort": _SORT_CLAUSES[resolved_sort],
         }
         if cursor is not None:
             body["search_after"] = [cursor.sort_value, str(cursor.product_id)]
@@ -116,7 +118,7 @@ class OpenSearchProductSearch:
             sort_values = page_hits[-1]["sort"]
             next_cursor = encode_search_cursor(
                 SearchCursor(
-                    sort=sort,
+                    sort=resolved_sort,
                     sort_value=float(sort_values[0]),
                     product_id=uuid.UUID(str(sort_values[1])),
                 )

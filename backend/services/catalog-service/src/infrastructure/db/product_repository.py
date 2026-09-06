@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from kernel_domain.result import Result
 from kernel_platform.outbox.drain import drain_events_to_outbox
@@ -61,6 +62,19 @@ def _to_image_domain(row: ProductImageModel) -> ProductImage:
         size_bytes=row.size_bytes,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _catalog_cursor(
+    row: ProductModel, *, sort: ProductListSortOption
+) -> CatalogListCursor:
+    sort_value: datetime | float = (
+        row.created_at if sort is ProductListSortOption.NEWEST else float(row.price)
+    )
+    return CatalogListCursor(
+        sort=sort,
+        sort_value=sort_value,
+        product_id=row.id,
     )
 
 
@@ -253,8 +267,13 @@ class ProductRepository:
         max_price: float | None = None,
         sort: ProductListSortOption = ProductListSortOption.NEWEST,
     ) -> ProductPage:
-        from datetime import datetime
-
+        # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
+        # — деактивированный Товар и Товар деактивированного (или ещё не
+        # добранного, issue #149) Владельца одинаково скрыты из выдачи для
+        # всех, включая самого Владельца. INNER JOIN: Товар, чей Владелец ещё
+        # не появился в owner_read_model (ни событием, ни синхронным
+        # добором), из списков тоже не виден — тот же осторожный дефолт, что
+        # и на прямом обращении по id.
         base_stmt = (
             select(ProductModel)
             .join(OwnerReadModelRow, OwnerReadModelRow.user_id == ProductModel.user_id)
@@ -279,30 +298,16 @@ class ProductRepository:
             ProductListSortOption.PRICE_DESC,
         )
 
-        def _get_sort_val(cursor: CatalogListCursor):
-            if sort == ProductListSortOption.NEWEST:
-                return datetime.fromisoformat(cursor.sort_value)
-            return float(cursor.sort_value)
-
-        def _make_cursor(row: ProductModel) -> CatalogListCursor:
-            val = (
-                row.created_at.isoformat()
-                if sort == ProductListSortOption.NEWEST
-                else float(row.price)
-            )
-            return CatalogListCursor(
-                sort=sort, sort_value=val, product_id=uuid.UUID(str(row.id))
-            )
-
         if before is not None:
-            val = _get_sort_val(before)
             if sort_desc:
                 stmt = base_stmt.where(
-                    tuple_(sort_col, ProductModel.id) > (val, before.product_id.hex)
+                    tuple_(sort_col, ProductModel.id)
+                    > (before.sort_value, before.product_id)
                 ).order_by(sort_col.asc(), ProductModel.id.asc())
             else:
                 stmt = base_stmt.where(
-                    tuple_(sort_col, ProductModel.id) < (val, before.product_id.hex)
+                    tuple_(sort_col, ProductModel.id)
+                    < (before.sort_value, before.product_id)
                 ).order_by(sort_col.desc(), ProductModel.id.desc())
 
             page, has_prev = await self._overfetch(stmt, limit)
@@ -311,14 +316,15 @@ class ProductRepository:
         else:
             stmt = base_stmt
             if after is not None:
-                val = _get_sort_val(after)
                 if sort_desc:
                     stmt = stmt.where(
-                        tuple_(sort_col, ProductModel.id) < (val, after.product_id.hex)
+                        tuple_(sort_col, ProductModel.id)
+                        < (after.sort_value, after.product_id)
                     )
                 else:
                     stmt = stmt.where(
-                        tuple_(sort_col, ProductModel.id) > (val, after.product_id.hex)
+                        tuple_(sort_col, ProductModel.id)
+                        > (after.sort_value, after.product_id)
                     )
 
             if sort_desc:
@@ -341,10 +347,14 @@ class ProductRepository:
             items=[_to_domain(row) for row in page],
             page_info=PageInfo(
                 next_cursor=(
-                    encode_catalog_cursor(_make_cursor(page[-1])) if has_more else None
+                    encode_catalog_cursor(_catalog_cursor(page[-1], sort=sort))
+                    if has_more
+                    else None
                 ),
                 prev_cursor=(
-                    encode_catalog_cursor(_make_cursor(page[0])) if has_prev else None
+                    encode_catalog_cursor(_catalog_cursor(page[0], sort=sort))
+                    if has_prev
+                    else None
                 ),
                 has_more=has_more,
                 has_prev=has_prev,

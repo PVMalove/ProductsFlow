@@ -23,7 +23,7 @@ import { apiClient } from '../apiClient';
 import { ApiResponse } from './types';
 
 export async function createTicket(subject: string, first_message: string): Promise<TicketDetailView> {
-  const res = await apiClient.post<ApiResponse<TicketDetailView>>('/v1/tickets', {
+  const res = await apiClient.post<ApiResponse<TicketDetailView>>('/tickets', {
     subject,
     first_message,
   });

@@ -6,7 +6,8 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.catalog_list_cursor import ProductListSortOption, decode_catalog_cursor
+from application.catalog_list_cursor import decode_catalog_cursor
+from domain.repositories import ProductListSortOption
 from domain.value_objects.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.entity_configurations.models import ProductModel
@@ -310,6 +311,60 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
         reversed(PAGINATION_PRODUCT_IDS[1:])
     )
     assert page_before.page_info.has_more is True
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected_ids"),
+    [
+        (ProductListSortOption.PRICE_ASC, PAGINATION_PRODUCT_IDS),
+        (ProductListSortOption.PRICE_DESC, tuple(reversed(PAGINATION_PRODUCT_IDS))),
+    ],
+)
+async def test_list_paginates_in_price_order_with_id_tie_breaker(
+    db_session: AsyncSession,
+    sort: ProductListSortOption,
+    expected_ids: tuple[uuid.UUID, ...],
+) -> None:
+    repo = ProductRepository(db_session)
+    owner_id = uuid.uuid4()
+    category = f"price-sort-{owner_id}"
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=True,
+        last_applied_outbox_id=1,
+    )
+    db_session.add_all(
+        [
+            ProductModel(
+                id=product_id,
+                name=f"Товар {product_id}",
+                category=category,
+                price=price,
+                description="",
+                user_id=owner_id,
+            )
+            for product_id, price in zip(
+                PAGINATION_PRODUCT_IDS, (10.0, 10.0, 20.0), strict=True
+            )
+        ]
+    )
+    await db_session.commit()
+
+    first_page = await repo.list(limit=2, category=category, sort=sort)
+    assert first_page.page_info.next_cursor is not None
+    second_page = await repo.list(
+        limit=2,
+        category=category,
+        sort=sort,
+        after=decode_catalog_cursor(
+            first_page.page_info.next_cursor, expected_sort=sort
+        ),
+    )
+
+    actual_ids = [item.id.value for item in first_page.items + second_page.items]
+    assert actual_ids == list(expected_ids)
 
 
 async def test_list_hides_deactivated_products_from_everyone(

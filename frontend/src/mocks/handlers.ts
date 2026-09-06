@@ -5,11 +5,24 @@ export const handlers = [
     return res(
       ctx.status(200),
       ctx.json({
-        items: [
-          { id: '1', name: 'Mocked Product' }
+        data: [
+          {
+            id: '1',
+            name: 'Mocked Product',
+            description: 'Mocked description',
+            price: 10,
+            category: 'Mocked category',
+            user_id: 'user-1',
+            is_active: true,
+          },
         ],
-        page_info: { has_more: false }
-      })
+        meta: {
+          next_cursor: null,
+          prev_cursor: null,
+          has_more: false,
+          has_prev: false,
+        },
+      }),
     )
   }),
 
@@ -98,11 +111,10 @@ export const handlers = [
     if (email && password) {
       return res(
         ctx.status(200),
-        ctx.cookie('accessToken', 'mock-access-token', { httpOnly: true }),
-        ctx.cookie('refreshToken', 'mock-refresh-token', { httpOnly: true }),
         ctx.json({
-          message: 'Success'
-        })
+          access_token: 'mock-access-token',
+          token_type: 'bearer',
+        }),
       );
     }
 
@@ -110,31 +122,20 @@ export const handlers = [
   }),
 
   rest.get('/api/v1/users/me', (req, res, ctx) => {
-    // If the request doesn't have the mock access token, return 401
-    // (MSW mock tokens are sent in requests just like real cookies in browser)
-    const token = req.cookies.accessToken;
-    if (token !== 'mock-access-token') {
+    if (req.headers.get('authorization') !== 'Bearer mock-access-token') {
       return res(ctx.status(401));
     }
 
     return res(
       ctx.status(200),
       ctx.json({
-        id: 'user-123',
-        role: 'user',
-        email: 'user@example.com'
-      })
-    );
-  }),
-
-  rest.post('/api/v1/auth/logout', (req, res, ctx) => {
-    return res(
-      ctx.status(200),
-      ctx.cookie('accessToken', '', { httpOnly: true, expires: new Date(0) }),
-      ctx.cookie('refreshToken', '', { httpOnly: true, expires: new Date(0) }),
-      ctx.json({
-        message: 'Logged out successfully'
-      })
+        data: {
+          id: 'user-123',
+          role: 'user',
+          email: 'user@example.com',
+        },
+        meta: {},
+      }),
     );
   })
 ]

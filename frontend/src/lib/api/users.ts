@@ -22,7 +22,7 @@ export interface OffsetApiResponse<T> {
 }
 
 export async function getGlobalAuditLog(pageIndex: number = 1, pageSize: number = 20): Promise<OffsetApiResponse<UserAuditEntry[]>> {
-  const res = await apiClient.get<OffsetApiResponse<UserAuditEntry[]>>('/v1/users/audit', {
+  const res = await apiClient.get<OffsetApiResponse<UserAuditEntry[]>>('/users/audit', {
     params: {
       page_index: pageIndex,
       page_size: pageSize,

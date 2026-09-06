@@ -1,7 +1,8 @@
 import enum
 import uuid
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 from kernel_domain.result import Result
 from kernel_platform.pagination import PageInfo
@@ -20,7 +21,7 @@ class ProductListSortOption(enum.StrEnum):
 @dataclass(frozen=True)
 class CatalogListCursor:
     sort: ProductListSortOption
-    sort_value: Any
+    sort_value: datetime | float
     product_id: uuid.UUID
 
 

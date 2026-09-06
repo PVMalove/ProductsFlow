@@ -1,11 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Header } from '@/components/layout/header';
 import { useAuthStore } from '@/lib/store';
-import { apiClient } from '@/lib/apiClient';
+import { authApi } from '@/lib/api/auth';
 
-jest.mock('@/lib/apiClient', () => ({
-  apiClient: {
-    post: jest.fn(),
+jest.mock('@/lib/api/auth', () => ({
+  authApi: {
+    logout: jest.fn(),
   },
 }));
 
@@ -54,14 +54,14 @@ describe('Header', () => {
       actor: { id: '1', role: 'user', email: 'user@example.com' },
     });
     
-    (apiClient.post as jest.Mock).mockResolvedValueOnce({});
+    (authApi.logout as jest.Mock).mockResolvedValueOnce(undefined);
 
     render(<Header />);
     const logoutBtn = screen.getByText('Выйти');
     fireEvent.click(logoutBtn);
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/auth/logout');
+      expect(authApi.logout).toHaveBeenCalledTimes(1);
     });
 
     expect(useAuthStore.getState().actor).toBeNull();

@@ -1,7 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# dependencies and package-manager caches
+node_modules/
+/.npm/
+/.pnpm-store/
 /.pnp
 .pnp.*
 .yarn/*
@@ -12,6 +14,7 @@
 
 # testing
 /coverage
+/.nyc_output/
 
 # next.js
 /.next/
@@ -22,16 +25,27 @@
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
+*.swp
+
+# local tooling caches
+/.cache/
+/.swc/
+/.turbo/
+.eslintcache
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+*.local
 
 # vercel
 .vercel
@@ -41,7 +55,6 @@ yarn-error.log*
 next-env.d.ts
 
 # Playwright
-node_modules/
 /test-results/
 /playwright-report/
 /blob-report/

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store';
-import { apiClient } from '@/lib/apiClient';
+import { authApi } from '@/lib/api/auth';
 
 export function Header() {
   const { actor, clearAuth } = useAuthStore();
@@ -12,7 +12,7 @@ export function Header() {
 
   const handleLogout = async () => {
     try {
-      await apiClient.post('/auth/logout');
+      await authApi.logout();
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {

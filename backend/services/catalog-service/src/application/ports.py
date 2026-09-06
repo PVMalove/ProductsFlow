@@ -179,7 +179,7 @@ class ProductSearchPort(Protocol):
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]: ...

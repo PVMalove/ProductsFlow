@@ -32,12 +32,12 @@ class FakeProductSearch:
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]:
@@ -123,6 +123,28 @@ async def test_cache_key_normalizes_query_and_category_case_and_whitespace() -> 
     await cache.search("drill", category="tools")
 
     assert len(inner.calls) == 1
+
+
+async def test_catalog_without_query_is_cached_and_defaults_to_newest() -> None:
+    inner = FakeProductSearch()
+    redis = FakeRedis()
+    cache = CachedProductSearch(inner, redis, ttl_seconds=60)
+
+    first = await cache.search()
+    second = await cache.search()
+
+    assert second == first
+    assert inner.calls == [
+        {
+            "query": None,
+            "category": None,
+            "min_price": None,
+            "max_price": None,
+            "sort": ProductSortOption.NEWEST,
+            "limit": 20,
+            "cursor": None,
+        }
+    ]
 
 
 @pytest.mark.parametrize(

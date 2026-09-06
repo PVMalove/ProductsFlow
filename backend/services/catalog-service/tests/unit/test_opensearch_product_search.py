@@ -568,6 +568,55 @@ async def test_search_sort_clause_ends_with_product_id_tie_breaker(
     await client.aclose()
 
 
+@pytest.mark.asyncio
+async def test_catalog_without_text_uses_newest_sort_by_default() -> None:
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        return httpx.Response(200, json={"hits": {"hits": []}})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.search()
+
+    [request] = request_log
+    body = json.loads(request.content)
+    assert body["query"]["bool"].get("must") is None
+    assert body["sort"] == [{"created_at": "desc"}, {"id": "asc"}]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_text_search_uses_relevance_sort_by_default() -> None:
+    request_log: list[httpx.Request] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
+        return httpx.Response(200, json={"hits": {"hits": []}})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler), base_url="http://opensearch"
+    )
+    search = OpenSearchProductSearch(
+        base_url="http://opensearch", index_name="catalog-products", client=client
+    )
+
+    await search.search("drill")
+
+    [request] = request_log
+    assert json.loads(request.content)["sort"] == [
+        {"_score": "desc"},
+        {"id": "asc"},
+    ]
+    await client.aclose()
+
+
 @pytest.mark.parametrize(
     "sort",
     [

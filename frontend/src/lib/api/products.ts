@@ -1,3 +1,8 @@
+import type { CatalogFilters } from '../catalog-filters';
+import { buildApiBaseUrl } from '../api-url';
+import { apiClient } from '../apiClient';
+import type { ApiResponse } from './types';
+
 export interface ProductView {
   id: string;
   name: string;
@@ -8,59 +13,53 @@ export interface ProductView {
   is_active: boolean;
 }
 
-import { apiClient } from '../apiClient';
-import { ApiResponse } from './types';
+interface GetProductsParams extends CatalogFilters {
+  cursor?: string | null;
+}
 
-export async function getProducts(
-  cursor?: string | null,
-  category?: string | null,
-  min_price?: number | null,
-  max_price?: number | null,
-  sort?: string | null
-): Promise<ApiResponse<ProductView[]>> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
-  const url = new URL(`${baseUrl}/api/v1/products/search`);
-  if (cursor) {
-    url.searchParams.append('after', cursor);
-  }
-  if (sort) {
-    url.searchParams.append('sort', sort);
-  }
-  if (category) {
-    url.searchParams.append('category', category);
-  }
-  if (min_price !== undefined && min_price !== null) {
-    url.searchParams.append('min_price', min_price.toString());
-  }
-  if (max_price !== undefined && max_price !== null) {
-    url.searchParams.append('max_price', max_price.toString());
-  }
-  
+export async function getProducts({
+  cursor,
+  category,
+  minPrice,
+  maxPrice,
+  sort,
+}: GetProductsParams): Promise<ApiResponse<ProductView[]>> {
+  const baseUrl = buildApiBaseUrl(
+    process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
+  );
+  const url = new URL(`${baseUrl}/products/search`);
+
+  if (cursor) url.searchParams.set('after', cursor);
+  if (category) url.searchParams.set('category', category);
+  if (minPrice !== null) url.searchParams.set('min_price', minPrice.toString());
+  if (maxPrice !== null) url.searchParams.set('max_price', maxPrice.toString());
+  url.searchParams.set('sort', sort);
+
   const res = await fetch(url.toString(), {
-    cache: 'no-store'
+    cache: 'no-store',
   });
-  
+
   if (!res.ok) {
     throw new Error('Failed to fetch products');
   }
-  
+
   return res.json();
 }
 
 export async function getProduct(id: string): Promise<ProductView> {
-  const res = await apiClient.get<ApiResponse<ProductView>>(`/v1/products/${id}`);
+  const res = await apiClient.get<ApiResponse<ProductView>>(`/products/${id}`);
   return res.data.data;
 }
 
 export async function patchProduct(id: string, data: Partial<ProductView>): Promise<ProductView> {
-  const res = await apiClient.patch<ApiResponse<ProductView>>(`/v1/products/${id}`, data);
+  const res = await apiClient.patch<ApiResponse<ProductView>>(`/products/${id}`, data);
   return res.data.data;
 }
 
 export async function uploadProductImage(id: string, file: File): Promise<{ image_url: string }> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await apiClient.post<ApiResponse<{ image_url: string }>>(`/v1/products/${id}/image`, formData, {
+  const res = await apiClient.post<ApiResponse<{ image_url: string }>>(`/products/${id}/image`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -69,6 +68,6 @@ export async function uploadProductImage(id: string, file: File): Promise<{ imag
 }
 
 export async function getProductImage(id: string): Promise<{ image_url: string }> {
-  const res = await apiClient.get<ApiResponse<{ image_url: string }>>(`/v1/products/${id}/image`);
+  const res = await apiClient.get<ApiResponse<{ image_url: string }>>(`/products/${id}/image`);
   return res.data.data;
 }

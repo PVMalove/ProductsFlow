@@ -1,13 +1,15 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query';
 import { getProducts } from '@/lib/api/products';
+import type { CatalogFilters } from '@/lib/catalog-filters';
 
-export const getCatalogQueryOptions = (category?: string | null, min_price?: number | null, max_price?: number | null, sort?: string | null) => ({
-  queryKey: ['products', { category, min_price, max_price, sort }],
-  queryFn: ({ pageParam }: { pageParam: string | null }) => getProducts(pageParam, category, min_price, max_price, sort),
-  initialPageParam: null as string | null,
-  getNextPageParam: (lastPage: { meta: { next_cursor: string | null } }) => lastPage.meta.next_cursor || null,
-});
+export const getCatalogQueryOptions = (filters: CatalogFilters) =>
+  infiniteQueryOptions({
+    queryKey: ['products', filters] as const,
+    queryFn: ({ pageParam }) => getProducts({ ...filters, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? undefined,
+  });
 
-export function useCursorInfiniteQuery(category?: string | null, min_price?: number | null, max_price?: number | null, sort?: string | null) {
-  return useInfiniteQuery(getCatalogQueryOptions(category, min_price, max_price, sort));
+export function useCursorInfiniteQuery(filters: CatalogFilters) {
+  return useInfiniteQuery(getCatalogQueryOptions(filters));
 }

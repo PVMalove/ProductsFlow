@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 from kernel_platform.pagination import Page
 
-from application.catalog_list_cursor import CatalogListCursor, ProductListSortOption
 from application.ports import ProductQueryPort
 from contracts.product import ProductView
+from domain.repositories import CatalogListCursor, ProductListSortOption
 
 
 @dataclass(frozen=True)
