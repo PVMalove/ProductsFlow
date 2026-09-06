@@ -96,12 +96,6 @@ down: ## Остановить все контейнеры (docker compose down)
 down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
 
-down: ## Остановить все контейнеры (docker compose down)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down
-
-down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
-
 setup: ## Поднять *-db + MinIO + RabbitMQ + search infrastructure, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
 	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq opensearch redis
 	docker compose run --rm --no-deps identity-bootstrap alembic -c infrastructure/db/alembic.ini upgrade head
