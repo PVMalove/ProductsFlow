@@ -14,7 +14,11 @@ from application.search_snapshot import ProductSearchSnapshot, ProductSearchTomb
 from contracts.product import ProductView
 from domain.entities.product import Product
 from domain.product_image import ProductImage
-from domain.repositories import Cursor, ProductPage
+from domain.repositories import (
+    CatalogListCursor,
+    ProductListSortOption,
+    ProductPage,
+)
 from domain.value_objects.product_id import ProductId
 
 
@@ -156,11 +160,12 @@ class ProductQueryPort(Protocol):
         self,
         *,
         limit: int,
-        after: Cursor | None = None,
-        before: Cursor | None = None,
+        after: CatalogListCursor | None = None,
+        before: CatalogListCursor | None = None,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
+        sort: ProductListSortOption = ProductListSortOption.NEWEST,
     ) -> ProductPage: ...
 
 

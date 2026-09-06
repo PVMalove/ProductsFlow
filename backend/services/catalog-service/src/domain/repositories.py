@@ -1,13 +1,27 @@
+import enum
 import uuid
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from kernel_domain.result import Result
-from kernel_platform.pagination import Cursor, PageInfo
+from kernel_platform.pagination import PageInfo
 
 from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.value_objects.product_id import ProductId
+
+
+class ProductListSortOption(enum.StrEnum):
+    NEWEST = "newest"
+    PRICE_ASC = "price_asc"
+    PRICE_DESC = "price_desc"
+
+
+@dataclass(frozen=True)
+class CatalogListCursor:
+    sort: ProductListSortOption
+    sort_value: Any
+    product_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -68,9 +82,10 @@ class ProductRepository(Protocol):
         self,
         *,
         limit: int,
-        after: Cursor | None = None,
-        before: Cursor | None = None,
+        after: CatalogListCursor | None = None,
+        before: CatalogListCursor | None = None,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
+        sort: ProductListSortOption = ProductListSortOption.NEWEST,
     ) -> ProductPage: ...

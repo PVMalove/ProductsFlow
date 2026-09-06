@@ -15,12 +15,16 @@ export async function getProducts(
   cursor?: string | null,
   category?: string | null,
   min_price?: number | null,
-  max_price?: number | null
+  max_price?: number | null,
+  sort?: string | null
 ): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const url = new URL(`${baseUrl}/api/v1/products`);
   if (cursor) {
     url.searchParams.append('after', cursor);
+  }
+  if (sort) {
+    url.searchParams.append('sort', sort);
   }
   if (category) {
     url.searchParams.append('category', category);

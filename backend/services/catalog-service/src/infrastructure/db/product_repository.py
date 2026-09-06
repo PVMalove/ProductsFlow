@@ -2,11 +2,11 @@ import uuid
 
 from kernel_domain.result import Result
 from kernel_platform.outbox.drain import drain_events_to_outbox
-from kernel_platform.pagination import encode_cursor
 from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.catalog_list_cursor import encode_catalog_cursor
 from application.ports import (
     ProductAuditAction,
     ProductCommandPort,
@@ -15,8 +15,9 @@ from application.ports import (
 from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import (
-    Cursor,
+    CatalogListCursor,
     PageInfo,
+    ProductListSortOption,
     ProductPage,
 )
 from domain.repositories import (
@@ -245,19 +246,15 @@ class ProductRepository:
         self,
         *,
         limit: int,
-        after: Cursor | None = None,
-        before: Cursor | None = None,
+        after: CatalogListCursor | None = None,
+        before: CatalogListCursor | None = None,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
+        sort: ProductListSortOption = ProductListSortOption.NEWEST,
     ) -> ProductPage:
-        # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
-        # — деактивированный Товар и Товар деактивированного (или ещё не
-        # добранного, issue #149) Владельца одинаково скрыты из выдачи для
-        # всех, включая самого Владельца. INNER JOIN: Товар, чей Владелец ещё
-        # не появился в owner_read_model (ни событием, ни синхронным
-        # добором), из списков тоже не виден — тот же осторожный дефолт, что
-        # и на прямом обращении по id.
+        from datetime import datetime
+
         base_stmt = (
             select(ProductModel)
             .join(OwnerReadModelRow, OwnerReadModelRow.user_id == ProductModel.user_id)
@@ -271,22 +268,64 @@ class ProductRepository:
             base_stmt = base_stmt.where(ProductModel.price >= min_price)
         if max_price is not None:
             base_stmt = base_stmt.where(ProductModel.price <= max_price)
+
+        sort_col = (
+            ProductModel.created_at
+            if sort == ProductListSortOption.NEWEST
+            else ProductModel.price
+        )
+        sort_desc = sort in (
+            ProductListSortOption.NEWEST,
+            ProductListSortOption.PRICE_DESC,
+        )
+
+        def _get_sort_val(cursor: CatalogListCursor):
+            if sort == ProductListSortOption.NEWEST:
+                return datetime.fromisoformat(cursor.sort_value)
+            return float(cursor.sort_value)
+
+        def _make_cursor(row: ProductModel) -> CatalogListCursor:
+            val = (
+                row.created_at.isoformat()
+                if sort == ProductListSortOption.NEWEST
+                else float(row.price)
+            )
+            return CatalogListCursor(
+                sort=sort, sort_value=val, product_id=uuid.UUID(str(row.id))
+            )
+
         if before is not None:
-            stmt = base_stmt.where(
-                tuple_(ProductModel.created_at, ProductModel.id)
-                > (before.created_at, before.id)
-            ).order_by(ProductModel.created_at.asc(), ProductModel.id.asc())
+            val = _get_sort_val(before)
+            if sort_desc:
+                stmt = base_stmt.where(
+                    tuple_(sort_col, ProductModel.id) > (val, before.product_id.hex)
+                ).order_by(sort_col.asc(), ProductModel.id.asc())
+            else:
+                stmt = base_stmt.where(
+                    tuple_(sort_col, ProductModel.id) < (val, before.product_id.hex)
+                ).order_by(sort_col.desc(), ProductModel.id.desc())
+
             page, has_prev = await self._overfetch(stmt, limit)
             page.reverse()
             has_more = True
         else:
             stmt = base_stmt
             if after is not None:
-                stmt = stmt.where(
-                    tuple_(ProductModel.created_at, ProductModel.id)
-                    < (after.created_at, after.id)
-                )
-            stmt = stmt.order_by(ProductModel.created_at.desc(), ProductModel.id.desc())
+                val = _get_sort_val(after)
+                if sort_desc:
+                    stmt = stmt.where(
+                        tuple_(sort_col, ProductModel.id) < (val, after.product_id.hex)
+                    )
+                else:
+                    stmt = stmt.where(
+                        tuple_(sort_col, ProductModel.id) > (val, after.product_id.hex)
+                    )
+
+            if sort_desc:
+                stmt = stmt.order_by(sort_col.desc(), ProductModel.id.desc())
+            else:
+                stmt = stmt.order_by(sort_col.asc(), ProductModel.id.asc())
+
             page, has_more = await self._overfetch(stmt, limit)
             has_prev = after is not None
 
@@ -302,12 +341,10 @@ class ProductRepository:
             items=[_to_domain(row) for row in page],
             page_info=PageInfo(
                 next_cursor=(
-                    encode_cursor(page[-1].created_at, page[-1].id)
-                    if has_more
-                    else None
+                    encode_catalog_cursor(_make_cursor(page[-1])) if has_more else None
                 ),
                 prev_cursor=(
-                    encode_cursor(page[0].created_at, page[0].id) if has_prev else None
+                    encode_catalog_cursor(_make_cursor(page[0])) if has_prev else None
                 ),
                 has_more=has_more,
                 has_prev=has_prev,

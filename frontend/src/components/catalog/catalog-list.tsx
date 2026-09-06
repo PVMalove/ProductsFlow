@@ -13,14 +13,16 @@ interface CatalogListProps {
   category?: string | null;
   min_price?: number | null;
   max_price?: number | null;
+  sort?: string | null;
 }
 
-export default function CatalogList({ category, min_price, max_price }: CatalogListProps = {}) {
+export default function CatalogList({ category, min_price, max_price, sort }: CatalogListProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   
   const [minPriceInput, setMinPriceInput] = useState(min_price?.toString() || '');
   const [maxPriceInput, setMaxPriceInput] = useState(max_price?.toString() || '');
+  const [sortInput, setSortInput] = useState(sort || 'newest');
 
   const {
     data,
@@ -28,7 +30,7 @@ export default function CatalogList({ category, min_price, max_price }: CatalogL
     hasNextPage,
     isFetchingNextPage,
     status,
-  } = useCursorInfiniteQuery(category, min_price, max_price);
+  } = useCursorInfiniteQuery(category, min_price, max_price, sort);
 
   const { ref, inView } = useInView();
   const { actor } = useAuthStore();
@@ -41,6 +43,9 @@ export default function CatalogList({ category, min_price, max_price }: CatalogL
     
     if (maxPriceInput) params.set('max_price', maxPriceInput);
     else params.delete('max_price');
+    
+    if (sortInput && sortInput !== 'newest') params.set('sort', sortInput);
+    else params.delete('sort');
     
     router.push(`?${params.toString()}`);
   };
@@ -77,7 +82,7 @@ export default function CatalogList({ category, min_price, max_price }: CatalogL
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto p-4">
-      <form onSubmit={applyFilters} className="flex gap-4 items-end mb-4 bg-white dark:bg-zinc-900 p-4 rounded-lg shadow-sm">
+      <form onSubmit={applyFilters} className="flex flex-wrap gap-4 items-end mb-4 bg-white dark:bg-zinc-900 p-4 rounded-lg shadow-sm">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="min_price" className="text-sm font-medium">Min Price</label>
           <Input 
@@ -102,7 +107,20 @@ export default function CatalogList({ category, min_price, max_price }: CatalogL
             onChange={(e) => setMaxPriceInput(e.target.value)} 
           />
         </div>
-        <Button type="submit">Filter</Button>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="sort" className="text-sm font-medium">Sort By</label>
+          <select 
+            id="sort"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus:ring-zinc-300"
+            value={sortInput}
+            onChange={(e) => setSortInput(e.target.value)}
+          >
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+          </select>
+        </div>
+        <Button type="submit">Apply</Button>
       </form>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

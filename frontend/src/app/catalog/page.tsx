@@ -12,8 +12,9 @@ export default async function CatalogPage({
   const category = typeof params.category === 'string' ? params.category : null;
   const min_price = typeof params.min_price === 'string' && !isNaN(Number(params.min_price)) ? Number(params.min_price) : null;
   const max_price = typeof params.max_price === 'string' && !isNaN(Number(params.max_price)) ? Number(params.max_price) : null;
+  const sort = typeof params.sort === 'string' ? params.sort : null;
 
-  await queryClient.prefetchInfiniteQuery(getCatalogQueryOptions(category, min_price, max_price));
+  await queryClient.prefetchInfiniteQuery(getCatalogQueryOptions(category, min_price, max_price, sort));
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
@@ -22,7 +23,7 @@ export default async function CatalogPage({
       </div>
       
       <HydrationBoundary state={dehydrate(queryClient)}>
-        <CatalogList category={category} min_price={min_price} max_price={max_price} />
+        <CatalogList category={category} min_price={min_price} max_price={max_price} sort={sort} />
       </HydrationBoundary>
     </main>
   );

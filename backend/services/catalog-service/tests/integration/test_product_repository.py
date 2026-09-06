@@ -3,10 +3,10 @@ from datetime import datetime
 
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
-from kernel_platform.pagination import decode_cursor
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.catalog_list_cursor import ProductListSortOption, decode_catalog_cursor
 from domain.value_objects.product_id import ProductId
 from infrastructure.db.audit import ProductAuditLog
 from infrastructure.db.entity_configurations.models import ProductModel
@@ -264,7 +264,10 @@ async def test_list_paginates_with_keyset_cursor(db_session: AsyncSession) -> No
     assert first_page.page_info.next_cursor is not None
 
     second_page = await repo.list(
-        limit=2, after=decode_cursor(first_page.page_info.next_cursor)
+        limit=2,
+        after=decode_catalog_cursor(
+            first_page.page_info.next_cursor, expected_sort=ProductListSortOption.NEWEST
+        ),
     )
     second_page_ids = [p.id.value for p in second_page.items]
     assert second_page_ids == [PAGINATION_PRODUCT_IDS[0]]
@@ -288,12 +291,19 @@ async def test_list_before_cursor_navigates_back_to_a_newer_page(
     first_page = await repo.list(limit=2)
     assert first_page.page_info.next_cursor is not None
     second_page = await repo.list(
-        limit=2, after=decode_cursor(first_page.page_info.next_cursor)
+        limit=2,
+        after=decode_catalog_cursor(
+            first_page.page_info.next_cursor, expected_sort=ProductListSortOption.NEWEST
+        ),
     )
     assert second_page.page_info.prev_cursor is not None
 
     page_before = await repo.list(
-        limit=2, before=decode_cursor(second_page.page_info.prev_cursor)
+        limit=2,
+        before=decode_catalog_cursor(
+            second_page.page_info.prev_cursor,
+            expected_sort=ProductListSortOption.NEWEST,
+        ),
     )
 
     assert [p.id.value for p in page_before.items] == list(
