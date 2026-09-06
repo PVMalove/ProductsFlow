@@ -311,6 +311,56 @@ graph LR
     style SC fill:#14532d,stroke:#4ade80,color:#fff
 ```
 
+### 5.3. Наблюдаемость (LGTM overlay)
+
+Opt-in Compose overlay (`backend/docker-compose.monitoring.yml`, [ADR 0015](../adr/0015-observability-and-asynchronous-trace-propagation.md)) — три независимых пути данных из одних и тех же процессов, сходящихся в Grafana:
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+graph LR
+    subgraph "identity/catalog/support — *-api, *-worker"
+        APP["FastAPI / consumer-процессы"]
+    end
+
+    subgraph "Метрики"
+        APP -- "1. GET /metrics (scrape 15s)" --> Prom[("Prometheus")]
+    end
+
+    subgraph "Логи"
+        APP -- "2a. JSON на stdout (OBSERVABILITY_LOG_FORMAT=json, только *-api)" --> Docker[["Docker log driver"]]
+        Docker -- "2b. Docker API (docker_sd_configs)" --> Promtail["Promtail"]
+        Promtail -- "2c. push, лейблы: container/compose_service" --> Loki[("Loki")]
+    end
+
+    subgraph "Трейсы"
+        APP -- "3a. OTLP/gRPC :4317" --> Tempo[("Tempo")]
+        Tempo -. "3b. кэш поиска (frontend-search)" .-> Redis[("monitoring-redis")]
+    end
+
+    subgraph "Хранилище"
+        Loki -- "чанки → bucket loki-chunks" --> MinIO[("MinIO<br/>(тот же, что у catalog)")]
+        Tempo -- "блоки → bucket tempo-traces" --> MinIO
+        Init["monitoring-minio-init<br/>(один раз, до старта Loki/Tempo)"] -.-> MinIO
+    end
+
+    subgraph "Grafana"
+        Prom --> G["Datasources: Prometheus/Loki/Tempo"]
+        Loki --> G
+        Tempo --> G
+        G -- "4. derived field: «trace_id» в строке лога → трейс" --> User(("localhost:3300"))
+    end
+
+    style APP fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style Prom fill:#7c2d12,stroke:#fb923c,color:#fff
+    style Loki fill:#7c2d12,stroke:#fb923c,color:#fff
+    style Tempo fill:#7c2d12,stroke:#fb923c,color:#fff
+    style G fill:#14532d,stroke:#4ade80,color:#fff
+```
+
+- Метрики, логи и трейсы — три отдельных, не зависящих друг от друга канала: падение Tempo не мешает сбору логов, недоступность Loki не рвёт трейсинг (best-effort экспорт, ADR 0015).
+- `trace_id` — единственная связка между Loki и Tempo, и появляется он только в JSON-логах трёх `*-api` (только их `main.py` вызывает `configure_logging`, см. `backend/libs/observability`); `*-worker`-процессы пишут неструктурированный лог и в Loki отдельным трейсом не кликабельны — их спаны (`publish_message`/`consume_message`) видны через сам трейс в Tempo, а не через связку из Loki.
+- Наружу (`localhost:3300`) опубликована только Grafana; Prometheus/Loki/Tempo/MinIO/`monitoring-redis` — только во внутренней `backend-network`.
+
 ---
 
 ## 6. DevOps и CI/CD

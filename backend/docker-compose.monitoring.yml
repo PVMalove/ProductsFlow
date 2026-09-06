@@ -101,6 +101,23 @@ services:
     networks:
       - backend-network
 
+  # Кэш результатов поиска трейсов для Tempo (infra/monitoring/tempo.yaml,
+  # секция cache) — чисто эфемерное хранилище, поэтому без persistence
+  # (--save "" --appendonly no, как и у catalog-service'ного `redis`) и
+  # своего тома. Отдельный сервис, а не тот же `redis` из базового
+  # docker-compose.yml: разные данные (кэш трейсов vs кэш поиска товаров) и
+  # разные потребители — совмещать нечем, а имя `redis` уже занято catalog.
+  monitoring-redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
   tempo:
     image: grafana/tempo:2.8.0
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
@@ -113,6 +130,8 @@ services:
     depends_on:
       monitoring-minio-init:
         condition: service_completed_successfully
+      monitoring-redis:
+        condition: service_healthy
     networks:
       - backend-network
 

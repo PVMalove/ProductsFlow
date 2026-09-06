@@ -181,7 +181,7 @@ Swagger UI каждого сервиса — по его собственном�
 
 ## Наблюдаемость (LGTM overlay, опционально)
 
-Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015). Использует существующий MinIO как S3-хранилище Loki/Tempo, ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
 
 ```bash
 cd backend

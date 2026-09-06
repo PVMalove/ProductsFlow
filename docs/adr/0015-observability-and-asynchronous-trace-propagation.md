@@ -11,5 +11,7 @@
 - Точки RabbitMQ-потребления инструментируются в `kernel_platform.consumer`; PostgreSQL `LISTEN/NOTIFY` остаётся только механизмом пробуждения Outbox publisher.
 - Prometheus собирает только HTTP-метрики API; `/metrics` не проходит через Gateway и не инструментируется, а набор меток не включает пользовательские и высококардинальные значения.
 - Loki и Tempo получают отдельные buckets в уже существующем MinIO; одноразовый `monitoring-minio-init` идемпотентно создаёт их до старта хранилищ, поэтому их создание не относится к bootstrap Catalog.
-- Наружу опубликован только Grafana `localhost:3300` (внутри контейнера — `3000`); Tempo OTLP, Loki, Prometheus и MinIO остаются во внутренней Docker-сети. Grafana использует локальные `admin`/`admin`, переопределяемые переменными окружения.
+- Наружу опубликован только Grafana `localhost:3300` (внутри контейнера — `3000`); Tempo OTLP, Loki, Prometheus, MinIO и вспомогательный Redis остаются во внутренней Docker-сети. Grafana использует локальные `admin`/`admin`, переопределяемые переменными окружения.
+- Tempo кэширует результаты поиска трейсов (роль `frontend-search`) в отдельном Redis-инстансе overlay — эфемерные данные, без persistence; недоступность кэша не блокирует поиск, он просто идёт мимо в S3.
+- Внутренние gRPC/HTTP-лимиты Loki (max message size, concurrent streams, таймауты) подняты сверх дефолтов одного сервиса — под объём логов всего backend-стека сразу, чтобы широкий Explore-запрос из Grafana не упирался в ResourceExhausted на внутреннем querier ↔ query-frontend вызове.
 - Стек запускается явной командой `docker compose` с monitoring overlay; новый Make target не вводится.
