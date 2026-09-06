@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from kernel_platform.http.exception_handlers import register_error_handlers
+from observability.metrics import register_http_metrics
 from observability.middleware import RequestContextMiddleware
+from observability.tracing import instrument_fastapi
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.endpoints.auth import router as auth_router
@@ -40,6 +42,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=lifespan)
 register_error_handlers(app, service_error_type=ApplicationError)
 app.add_middleware(RequestContextMiddleware, verifier=LocalTokenVerifier())
+register_http_metrics(app, service_name="identity-service")
+instrument_fastapi(app, service_name="identity-service")
 app.include_router(jwks_router)
 app.include_router(auth_router)
 app.include_router(users_router)
