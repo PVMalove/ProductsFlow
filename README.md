@@ -167,17 +167,32 @@ cp .env.example .env
 
 make keys                  # сгенерировать dev-пару ключей RS256 для identity
 
+# собрать все образы приложений (по умолчанию с Docker-кэшем)
+make build
+# при необходимости полностью пересобрать без кэша:
+# make build no_cache=1
+
 make setup                 # поднять *-db + MinIO + RabbitMQ, прогнать миграции (без сида и без API)
 make demo                  # setup + сид (админ, демо-товары) + воркеры
 
-make up_dev                # поднять все *-api и *-worker в dev-профиле (host-порты 9010–9012)
+make up_dev                # поднять все *-api и *-worker в dev-профиле (Gateway :8080, API :9013–9015)
 ```
 
-Swagger UI каждого сервиса — по его собственному порту, отдельно (единого шлюза нет):
+`make demo` уже включает `make setup`, поэтому обычно достаточно одного из
+сценариев:
 
-- identity-service: http://localhost:9010/docs
-- catalog-service: http://localhost:9011/docs
-- support-service: http://localhost:9012/docs
+- без демо-данных: `make build` → `make up_dev`;
+- с демо-данными: `make build` → `make demo` → `make up_dev`.
+
+Для полной пересборки в любом сценарии используйте `make build no_cache=1`.
+Если нужно собрать только один сервис, добавьте `service`, например:
+`make build service=catalog-api no_cache=1`.
+
+Swagger UI сервисов доступен через Gateway и по прямым dev-портам:
+
+- identity-service: http://localhost:9013/docs
+- catalog-service: http://localhost:9014/docs
+- support-service: http://localhost:9015/docs
 
 ## Тестирование
 
