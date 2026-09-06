@@ -148,13 +148,14 @@ graph TD
 - **SQLAlchemy 2.0** (async), **Alembic** (изолированные миграции на сервис)
 - **PostgreSQL** — своя логическая БД на сервис
 - **RabbitMQ** + Transactional Outbox (гарантия At-Least-Once, без синхронного двойного write)
-- **MinIO** (S3-совместимое приватное хранилище картинок товаров, доступ — presigned URL)
+- **MinIO** (S3-совместимое хранилище: приватные картинки товаров через presigned URL; в opt-in monitoring overlay — ещё и чанки/блоки Loki и Tempo)
 - **JWT (PyJWT, RS256)** — issuer identity; **bcrypt** — хеширование паролей
 - **uv** — общий workspace (`backend/uv.lock` и `backend/.venv`) для всех пакетов (`libs/*`, `services/*`)
 - **pytest**, **ruff**, **mypy**, `check_architecture.py` (CQRS/direction-of-dependency gate)
 - **Docker Compose** + GitHub Actions (матрица CI по пакетам)
+- **OpenTelemetry** (трейсинг + Prometheus-метрики) во всех API/worker-процессах; **Prometheus + Loki + Promtail + Tempo + Grafana** — opt-in Compose overlay поверх этого же стека ([ADR 0015](docs/adr/0015-observability-and-asynchronous-trace-propagation.md), раздел «Наблюдаемость (LGTM overlay, опционально)» ниже)
 
-Structured JSON-логирование подключено с первого дня; OpenTelemetry (трейсинг/метрики) — зарезервированная, но пока не реализованная точка расширения.
+Structured JSON-логирование подключено с первого дня; в API-процессах (`*-api`) оно опционально переключается в единый JSON-формат с `trace_id` — специально для monitoring overlay, чтобы Loki мог связать лог с трейсом в Tempo.
 
 ## Быстрый старт
 
