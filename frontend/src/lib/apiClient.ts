@@ -19,6 +19,7 @@ apiClient.interceptors.response.use(
       if (store.actor) {
         store.clearAuth();
         if (typeof window !== 'undefined') {
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = '/login';
         }
       }

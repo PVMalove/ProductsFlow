@@ -10,9 +10,60 @@ export const handlers = [
     )
   }),
 
+  rest.post('/api/v1/auth/register', async (req, res, ctx) => {
+    try {
+      const body = await req.json();
+      if (body.email === 'error422@example.com') {
+        return res(
+          ctx.status(422),
+          ctx.json({
+            error: {
+              code: 'validation_error',
+              message: 'Unprocessable Entity',
+              details: [
+                { field: 'email', issue: 'Email already exists' }
+              ]
+            }
+          })
+        );
+      }
+      return res(
+        ctx.status(201),
+        ctx.json({
+          data: {
+            id: 'user-new',
+            role: 'USER',
+            email: body.email
+          },
+          meta: {}
+        })
+      );
+    } catch {
+      return res(ctx.status(400));
+    }
+  }),
+
   rest.post('/api/v1/auth/login', async (req, res, ctx) => {
-    const body = await req.json();
-    if (body.email === 'error400@example.com') {
+    let email = '';
+    let password = '';
+    
+    try {
+      const contentType = req.headers.get('content-type') || '';
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        const text = await req.text();
+        const params = new URLSearchParams(text);
+        email = params.get('username') || '';
+        password = params.get('password') || '';
+      } else {
+        const body = await req.json();
+        email = body.email;
+        password = body.password;
+      }
+    } catch {
+      // Ignore
+    }
+
+    if (email === 'error400@example.com') {
       return res(
         ctx.status(400),
         ctx.json({
@@ -26,7 +77,7 @@ export const handlers = [
         })
       );
     }
-    if (body.email === 'error422@example.com') {
+    if (email === 'error422@example.com') {
       return res(
         ctx.status(422),
         ctx.json({
@@ -41,7 +92,7 @@ export const handlers = [
       );
     }
 
-    if (body.email && body.password) {
+    if (email && password) {
       return res(
         ctx.status(200),
         ctx.cookie('accessToken', 'mock-access-token', { httpOnly: true }),
