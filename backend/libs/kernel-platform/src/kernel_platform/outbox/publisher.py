@@ -3,11 +3,14 @@ import json
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import aio_pika.exceptions
 from aio_pika import DeliveryMode, Message
 from aio_pika.abc import AbstractExchange
 from aiormq.exceptions import DeliveryError
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind
 from pamqp.commands import Basic
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,6 +22,11 @@ from kernel_platform.outbox.settings import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_PUBLISH_TIMEOUT_SECONDS,
     MAX_BACKOFF_EXPONENT,
+)
+from kernel_platform.outbox.trace_context import (
+    deserialize_trace_context,
+    extract_trace_context,
+    inject_trace_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +48,9 @@ def compute_backoff(attempts: int) -> timedelta:
     return timedelta(seconds=seconds)
 
 
-def build_message(row: OutboxMessage) -> Message:
+def build_message(
+    row: OutboxMessage, *, headers: dict[str, Any] | None = None
+) -> Message:
     """Пакует ORM-модель Outbox-сообщения в сырое AMQP сообщение `aio-pika`.
 
     Форсирует `message_id` из базы для дедупликации, выставляет `DeliveryMode.PERSISTENT` для надежности.
@@ -50,6 +60,9 @@ def build_message(row: OutboxMessage) -> Message:
 
     Returns:
         Message: Сформированное сообщение для брокера."""
+    message_headers: dict[str, Any] = (
+        headers if headers is not None else deserialize_trace_context(row.trace_context)
+    )
     return Message(
         body=json.dumps(row.payload).encode(),
         message_id=str(row.id),
@@ -57,8 +70,29 @@ def build_message(row: OutboxMessage) -> Message:
         delivery_mode=DeliveryMode.PERSISTENT,
         timestamp=row.occurred_at,
         type=row.event_type,
-        headers={"traceparent": row.trace_context},
+        headers=message_headers,
     )
+
+
+async def publish_message(
+    exchange: AbstractExchange,
+    row: OutboxMessage,
+    *,
+    timeout_seconds: float,
+) -> object:
+    """Publish one Outbox row under a child span of its stored trace context."""
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span(
+        "publish_message",
+        context=extract_trace_context(row.trace_context),
+        kind=SpanKind.PRODUCER,
+    ):
+        return await exchange.publish(
+            build_message(row, headers=inject_trace_context()),
+            routing_key=row.event_type,
+            mandatory=True,
+            timeout=timeout_seconds,
+        )
 
 
 class OutboxPublisher:
@@ -150,11 +184,10 @@ class OutboxPublisher:
         Args:
             row (OutboxMessage): Строка аутбокса."""
         try:
-            confirmation = await self._exchange.publish(
-                build_message(row),
-                routing_key=row.event_type,
-                mandatory=True,
-                timeout=self._publish_timeout_seconds,
+            confirmation = await publish_message(
+                self._exchange,
+                row,
+                timeout_seconds=self._publish_timeout_seconds,
             )
         except (
             DeliveryError,

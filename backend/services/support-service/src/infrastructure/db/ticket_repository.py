@@ -4,6 +4,7 @@ from typing import NoReturn
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.errors import Error
 from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.outbox.trace_context import serialize_trace_context
 from sqlalchemy import Select, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -467,6 +468,7 @@ def _to_outbox(event: DomainEvent) -> OutboxMessage:
         event_type=event.event_type,
         payload=payload,
         occurred_at=event.occurred_on_utc,
+        trace_context=serialize_trace_context(),
     )
 
 
