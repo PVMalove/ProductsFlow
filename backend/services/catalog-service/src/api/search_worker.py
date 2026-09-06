@@ -246,7 +246,14 @@ SEARCH_EVENTS_QUEUE_NAME = "catalog.search-events"
 
 
 async def declare_search_events_queue(channel: AbstractChannel) -> AbstractQueue:
-    exchange = await channel.get_exchange(EVENTS_EXCHANGE_NAME, ensure=True)
+    # Non-passive declare (idempotent, not just a passive existence check) —
+    # issue #317: identity-worker is otherwise the only process that creates
+    # this exchange, and it starts in parallel with this worker, not before
+    # it; a passive `get_exchange(ensure=True)` crashes with
+    # ChannelNotFoundEntity if this worker wins that race.
+    exchange = await channel.declare_exchange(
+        EVENTS_EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True
+    )
     queue = await channel.declare_queue(SEARCH_EVENTS_QUEUE_NAME, durable=True)
     await queue.bind(exchange, routing_key="product.*.v2")
     # Bound here (not only by identity's own topology) so an owner event
