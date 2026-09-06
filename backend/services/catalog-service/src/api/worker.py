@@ -9,6 +9,7 @@ import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 from kernel_platform.consumer import consume
 from kernel_platform.topology import declare_topology
+from observability.tracing import configure_tracing
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -140,6 +141,7 @@ def build_user_event_handler(
 
 async def main() -> None:
     """Запускает воркер проекции user-событий catalog (ADR 0010/0011)."""
+    configure_tracing("catalog-worker")
     engine = create_async_engine(
         settings.catalog_database_url,
         pool_pre_ping=True,
