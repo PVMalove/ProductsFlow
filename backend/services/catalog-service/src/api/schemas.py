@@ -119,6 +119,8 @@ class ProductListRequest(BaseModel):
     after: str | None = Query(default=None)
     before: str | None = Query(default=None)
     category: str | None = Query(default=None)
+    min_price: float | None = Query(default=None, ge=0)
+    max_price: float | None = Query(default=None, ge=0)
 
     def to_query(self) -> ListProductsQuery:
         if self.after is not None and self.before is not None:
@@ -135,6 +137,8 @@ class ProductListRequest(BaseModel):
             after=after_cursor,
             before=before_cursor,
             category=self.category,
+            min_price=self.min_price,
+            max_price=self.max_price,
         )
 
 

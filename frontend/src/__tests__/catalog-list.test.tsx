@@ -7,6 +7,11 @@ jest.mock('react-intersection-observer', () => ({
   useInView: () => ({ ref: jest.fn(), inView: false }),
 }));
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 jest.mock('@/hooks/useCursorInfiniteQuery', () => ({
   useCursorInfiniteQuery: jest.fn(),
 }));
@@ -21,7 +26,7 @@ describe('CatalogList', () => {
     });
 
     render(<CatalogList />);
-    expect(screen.getByText(/Loading.../i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Loading.../i)).toBeInTheDocument();
   });
 
   it('renders products', () => {

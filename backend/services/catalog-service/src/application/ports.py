@@ -159,6 +159,8 @@ class ProductQueryPort(Protocol):
         after: Cursor | None = None,
         before: Cursor | None = None,
         category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
     ) -> ProductPage: ...
 
 

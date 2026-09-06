@@ -19,6 +19,8 @@ class ListProductsQuery:
     after: Cursor | None = None
     before: Cursor | None = None
     category: str | None = None
+    min_price: float | None = None
+    max_price: float | None = None
 
 
 class ListProductsQueryHandler:
@@ -40,6 +42,8 @@ class ListProductsQueryHandler:
             after=query.after,
             before=query.before,
             category=query.category,
+            min_price=query.min_price,
+            max_price=query.max_price,
         )
         items = [ProductView.from_domain(item) for item in page.items]
         return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

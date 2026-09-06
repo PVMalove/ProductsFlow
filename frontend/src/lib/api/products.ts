@@ -11,7 +11,12 @@ export interface ProductView {
 import { apiClient } from '../apiClient';
 import { ApiResponse } from './types';
 
-export async function getProducts(cursor?: string | null, category?: string | null): Promise<ApiResponse<ProductView[]>> {
+export async function getProducts(
+  cursor?: string | null,
+  category?: string | null,
+  min_price?: number | null,
+  max_price?: number | null
+): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const url = new URL(`${baseUrl}/api/v1/products`);
   if (cursor) {
@@ -19,6 +24,12 @@ export async function getProducts(cursor?: string | null, category?: string | nu
   }
   if (category) {
     url.searchParams.append('category', category);
+  }
+  if (min_price !== undefined && min_price !== null) {
+    url.searchParams.append('min_price', min_price.toString());
+  }
+  if (max_price !== undefined && max_price !== null) {
+    url.searchParams.append('max_price', max_price.toString());
   }
   
   const res = await fetch(url.toString(), {
