@@ -54,12 +54,20 @@ def _run_compose(*args: str, environment: dict[str, str]) -> None:
         )
 
 
-def _search_events_queue_is_declared(environment: dict[str, str]) -> bool:
-    """Checks RabbitMQ through the isolated Compose stack rather than
-    assuming that a started worker has already declared its bindings."""
+def _search_events_queue_is_drained(environment: dict[str, str]) -> bool:
+    """Checks that the search projection has caught up with the seeded
+    catalog before E2E scenarios add their own products."""
     result = subprocess.run(
         _compose_command(
-            "exec", "-T", "rabbitmq", "rabbitmqctl", "list_queues", "name"
+            "exec",
+            "-T",
+            "rabbitmq",
+            "rabbitmqctl",
+            "list_queues",
+            "name",
+            "messages_ready",
+            "messages_unacknowledged",
+            "--no-table-headers",
         ),
         cwd=_BACKEND_DIR,
         env=environment,
@@ -68,25 +76,29 @@ def _search_events_queue_is_declared(environment: dict[str, str]) -> bool:
         check=False,
     )
     return result.returncode == 0 and any(
-        line.strip() == _SEARCH_EVENTS_QUEUE for line in result.stdout.splitlines()
+        line.split() == [_SEARCH_EVENTS_QUEUE, "0", "0"]
+        for line in result.stdout.splitlines()
     )
 
 
-async def _wait_for_search_events_queue(environment: dict[str, str]) -> None:
-    """Avoid publishing an owner-registration event before the durable search
-    queue has been bound; RabbitMQ otherwise discards it during cold start."""
+async def _wait_for_search_events_queue_to_drain(
+    environment: dict[str, str],
+) -> None:
+    """The outbox publishes 360 seeded product snapshots at startup. Waiting
+    for this queue to drain prevents later test events from timing out behind
+    that deterministic backlog on slower CI runners."""
     deadline = time.monotonic() + _READINESS_DEADLINE_SECONDS
     delay = _MIN_RETRY_DELAY_SECONDS
     while True:
-        is_ready = await asyncio.to_thread(
-            _search_events_queue_is_declared, environment
+        is_drained = await asyncio.to_thread(
+            _search_events_queue_is_drained, environment
         )
-        if is_ready:
+        if is_drained:
             return
         if time.monotonic() >= deadline:
             pytest.fail(
                 "Timed out waiting for RabbitMQ queue "
-                f"{_SEARCH_EVENTS_QUEUE!r} to be declared"
+                f"{_SEARCH_EVENTS_QUEUE!r} to drain seeded product snapshots"
             )
         await asyncio.sleep(min(_MAX_RETRY_DELAY_SECONDS, delay))
         delay = min(_MAX_RETRY_DELAY_SECONDS, delay * 2)
@@ -200,7 +212,6 @@ async def gateway_client() -> AsyncIterator[httpx.AsyncClient]:
 
     try:
         _run_compose("up", "--build", "--detach", "--wait", environment=environment)
-        await _wait_for_search_events_queue(environment)
         async with httpx.AsyncClient(
             base_url=f"http://127.0.0.1:{port}",
             timeout=15.0,
@@ -221,6 +232,7 @@ async def gateway_client() -> AsyncIterator[httpx.AsyncClient]:
                 retry_statuses=(401,),
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
+            await _wait_for_search_events_queue_to_drain(environment)
             yield client
     finally:
         _run_compose("down", "-v", "--remove-orphans", environment=environment)
