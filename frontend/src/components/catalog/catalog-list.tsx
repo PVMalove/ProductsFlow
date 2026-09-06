@@ -3,25 +3,47 @@
 import { ProductView } from '@/lib/api/products';
 import { useCursorInfiniteQuery } from '@/hooks/useCursorInfiniteQuery';
 import { useInView } from 'react-intersection-observer';
-import { useEffect } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Input } from '@/components/ui/input';
 
 interface CatalogListProps {
   category?: string | null;
+  min_price?: number | null;
+  max_price?: number | null;
 }
 
-export default function CatalogList({ category }: CatalogListProps = {}) {
+export default function CatalogList({ category, min_price, max_price }: CatalogListProps = {}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  const [minPriceInput, setMinPriceInput] = useState(min_price?.toString() || '');
+  const [maxPriceInput, setMaxPriceInput] = useState(max_price?.toString() || '');
+
   const {
     data,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     status,
-  } = useCursorInfiniteQuery(category);
+  } = useCursorInfiniteQuery(category, min_price, max_price);
 
   const { ref, inView } = useInView();
   const { actor } = useAuthStore();
+
+  const applyFilters = (e: FormEvent) => {
+    e.preventDefault();
+    const params = new URLSearchParams(searchParams.toString());
+    if (minPriceInput) params.set('min_price', minPriceInput);
+    else params.delete('min_price');
+    
+    if (maxPriceInput) params.set('max_price', maxPriceInput);
+    else params.delete('max_price');
+    
+    router.push(`?${params.toString()}`);
+  };
 
   useEffect(() => {
     if (inView && hasNextPage) {
@@ -31,7 +53,7 @@ export default function CatalogList({ category }: CatalogListProps = {}) {
 
   if (status === 'pending') {
     return (
-      <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto p-4">
+      <div aria-label="Loading..." className="flex flex-col gap-8 w-full max-w-4xl mx-auto p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="border rounded-lg p-4 shadow-sm flex flex-col gap-2 bg-white dark:bg-zinc-900 animate-pulse">
@@ -55,6 +77,34 @@ export default function CatalogList({ category }: CatalogListProps = {}) {
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto p-4">
+      <form onSubmit={applyFilters} className="flex gap-4 items-end mb-4 bg-white dark:bg-zinc-900 p-4 rounded-lg shadow-sm">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="min_price" className="text-sm font-medium">Min Price</label>
+          <Input 
+            id="min_price" 
+            type="number" 
+            min="0"
+            step="0.01"
+            placeholder="0.00" 
+            value={minPriceInput} 
+            onChange={(e) => setMinPriceInput(e.target.value)} 
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="max_price" className="text-sm font-medium">Max Price</label>
+          <Input 
+            id="max_price" 
+            type="number" 
+            min="0"
+            step="0.01"
+            placeholder="999.99" 
+            value={maxPriceInput} 
+            onChange={(e) => setMaxPriceInput(e.target.value)} 
+          />
+        </div>
+        <Button type="submit">Filter</Button>
+      </form>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {data.pages.map((page, i) => (
           <div key={i} className="contents">

@@ -248,6 +248,8 @@ class ProductRepository:
         after: Cursor | None = None,
         before: Cursor | None = None,
         category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
     ) -> ProductPage:
         # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
         # — деактивированный Товар и Товар деактивированного (или ещё не
@@ -265,6 +267,10 @@ class ProductRepository:
         )
         if category is not None:
             base_stmt = base_stmt.where(ProductModel.category == category)
+        if min_price is not None:
+            base_stmt = base_stmt.where(ProductModel.price >= min_price)
+        if max_price is not None:
+            base_stmt = base_stmt.where(ProductModel.price <= max_price)
         if before is not None:
             stmt = base_stmt.where(
                 tuple_(ProductModel.created_at, ProductModel.id)

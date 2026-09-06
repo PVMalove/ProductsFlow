@@ -655,3 +655,22 @@ async def test_audit_log_for_a_deleted_product_is_forbidden_for_a_non_admin(
     )
 
     assert response.status_code == 403
+
+
+async def test_list_products_filters_by_price_range(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    token, _ = _register_owner(identity_gateway)
+    for price in [10.0, 50.0, 100.0, 200.0]:
+        await _create_product(catalog_client, token, price=price)
+
+    response = await catalog_client.get(
+        "/api/v1/products", params={"min_price": 40.0, "max_price": 150.0}
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    prices = {item["price"] for item in data}
+    assert 50.0 in prices
+    assert 100.0 in prices
+    assert 10.0 not in prices
+    assert 200.0 not in prices
