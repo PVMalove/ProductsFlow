@@ -84,7 +84,9 @@ async def test_worker_projects_user_events_idempotently_and_by_version(
     )
     queue = await declare_topology(channel, service_name=SERVICE_NAME)
     await queue.purge()
-    consumer_tag = await consume(queue, build_user_event_handler(session_factory))
+    consumer_tag = await consume(
+        queue, build_user_event_handler(session_factory), prefetch_count=1
+    )
     user_id = uuid.uuid4()
 
     try:
@@ -143,7 +145,9 @@ async def test_worker_tombstones_a_deleted_user_and_stale_events_cannot_revive_i
     )
     queue = await declare_topology(channel, service_name=SERVICE_NAME)
     await queue.purge()
-    consumer_tag = await consume(queue, build_user_event_handler(session_factory))
+    consumer_tag = await consume(
+        queue, build_user_event_handler(session_factory), prefetch_count=1
+    )
     user_id = uuid.uuid4()
 
     try:

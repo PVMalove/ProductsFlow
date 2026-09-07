@@ -207,7 +207,9 @@ async def main() -> None:
         async with connection:
             channel = await connection.channel()
             queue = await declare_topology(channel, service_name="support-service")
-            await consume(queue, build_user_event_handler(session_factory))
+            await consume(
+                queue, build_user_event_handler(session_factory), prefetch_count=1
+            )
             logger.info("support-worker: user-event consumer started")
             await asyncio.Future()
     finally:

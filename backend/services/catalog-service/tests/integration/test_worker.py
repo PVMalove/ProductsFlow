@@ -86,7 +86,7 @@ async def test_worker_syncs_user_events_idempotently_and_by_version(
     queue = await declare_topology(channel, service_name=SERVICE_NAME)
     await queue.purge()
     handler = build_user_event_handler(worker_session_factory)
-    consumer_tag = await consume(queue, handler)
+    consumer_tag = await consume(queue, handler, prefetch_count=1)
     user_id = uuid.uuid4()
 
     try:
