@@ -62,7 +62,12 @@ def next_stage_index(headers: HeadersType, stage_queue_names: Sequence[str]) -> 
     return last_stage_index + 1
 
 
-async def consume(queue: AbstractQueue, handler: MessageHandler) -> ConsumerTag:
+async def consume(
+    queue: AbstractQueue,
+    handler: MessageHandler,
+    *,
+    prefetch_count: int | None = None,
+) -> ConsumerTag:
     """Обёртка-консьюмер над `queue.consume` с полной retry-лестницей.
 
     Под капотом подписывается на очередь и хэндлит эксепшены обработчика.
@@ -75,12 +80,25 @@ async def consume(queue: AbstractQueue, handler: MessageHandler) -> ConsumerTag:
     Args:
         queue (AbstractQueue): Очередь `aio_pika`, из которой будем консьюмить.
         handler (MessageHandler): Асинхронный коллбэк для обработки каждого сообщения.
+        prefetch_count (int | None): Если задан, ограничивает канал этим QoS
+            перед подпиской — обработчик получает следующее сообщение только
+            после `ack`/`reject` предыдущего. По умолчанию `None` (без
+            ограничения, брокер доставляет и `_on_message` обрабатывает
+            сообщения параллельно) — сохраняет прежнее поведение для
+            консьюмеров без зависимости от порядка. Consumers, чья read-модель
+            версионируется частичным upsert (не полным снапшотом), обязаны
+            передавать `prefetch_count=1`: без строгого порядка обработки более
+            новое по `last_applied_outbox_id` событие может закоммититься раньше
+            более старого, и тогда version guard навсегда отбросит поле,
+            которое нёс только отставший apply.
 
     Returns:
         ConsumerTag: Тег созданного консьюмера, по которому его можно будет остановить.
 
     Side Effects:
         Мутирует стейт брокера (аккает, режектит или паблишит месседжи)."""
+    if prefetch_count is not None:
+        await queue.channel.set_qos(prefetch_count=prefetch_count)
     stage_queue_names = tuple(
         (f"{queue.name}.{suffix}" for suffix in _RETRY_STAGE_NAMES)
     )

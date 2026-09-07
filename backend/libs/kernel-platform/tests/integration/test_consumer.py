@@ -66,6 +66,59 @@ async def test_consume_acks_message_on_successful_handling(
         await main_queue.cancel(consumer_tag)
 
 
+async def test_consume_with_prefetch_count_one_processes_messages_sequentially(
+    channel: AbstractChannel,
+) -> None:
+    """issue #357: consumers versioning a read-model via partial upsert need
+    strictly ordered delivery — a handler must fully finish (ack) before the
+    next message's handler starts, or a later event can commit ahead of an
+    earlier one and its version guard silently drops the earlier event's
+    unique field. `prefetch_count=1` is the fix; this proves it holds the
+    second handler back until the first one returns."""
+    # Собственный routing key (не "user.registered.v1"), иначе сообщение
+    # фанаутится и в другие уже объявленные в этом файле очереди на том же
+    # topic exchange (см. комментарий в тесте трейсинга выше по файлу).
+    service_name = "kernel-consumer-prefetch-test"
+    prefetch_event_type = "prefetch.smoke.v1"
+    main_queue = await declare_topology(
+        channel, service_name, routing_keys=(prefetch_event_type,)
+    )
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    order: list[int] = []
+
+    async def handler(message: AbstractIncomingMessage) -> None:
+        body = int(message.body)
+        if body == 1:
+            first_started.set()
+            await release_first.wait()
+        order.append(body)
+
+    consumer_tag = await consume(main_queue, handler, prefetch_count=1)
+    try:
+        events_exchange = await channel.get_exchange(EVENTS_EXCHANGE_NAME)
+        for body in (b"1", b"2"):
+            await events_exchange.publish(
+                aio_pika.Message(body=body), routing_key=prefetch_event_type
+            )
+        await asyncio.wait_for(first_started.wait(), timeout=5)
+
+        # Пока первый обработчик не вернулся (и сообщение не заакано),
+        # второе сообщение не должно даже начать обрабатываться — при
+        # prefetch=1 брокер не отдаёт его каналу.
+        await asyncio.sleep(0.2)
+        assert order == []
+
+        release_first.set()
+        for _ in range(100):
+            if order == [1, 2]:
+                break
+            await asyncio.sleep(0.05)
+        assert order == [1, 2]
+    finally:
+        await main_queue.cancel(consumer_tag)
+
+
 async def test_http_request_publish_message_consume_message_form_one_trace(
     channel: AbstractChannel, monkeypatch: pytest.MonkeyPatch
 ) -> None:

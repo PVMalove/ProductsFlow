@@ -151,7 +151,9 @@ async def test_rabbitmq_contract_consumes_support_queue_idempotently(
     queue = await declare_topology(channel, service_name=SERVICE_NAME)
     await queue.purge()
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
-    consumer_tag = await consume(queue, build_user_event_handler(session_factory))
+    consumer_tag = await consume(
+        queue, build_user_event_handler(session_factory), prefetch_count=1
+    )
     user_id = uuid.uuid4()
     ticket = Ticket.create(
         author_id=user_id, subject="Subject", first_message="Private message"
