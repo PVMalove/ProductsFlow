@@ -8,6 +8,7 @@ import { ProductCard } from '@/components/catalog/product-card';
 import { useCursorInfiniteQuery } from '@/hooks/useCursorInfiniteQuery';
 import {
   DEFAULT_CATALOG_FILTERS,
+  getCatalogFiltersKey,
 } from '@/lib/catalog-filters';
 import type { CatalogFilters } from '@/lib/catalog-filters';
 import { useAuthStore } from '@/lib/store';
@@ -72,12 +73,7 @@ export default function CatalogList({
   }
 
   const products = data.pages.flatMap((page) => page.data);
-  const filtersKey = [
-    filters.category,
-    filters.minPrice,
-    filters.maxPrice,
-    filters.sort,
-  ].join(':');
+  const filtersKey = getCatalogFiltersKey(filters);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 p-4">

@@ -31,6 +31,7 @@ describe('getProducts pagination', () => {
   it('sends cursor and sort when requesting the next catalog page', async () => {
     await getProducts({
       cursor: 'opaque-cursor',
+      query: null,
       category: 'Tools',
       minPrice: 10,
       maxPrice: 100,
@@ -38,7 +39,7 @@ describe('getProducts pagination', () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://gateway.test/api/v1/products/search?after=opaque-cursor&category=Tools&min_price=10&max_price=100&sort=newest',
+      'http://gateway.test/api/v1/products/search?category=Tools&min_price=10&max_price=100&after=opaque-cursor&sort=newest',
       { cache: 'no-store' },
     );
   });

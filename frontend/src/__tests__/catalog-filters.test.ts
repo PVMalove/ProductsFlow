@@ -11,12 +11,14 @@ describe('parseCatalogFilters', () => {
   it('parses supported filters', () => {
     expect(
       parseCatalogFilters({
+        q: ' drill ',
         category: ' Tools ',
         min_price: '10.5',
         max_price: '99',
         sort: 'price_desc',
       }),
     ).toEqual({
+      query: 'drill',
       category: 'Tools',
       minPrice: 10.5,
       maxPrice: 99,
