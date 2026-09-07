@@ -4,12 +4,21 @@ from typing import Any
 
 import httpx
 import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from observability.context import actor_id_var, request_id_var
+from observability.context import (
+    actor_id_var,
+    request_id_var,
+    span_id_var,
+    trace_id_var,
+)
 from observability.middleware import RequestContextMiddleware
 
 
@@ -170,3 +179,19 @@ async def test_context_vars_do_not_leak_between_requests() -> None:
 
     assert actor_id_var.get() is None
     assert request_id_var.get() is None
+
+
+async def test_active_trace_and_span_are_available_to_request_logs() -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("request") as span:
+        with trace.use_span(span, end_on_exit=False):
+            async with _build_client(FakeTokenVerifier()) as client:
+                response = await client.get("/echo")
+
+        assert response.json()["request_id"]
+        assert trace_id_var.get() is None
+        assert span_id_var.get() is None
+        assert span.get_span_context().is_valid

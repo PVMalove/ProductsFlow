@@ -40,21 +40,11 @@ class Settings(BaseSettings):
     minio_root_user: str = "minio-admin"
     minio_root_password: str = "minio-secret-key"
     minio_bucket_name_product: str = "product-chunks"
-    minio_bucket_name_loki: str = "loki-chunks"
-    minio_bucket_name_tempo: str = "tempo-traces"
     catalog_seed_placeholder_image_path: str = _DEFAULT_SEED_PLACEHOLDER_IMAGE_PATH
 
     db_pool_size: int = 20
     db_max_overflow: int = 10
     db_pool_recycle: int = 1800
-
-    @property
-    def minio_bucket_names(self) -> tuple[str, ...]:
-        return (
-            self.minio_bucket_name_product,
-            self.minio_bucket_name_loki,
-            self.minio_bucket_name_tempo,
-        )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

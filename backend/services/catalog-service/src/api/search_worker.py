@@ -9,6 +9,7 @@ import aio_pika
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractQueue
 from kernel_platform.consumer import consume
 from kernel_platform.topology import declare_topology
+from observability.tracing import configure_tracing
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -311,6 +312,7 @@ async def declare_search_events_queue(
 
 async def main() -> None:
     """Runs the dedicated Catalog Product-to-OpenSearch projection worker."""
+    configure_tracing("catalog-search-worker")
     engine = create_async_engine(
         settings.catalog_database_url,
         pool_pre_ping=True,

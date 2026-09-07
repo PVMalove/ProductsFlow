@@ -5,6 +5,7 @@ from kernel_domain.entity import Entity
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.outbox.trace_context import serialize_trace_context
 
 
 async def drain_events_to_outbox(session: AsyncSession, entity: Entity[Any]) -> None:
@@ -28,5 +29,6 @@ async def drain_events_to_outbox(session: AsyncSession, entity: Entity[Any]) -> 
                 event_type=event.event_type,
                 payload=event.to_payload(),
                 occurred_at=event.occurred_on_utc,
+                trace_context=serialize_trace_context(),
             )
         )

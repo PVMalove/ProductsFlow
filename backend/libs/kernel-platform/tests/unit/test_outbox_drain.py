@@ -1,4 +1,5 @@
 # ruff: noqa: E501
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,6 +8,8 @@ from typing import Any
 from kernel_domain import PRIVATE_MARKER
 from kernel_domain.domain_event import DomainEvent
 from kernel_domain.entity import Entity
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
 
 from kernel_platform.outbox.drain import drain_events_to_outbox
 from kernel_platform.outbox.models import OutboxMessage
@@ -57,6 +60,29 @@ async def test_drain_events_to_outbox_maps_each_event_via_the_domain_event_contr
     assert row.event_type == "widget.created.v1"
     assert row.payload == {"widget_id": str(widget.id), "name": "Widget"}
     assert isinstance(row.occurred_at, datetime)
+
+
+async def test_drain_events_to_outbox_serializes_the_active_w3c_carrier(
+    monkeypatch: Any,
+) -> None:
+    provider = TracerProvider()
+    monkeypatch.setattr(trace, "get_tracer_provider", lambda: provider)
+    widget = _Widget(PRIVATE_MARKER, uuid.uuid4())
+    widget.create("Widget")
+    session = _RecordingSession()
+
+    with provider.get_tracer("test").start_as_current_span("http_request"):
+        await drain_events_to_outbox(session, widget)  # type: ignore[arg-type]
+
+    row = session.added[0]
+    assert isinstance(row, OutboxMessage)
+    carrier = json.loads(row.trace_context or "")
+    assert set(carrier) == {"traceparent"}
+    version, trace_id, span_id, flags = carrier["traceparent"].split("-")
+    assert version == "00"
+    assert len(trace_id) == 32
+    assert len(span_id) == 16
+    assert len(flags) == 2
 
 
 async def test_drain_events_to_outbox_drains_the_aggregate_event_queue() -> None:

@@ -24,84 +24,9 @@ ProductsFlow — распределённая микросервисная пл�
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. **Единая точка входа — Nginx Gateway**: и в dev (`8080:80`), и в prod (`80:80`) это единственный сервис, публикующий порт наружу; `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Отдельно от него — изолированная E2E-тестовая инфраструктура (свой Nginx-Gateway), поднимаемая и уничтожаемая pytest-фикстурой на время прогона.
 
-<details>
-<summary><b>Показать схему макро-архитектуры (Mermaid)</b></summary>
+![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity; все три сервиса используют Shared Kernel (kernel-domain, kernel-platform, observability); MinIO переиспользуется opt-in LGTM Monitoring оверлеем](docs/architecture/diagrams/macro-architecture.png)
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    Client(["Web / BFF Clients"])
-
-    Client -->|"HTTP :8080 (dev) / :80 (prod)"| GW["gateway (Nginx)"]
-
-    GW --> IS["identity-service"]
-    GW --> CS["catalog-service"]
-    GW --> SS["support-service"]
-
-    subgraph APP["Polyrepo Workspace (backend/)"]
-        direction TB
-
-        subgraph SERVICES["Микросервисы (FastAPI)"]
-            IS
-            CS
-            SS
-        end
-
-        subgraph WORKERS["Async-воркеры (тот же образ, другая точка входа)"]
-            IdentityWorker["identity-worker<br/>(единственный Outbox producer)"]
-            CatalogWorker["catalog-worker"]
-            SupportWorker["support-worker"]
-        end
-
-        subgraph LIBS["Shared Kernel (libs/)"]
-            KernelDomain["kernel-domain<br/>(Result, Entity, DomainEvent)"]
-            KernelPlatform["kernel-platform<br/>(Outbox, UnitOfWork, Actor, HTTP-конверт)"]
-            OBS["observability<br/>(structured logging)"]
-        end
-
-        IS -.-> KernelDomain & KernelPlatform & OBS
-        CS -.-> KernelDomain & KernelPlatform & OBS
-        SS -.-> KernelDomain & KernelPlatform & OBS
-        CS -. "IdentityClient: JWKS + sync fallback" .-> IS
-    end
-
-    subgraph DATA["Данные и обмен сообщениями"]
-        IdentityDB[("identity-db<br/>(своя БД)")]
-        CatalogDB[("catalog-db<br/>(своя БД)")]
-        SupportDB[("support-db<br/>(своя БД)")]
-        RabbitNode(("RabbitMQ<br/>productsflow.events (topic)"))
-        MinIO[("MinIO (S3)<br/>картинки товаров, приватный bucket")]
-    end
-
-    IS --> IdentityDB
-    CS --> CatalogDB
-    SS --> SupportDB
-
-    IdentityWorker -.->|"LISTEN/NOTIFY + poll"| IdentityDB
-    IdentityWorker --->|Publish| RabbitNode
-    RabbitNode -->|"user.*.v1"| CatalogWorker
-    RabbitNode -->|"user.*.v1"| SupportWorker
-    CatalogWorker --> CatalogDB
-    SupportWorker --> SupportDB
-
-    CS --->|"presigned URL"| MinIO
-
-    style Client fill:#1f2937,stroke:#9ca3af,color:#fff
-    style GW fill:#581c87,stroke:#c084fc,color:#fff
-    style IS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style CS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style SS fill:#1e3a8a,stroke:#60a5fa,color:#fff
-    style KernelDomain fill:#14532d,stroke:#4ade80,color:#fff
-    style KernelPlatform fill:#14532d,stroke:#4ade80,color:#fff
-    style OBS fill:#14532d,stroke:#4ade80,color:#fff
-    style IdentityDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style CatalogDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style SupportDB fill:#7c2d12,stroke:#fb923c,color:#fff
-    style RabbitNode fill:#7c2d12,stroke:#fb923c,color:#fff
-    style MinIO fill:#7c2d12,stroke:#fb923c,color:#fff
-```
-
-</details>
+[Открыть интерактивную схему](docs/architecture/diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория; подробности по воркерам — [backend_architecture.md §3](docs/architecture/backend_architecture.md)).
 
 - **`identity-service`** — учётные записи, ролевая модель (`user`/`admin`), выдача stateless JWT (RS256), единственный producer доменных событий.
 - **`catalog-service`** — товары, видимость, картинки (MinIO); проверяет JWT через JWKS-кэш (`IdentityClient`) и делает синхронный добор к identity на холодном старте read-модели и на админской ветке.
@@ -110,37 +35,14 @@ graph TD
 Разделяемый код — в `backend/libs/` (path-зависимости, без semver, HEAD-версии):
 - `kernel-domain` — без сторонних зависимостей: `Result`/`Error`, `Entity`, `DomainEvent`, `VisibilityPolicy`.
 - `kernel-platform` — BFF-конверт и обработка ошибок, `Actor`/RBAC, `IdentityClient`, transactional Outbox + `UnitOfWork`, keyset-пагинация.
-- `observability` — structured logging, `RequestContextMiddleware`. OTEL SDK пока не подключён — схема лога резервирует `trace_id`/`span_id` как `null`.
+- `observability` — structured logging, `RequestContextMiddleware`, OpenTelemetry SDK (трейсинг + Prometheus-метрики) во всех API/worker-процессах; `trace_id`/`span_id` в логе — реальные, а не зарезервированные `null` (см. раздел «Наблюдаемость» ниже).
 - `test-support` — dev-only testcontainers-фикстуры для интеграционных тестов.
 
 ## Устройство одного сервиса
 
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-graph TD
-    subgraph "Service Boundary"
-        subgraph "1. api/ — тонкие роутеры"
-            Routers["FastAPI Routers<br/>(DTO → handler → match_result)"]
-            AMQPConsumer["RabbitMQ Consumer"]
-        end
-        subgraph "2. application/ — CQRS"
-            Commands["Command Handlers"]
-            Queries["Query Handlers"]
-        end
-        subgraph "3. domain/"
-            Entities["Entities<br/>(create / reconstitute)"]
-            Ports["Repository Ports (Protocol)"]
-            UoW["UnitOfWork Protocol"]
-        end
-        subgraph "4. infrastructure/"
-            Repos["SQLAlchemy Repository"]
-        end
-        Routers --> Commands & Queries
-        AMQPConsumer --> Commands
-        Commands --> Entities & Ports & UoW
-        Repos -. implements .-> Ports
-    end
-```
+![Устройство одного сервиса: FastAPI Routers/RabbitMQ Consumer → Command/Query Handlers → Entities/Repository Ports → SQL Repository, направление зависимостей строго внутрь](docs/architecture/diagrams/micro-architecture.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/micro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
 ## Стек технологий
 
@@ -148,13 +50,14 @@ graph TD
 - **SQLAlchemy 2.0** (async), **Alembic** (изолированные миграции на сервис)
 - **PostgreSQL** — своя логическая БД на сервис
 - **RabbitMQ** + Transactional Outbox (гарантия At-Least-Once, без синхронного двойного write)
-- **MinIO** (S3-совместимое приватное хранилище картинок товаров, доступ — presigned URL)
+- **MinIO** (S3-совместимое хранилище: приватные картинки товаров через presigned URL; в opt-in monitoring overlay — ещё и чанки/блоки Loki и Tempo)
 - **JWT (PyJWT, RS256)** — issuer identity; **bcrypt** — хеширование паролей
 - **uv** — общий workspace (`backend/uv.lock` и `backend/.venv`) для всех пакетов (`libs/*`, `services/*`)
 - **pytest**, **ruff**, **mypy**, `check_architecture.py` (CQRS/direction-of-dependency gate)
 - **Docker Compose** + GitHub Actions (матрица CI по пакетам)
+- **OpenTelemetry** (трейсинг + Prometheus-метрики) во всех API/worker-процессах; **Prometheus + Loki + Promtail + Tempo + Grafana** — opt-in Compose overlay поверх этого же стека ([ADR 0015](docs/adr/0015-observability-and-asynchronous-trace-propagation.md), раздел «Наблюдаемость (LGTM overlay, опционально)» ниже)
 
-Structured JSON-логирование подключено с первого дня; OpenTelemetry (трейсинг/метрики) — зарезервированная, но пока не реализованная точка расширения.
+Structured JSON-логирование подключено с первого дня; в API-процессах (`*-api`) оно опционально переключается в единый JSON-формат с `trace_id` — специально для monitoring overlay, чтобы Loki мог связать лог с трейсом в Tempo.
 
 ## Быстрый старт
 
@@ -194,6 +97,39 @@ Swagger UI сервисов доступен через Gateway и по прям
 - catalog-service: http://localhost:9014/docs
 - support-service: http://localhost:9015/docs
 
+## Наблюдаемость (LGTM overlay, опционально)
+
+Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; более подробная схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+
+![Схема LGTM-оверлея: три независимых потока (метрики/логи/трейсы) от identity/catalog/support сходятся в Grafana](docs/architecture/diagrams/observability-lgtm-overlay.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/observability-lgtm-overlay.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
+
+```bash
+cd backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up -d
+```
+
+Grafana — http://localhost:3300 (логин/пароль по умолчанию `admin`/`admin`, переопределяются `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`).
+
+**Смоук-проверка** (подтверждает связку HTTP-запрос → Loki-лог → Tempo-трейс):
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"smoke@example.test","password":"Smoke-Test-Pass-123"}'
+```
+
+1. В Grafana → Explore → Loki: `{compose_service="identity-api"}` — найти строку `POST /api/v1/auth/register` и её JSON-поле `trace_id`.
+2. По этой же строке кликнуть derived-field-ссылку «Открыть трейс в Tempo» (или открыть трейс по `trace_id` напрямую в Explore → Tempo).
+3. В трейсе должны быть: HTTP-спан `POST /api/v1/auth/register` (identity-service), `publish_message` (identity-worker, Outbox-паблишер) и `consume_message` (catalog-worker/catalog-search-worker/support-worker — все три консьюмера `user.registered.v1`).
+
+Остановить оверлей (данные в томах и в MinIO сохраняются):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml stop prometheus loki tempo promtail grafana
+```
+
 ## Тестирование
 
 Тесты запускаются изолированно по пакетам — свой `uv`-run, но единое окружение:
@@ -226,27 +162,9 @@ make architecture-check          # CQRS-аудит + направление за
   - `Owner` деактивирует товар (меняет статус `is_active=False`).
   - Проверка: `Owner` по-прежнему видит свой товар (HTTP 200), а для `Viewer` этот же URL отдаёт HTTP 404 (товар скрыт от посторонних).
   
-  ```mermaid
-  sequenceDiagram
-      participant Owner
-      participant Viewer
-      participant Gateway
-      participant Catalog
-  
-      Owner->>Gateway: POST /products (Создать товар)
-      Gateway->>Catalog: маршрутизация
-      Owner->>Gateway: PATCH /products/{id}/deactivate
-      Gateway->>Catalog: маршрутизация
-      Catalog-->>Owner: 200 OK (Деактивирован)
-      
-      Viewer->>Gateway: GET /products/{id}
-      Gateway->>Catalog: Попытка просмотра
-      Catalog-->>Viewer: 404 Not Found (Скрыт)
-      
-      Owner->>Gateway: GET /products/{id}
-      Gateway->>Catalog: Просмотр владельцем
-      Catalog-->>Owner: 200 OK (Виден автору)
-  ```
+![Деактивированный товар остаётся виден Owner (200), но скрыт от Viewer (404)](docs/architecture/diagrams/e2e-product-visibility.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/e2e-product-visibility.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
   
   **2. Защита периметра (API Gateway)**
   (`test_gateway_denies_a_path_outside_its_allow_list`)
@@ -263,26 +181,9 @@ make architecture-check          # CQRS-аудит + направление за
   - Воркер службы поддержки ловит событие, анонимизирует автора тикета (заменяя ID на `null`), переводит тикет в `CLOSED` и оставляет системное сообщение.
   - Тест авторизуется под Администратором и поллит API поддержки, ожидая подтверждения, что тикет закрыт и анонимизирован.
   
-  ```mermaid
-  sequenceDiagram
-      participant User
-      participant Identity API
-      participant Support API
-      participant RabbitMQ
-      participant Support Worker
-  
-      User->>Support API: POST /tickets (Создать тикет)
-      User->>Identity API: DELETE /users/me (Удалить аккаунт)
-      Identity API-->>User: 200 OK (Аккаунт удален)
-      
-      Identity API-)RabbitMQ: Publish event user.deleted.v1
-      RabbitMQ-)Support Worker: Consume event user.deleted.v1
-      
-      Note over Support Worker: Анонимизирует тикет,<br>закрывает его (CLOSED)
-      
-      User->>Identity API: GET /users/me
-      Identity API-->>User: 403 Forbidden (Токен отозван)
-  ```
+![Самоудаление пользователя: identity публикует user.deleted.v1 в RabbitMQ, support-worker асинхронно анонимизирует и закрывает тикет пользователя](docs/architecture/diagrams/e2e-choreography.png)
+
+[Открыть интерактивную схему](docs/architecture/diagrams/e2e-choreography.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
   Подробности E2E инфраструктуры — в [ADR 0013](docs/adr/0013-testing-strategy.md).
 
 ## Переменные окружения

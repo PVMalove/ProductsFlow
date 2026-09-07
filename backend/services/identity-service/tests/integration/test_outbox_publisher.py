@@ -75,7 +75,7 @@ async def _insert_row(
         event_type=event_type,
         payload={"id": 7, "username": "alice"},
         occurred_at=datetime.now(UTC),
-        trace_context="00-test-trace-01",
+        trace_context="00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
     )
     async with session_factory() as session:
         session.add(row)
@@ -124,7 +124,9 @@ async def test_run_once_delivers_a_routed_row_and_marks_it_published(
 
     assert message.message_id == str(row.id)
     assert message.delivery_mode == DeliveryMode.PERSISTENT
-    assert message.headers["traceparent"] == "00-test-trace-01"
+    traceparent = message.headers["traceparent"]
+    assert isinstance(traceparent, str)
+    assert traceparent.split("-")[1] == "0123456789abcdef0123456789abcdef"
     assert json.loads(message.body) == {"id": 7, "username": "alice"}
     assert await _published_at(session_factory, row.id) is not None
 

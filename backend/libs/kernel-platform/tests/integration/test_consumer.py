@@ -1,12 +1,21 @@
 # ruff: noqa: E501
 import asyncio
+import uuid
+from datetime import UTC, datetime
 
 import aio_pika
 import pytest
 from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, HeadersType
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from kernel_platform.consumer import consume
+from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.outbox.publisher import publish_message
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
+from kernel_platform.outbox.trace_context import serialize_trace_context
 from kernel_platform.topology import declare_topology
 
 # amqp_connection/channel/events_exchange_exists (conftest.py) —
@@ -55,6 +64,62 @@ async def test_consume_acks_message_on_successful_handling(
         assert await dlq.get(fail=False, timeout=1) is None
     finally:
         await main_queue.cancel(consumer_tag)
+
+
+async def test_http_request_publish_message_consume_message_form_one_trace(
+    channel: AbstractChannel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR 0015: доказывает через реальный брокер, что W3C-контекст,
+    сохранённый в Outbox-строке под спаном `http_request`, переживает
+    `publish_message` и подхватывается общим consumer'ом как родитель
+    `consume_message` — единый трейс через асинхронную границу."""
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "get_tracer_provider", lambda: provider)
+
+    # Ключ маршрутизации, не пересекающийся с `user.*.v1` — иначе сообщение
+    # фанаутится и в другие уже объявленные в этом файле очереди на том же
+    # topic exchange, засоряя их независимо от того, кто его в итоге
+    # консьюмит.
+    trace_test_service_name = "kernel-consumer-trace-test"
+    trace_event_type = "trace.smoke.v1"
+    main_queue = await declare_topology(
+        channel, trace_test_service_name, routing_keys=(trace_event_type,)
+    )
+    handled = asyncio.Event()
+
+    async def handler(_message: AbstractIncomingMessage) -> None:
+        handled.set()
+
+    consumer_tag = await consume(main_queue, handler)
+    try:
+        with provider.get_tracer("test").start_as_current_span("http_request"):
+            row = OutboxMessage(
+                id=1,
+                aggregate_type="User",
+                aggregate_id=uuid.uuid4(),
+                event_type=trace_event_type,
+                payload={"user_id": 1},
+                occurred_at=datetime.now(UTC),
+                trace_context=serialize_trace_context(),
+            )
+        events_exchange = await channel.get_exchange(EVENTS_EXCHANGE_NAME)
+        await publish_message(events_exchange, row, timeout_seconds=5.0)
+        await asyncio.wait_for(handled.wait(), timeout=5)
+    finally:
+        await main_queue.cancel(consumer_tag)
+
+    spans = exporter.get_finished_spans()
+    http_span = next(span for span in spans if span.name == "http_request")
+    publish_span = next(span for span in spans if span.name == "publish_message")
+    consume_span = next(span for span in spans if span.name == "consume_message")
+
+    assert publish_span.parent is not None
+    assert publish_span.parent.span_id == http_span.context.span_id
+    assert consume_span.parent is not None
+    assert consume_span.parent.span_id == publish_span.context.span_id
+    assert consume_span.context.trace_id == http_span.context.trace_id
 
 
 async def test_consume_routes_message_to_first_retry_stage_on_first_failure(

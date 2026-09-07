@@ -3,11 +3,12 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import Response
 from kernel_platform.http.exception_handlers import register_error_handlers
 from kernel_platform.security.identity_client import IdentityClient
+from observability.formatters import configure_logging
+from observability.metrics import register_http_metrics
 from observability.middleware import RequestContextMiddleware
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from observability.tracing import instrument_fastapi
 from redis.asyncio import Redis
 
 from api.endpoints.product_images import router as product_images_router
@@ -17,6 +18,8 @@ from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
 from infrastructure.search.cache import CachedProductSearch
 from infrastructure.search.opensearch import OpenSearchProductSearch
+
+configure_logging(settings.app_env, "catalog-service")
 
 # Модульный уровень, не lifespan: RequestContextMiddleware принимает готовый
 # экземпляр verifier'а при регистрации (app.add_middleware), до того как
@@ -56,13 +59,7 @@ app = FastAPI(lifespan=lifespan)
 register_error_handlers(app, service_error_type=ApplicationError)
 
 app.add_middleware(RequestContextMiddleware, verifier=_identity_client)
+register_http_metrics(app, service_name="catalog-service")
+instrument_fastapi(app, service_name="catalog-service")
 app.include_router(products_router)
 app.include_router(product_images_router)
-
-
-@app.get("/metrics", include_in_schema=False)
-async def metrics() -> Response:
-    """Внутренний Prometheus-scrape эндпоинт (issue #293) — не проксируется
-    публичным Gateway (`infra/gateway/nginx.conf`), только по внутренней
-    docker-сети."""
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
