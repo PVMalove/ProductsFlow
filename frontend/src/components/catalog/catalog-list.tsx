@@ -73,6 +73,7 @@ export default function CatalogList({
 
   const products = data.pages.flatMap((page) => page.data);
   const filtersKey = [
+    filters.q,
     filters.category,
     filters.minPrice,
     filters.maxPrice,

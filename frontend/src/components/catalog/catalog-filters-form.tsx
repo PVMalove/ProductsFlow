@@ -24,14 +24,20 @@ function setOptionalParam(
 export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [q, setQ] = useState(filters.q ?? '');
   const [minPrice, setMinPrice] = useState(filters.minPrice?.toString() ?? '');
   const [maxPrice, setMaxPrice] = useState(filters.maxPrice?.toString() ?? '');
   const [sort, setSort] = useState<CatalogSort>(filters.sort);
 
+  const isSearchInvalid = q.trim().length === 1;
+
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSearchInvalid) return;
+    
     const params = new URLSearchParams();
     if (filters.category) params.set('category', filters.category);
+    setOptionalParam(params, 'q', q.trim());
     setOptionalParam(params, 'min_price', minPrice);
     setOptionalParam(params, 'max_price', maxPrice);
 
@@ -47,6 +53,19 @@ export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
       onSubmit={applyFilters}
       className="mb-4 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow-sm dark:bg-zinc-900"
     >
+      <div className="flex flex-col gap-1.5 w-full sm:w-auto sm:flex-grow">
+        <Label htmlFor="q">Search</Label>
+        <Input
+          id="q"
+          type="text"
+          placeholder="Search products..."
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
+        {isSearchInvalid && (
+          <span className="text-xs text-red-500">Минимум 2 символа</span>
+        )}
+      </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="min_price">Min Price</Label>
         <Input
@@ -84,7 +103,7 @@ export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
           <option value="price_desc">Price: High to Low</option>
         </select>
       </div>
-      <Button type="submit">Apply</Button>
+      <Button type="submit" disabled={isSearchInvalid}>Apply</Button>
     </form>
   );
 }

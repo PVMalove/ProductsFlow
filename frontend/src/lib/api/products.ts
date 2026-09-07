@@ -20,6 +20,7 @@ interface GetProductsParams extends CatalogFilters {
 
 export async function getProducts({
   cursor,
+  q,
   category,
   minPrice,
   maxPrice,
@@ -31,6 +32,7 @@ export async function getProducts({
   const url = new URL(`${baseUrl}/products/search`);
 
   if (cursor) url.searchParams.set('after', cursor);
+  if (q) url.searchParams.set('q', q);
   if (category) url.searchParams.set('category', category);
   if (minPrice !== null) url.searchParams.set('min_price', minPrice.toString());
   if (maxPrice !== null) url.searchParams.set('max_price', maxPrice.toString());

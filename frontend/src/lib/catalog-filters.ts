@@ -7,6 +7,7 @@ export const CATALOG_SORT_OPTIONS = [
 export type CatalogSort = (typeof CATALOG_SORT_OPTIONS)[number];
 
 export interface CatalogFilters {
+  q: string | null;
   category: string | null;
   minPrice: number | null;
   maxPrice: number | null;
@@ -14,6 +15,7 @@ export interface CatalogFilters {
 }
 
 export const DEFAULT_CATALOG_FILTERS: CatalogFilters = {
+  q: null,
   category: null,
   minPrice: null,
   maxPrice: null,
@@ -37,10 +39,12 @@ export function isCatalogSort(value: string | undefined): value is CatalogSort {
 }
 
 export function parseCatalogFilters(params: CatalogSearchParams): CatalogFilters {
+  const q = firstValue(params.q)?.trim() || null;
   const category = firstValue(params.category)?.trim() || null;
   const sort = firstValue(params.sort);
 
   return {
+    q,
     category,
     minPrice: parsePrice(firstValue(params.min_price)),
     maxPrice: parsePrice(firstValue(params.max_price)),
