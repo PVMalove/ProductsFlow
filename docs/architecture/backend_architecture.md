@@ -97,7 +97,7 @@ backend/services/<service>/
 
 ### Доменная модель: базовые абстракции и события
 
-![Базовые доменные абстракции: User наследует буфер событий Entity, генерирует DomainEvent, drain_events_to_outbox() переносит их в OutboxMessage](diagrams/domain-model.png)
+![Базовые абстракции kernel-domain (Entity, DomainEvent, Result/Error, VisibilityPolicy): User и Product наследуют буфер событий Entity и генерируют DomainEvent, drain_events_to_outbox() переносит их в OutboxMessage](diagrams/domain-model.png)
 
 [Открыть интерактивную схему](diagrams/domain-model.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
