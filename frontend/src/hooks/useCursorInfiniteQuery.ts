@@ -1,13 +1,15 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query';
 import { getProducts } from '@/lib/api/products';
+import type { CatalogFilters } from '@/lib/catalog-filters';
 
-export const getCatalogQueryOptions = () => ({
-  queryKey: ['products'],
-  queryFn: ({ pageParam }: { pageParam: string | null }) => getProducts(pageParam),
-  initialPageParam: null as string | null,
-  getNextPageParam: (lastPage: { meta: { next_cursor: string | null } }) => lastPage.meta.next_cursor || null,
-});
+export const getCatalogQueryOptions = (filters: CatalogFilters) =>
+  infiniteQueryOptions({
+    queryKey: ['products', filters] as const,
+    queryFn: ({ pageParam }) => getProducts({ ...filters, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.meta.next_cursor ?? undefined,
+  });
 
-export function useCursorInfiniteQuery() {
-  return useInfiniteQuery(getCatalogQueryOptions());
+export function useCursorInfiniteQuery(filters: CatalogFilters) {
+  return useInfiniteQuery(getCatalogQueryOptions(filters));
 }

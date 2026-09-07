@@ -21,7 +21,7 @@ services:
     environment:
       APP_ENV: dev
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_ENDPOINT: http://localhost:9002
+      MINIO_PUBLIC_ENDPOINT: http://gateway
     ports:
       - "9014:8000"
 

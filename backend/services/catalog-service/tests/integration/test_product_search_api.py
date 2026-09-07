@@ -40,12 +40,12 @@ class FakeProductSearch:
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]:
@@ -119,8 +119,18 @@ async def test_public_search_returns_bff_envelope_with_active_text_matches(
     ]
 
 
-@pytest.mark.parametrize("params", [{}, {"q": "x"}, {"q": "x" * 101}])
-async def test_public_search_rejects_missing_or_out_of_bounds_query_with_bff_error(
+async def test_public_catalog_without_text_defaults_to_newest(catalog_client) -> None:
+    search = FakeProductSearch()
+    with _overridden_search(search):
+        response = await catalog_client.get("/api/v1/products/search")
+
+    assert response.status_code == 200
+    assert search.calls[0]["query"] is None
+    assert search.calls[0]["sort"] is ProductSortOption.NEWEST
+
+
+@pytest.mark.parametrize("params", [{"q": "x"}, {"q": "x" * 101}])
+async def test_public_search_rejects_out_of_bounds_query_with_bff_error(
     catalog_client, params: dict[str, str]
 ) -> None:
     with _overridden_search(FakeProductSearch()):
@@ -302,3 +312,37 @@ async def test_public_search_page_transition_exposes_next_cursor_in_meta(
     assert forwarded_cursor == decode_search_cursor(
         next_token, expected_sort=ProductSortOption.RELEVANCE
     )
+
+
+async def test_public_catalog_page_transition_keeps_newest_default(
+    catalog_client,
+) -> None:
+    next_cursor = SearchCursor(
+        sort=ProductSortOption.NEWEST,
+        sort_value=1_788_048_000_000.0,
+        product_id=uuid.uuid4(),
+    )
+    next_token = encode_search_cursor(next_cursor)
+    search = FakeProductSearch(
+        Page(
+            items=[_PRODUCT],
+            page_info=PageInfo(
+                next_cursor=next_token,
+                prev_cursor=None,
+                has_more=True,
+                has_prev=False,
+            ),
+        )
+    )
+
+    with _overridden_search(search):
+        first_response = await catalog_client.get("/api/v1/products/search")
+        second_response = await catalog_client.get(
+            "/api/v1/products/search", params={"after": next_token}
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert search.calls[0]["sort"] is ProductSortOption.NEWEST
+    assert search.calls[1]["sort"] is ProductSortOption.NEWEST
+    assert search.calls[1]["cursor"] == next_cursor

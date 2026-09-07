@@ -8,7 +8,7 @@ from kernel_platform.pagination import Page
 
 from application.ports import ProductQueryPort
 from contracts.product import ProductView
-from domain.repositories import Cursor
+from domain.repositories import CatalogListCursor, ProductListSortOption
 
 
 @dataclass(frozen=True)
@@ -16,8 +16,12 @@ class ListProductsQuery:
     """DTO для списка товаров (пагинация)."""
 
     limit: int
-    after: Cursor | None = None
-    before: Cursor | None = None
+    after: CatalogListCursor | None = None
+    before: CatalogListCursor | None = None
+    category: str | None = None
+    min_price: float | None = None
+    max_price: float | None = None
+    sort: ProductListSortOption = ProductListSortOption.NEWEST
 
 
 class ListProductsQueryHandler:
@@ -35,7 +39,13 @@ class ListProductsQueryHandler:
 
     async def execute(self, query: ListProductsQuery) -> Result[Page[ProductView]]:
         page = await self._repository.list(
-            limit=query.limit, after=query.after, before=query.before
+            limit=query.limit,
+            after=query.after,
+            before=query.before,
+            category=query.category,
+            min_price=query.min_price,
+            max_price=query.max_price,
+            sort=query.sort,
         )
         items = [ProductView.from_domain(item) for item in page.items]
         return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

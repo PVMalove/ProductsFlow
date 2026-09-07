@@ -1,18 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { AuthDialog } from '@/components/auth/auth-dialog';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store';
-import { apiClient } from '@/lib/apiClient';
+import { authApi } from '@/lib/api/auth';
 
 export function Header() {
-  const { actor, clearAuth } = useAuthStore();
+  const { actor, isLoading, clearAuth } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
-      await apiClient.post('/auth/logout');
+      await authApi.logout();
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
@@ -32,17 +34,17 @@ export function Header() {
           <nav className="flex items-center gap-4">
             {actor ? (
               <>
-                <Link href="/owner" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/owner/dashboard" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Мои товары
                 </Link>
-                <Link href="/" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/catalog" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Поиск
                 </Link>
-                <Link href="/support" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/support/tickets/new" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Поддержка
                 </Link>
                 {actor.role === 'admin' && (
-                  <Link href="/admin" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
+                  <Link href="/admin/audit-log" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
                     Админка
                   </Link>
                 )}
@@ -52,7 +54,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          {actor ? (
+          {isLoading ? null : actor ? (
             <div className="flex items-center gap-4">
               <span className="text-sm text-slate-400">{actor.email}</span>
               <Button variant="destructive" size="sm" onClick={handleLogout}>
@@ -61,11 +63,15 @@ export function Header() {
             </div>
           ) : (
             <>
-              <Link href="/login">
-                <Button variant="ghost" className="text-slate-300 hover:text-white">
-                  Вход
-                </Button>
-              </Link>
+              {pathname === '/' ? (
+                <AuthDialog />
+              ) : (
+                <Link href="/login">
+                  <Button variant="ghost" className="text-slate-300 hover:text-white">
+                    Вход
+                  </Button>
+                </Link>
+              )}
               <Link href="/register">
                 <Button variant="default">Регистрация</Button>
               </Link>

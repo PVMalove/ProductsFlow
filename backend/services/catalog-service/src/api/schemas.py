@@ -4,11 +4,13 @@ from fastapi import Query, UploadFile
 from kernel_platform.pagination import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
-    InvalidCursorError,
-    decode_cursor,
 )
 from pydantic import BaseModel
 
+from application.catalog_list_cursor import (
+    InvalidCatalogCursorError,
+    decode_catalog_cursor,
+)
 from application.commands import (
     ActivateProductCommand,
     CreateProductCommand,
@@ -37,7 +39,9 @@ from application.search_cursor import (
     InvalidSearchCursorError,
     ProductSortOption,
     decode_search_cursor,
+    resolve_search_sort,
 )
+from domain.repositories import ProductListSortOption
 
 _ALLOWED_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -112,46 +116,63 @@ class ProductGetRequest(BaseModel):
 
 
 class ProductListRequest(BaseModel):
-    """Query-bound — без path/body, `limit`/`after`/`before` приходят из
-    query-строки (issue #221)."""
+    """Query-bound — без path/body, `limit`/`after`/`before`/`sort` приходят из
+    query-строки (issue #221, #344)."""
 
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)
     before: str | None = Query(default=None)
+    category: str | None = Query(default=None)
+    min_price: float | None = Query(default=None, ge=0)
+    max_price: float | None = Query(default=None, ge=0)
+    sort: ProductListSortOption = Query(default=ProductListSortOption.NEWEST)
 
     def to_query(self) -> ListProductsQuery:
         if self.after is not None and self.before is not None:
             raise ProductListCursorConflictError
         try:
-            after_cursor = decode_cursor(self.after) if self.after is not None else None
-            before_cursor = (
-                decode_cursor(self.before) if self.before is not None else None
+            after_cursor = (
+                decode_catalog_cursor(self.after, expected_sort=self.sort)
+                if self.after is not None
+                else None
             )
-        except InvalidCursorError as exc:
+            before_cursor = (
+                decode_catalog_cursor(self.before, expected_sort=self.sort)
+                if self.before is not None
+                else None
+            )
+        except InvalidCatalogCursorError as exc:
             raise ProductListInvalidCursorError from exc
         return ListProductsQuery(
-            limit=self.limit, after=after_cursor, before=before_cursor
+            limit=self.limit,
+            after=after_cursor,
+            before=before_cursor,
+            category=self.category,
+            min_price=self.min_price,
+            max_price=self.max_price,
+            sort=self.sort,
         )
 
 
 class ProductSearchRequest(BaseModel):
-    """Public search request with a bounded, required text query plus
+    """Public catalog/search request with an optional bounded text query plus
     optional category/price filters, sort, and `search_after` cursor
     pagination (issue #291)."""
 
-    q: str = Query(min_length=2, max_length=100)
+    q: str | None = Query(default=None, min_length=2, max_length=100)
     category: str | None = Query(default=None)
     min_price: float | None = Query(default=None, ge=0)
     max_price: float | None = Query(default=None, ge=0)
-    sort: ProductSortOption = Query(default=ProductSortOption.RELEVANCE)
+    sort: ProductSortOption | None = Query(default=None)
     limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
     after: str | None = Query(default=None)
 
     def to_query(self) -> SearchProductsQuery:
+        sort = resolve_search_sort(self.q, self.sort)
         cursor = None
         if self.after is not None:
             try:
-                cursor = decode_search_cursor(self.after, expected_sort=self.sort)
+                cursor = decode_search_cursor(self.after, expected_sort=sort)
             except InvalidSearchCursorError as exc:
                 raise ProductSearchInvalidCursorError from exc
         return SearchProductsQuery(
@@ -159,7 +180,7 @@ class ProductSearchRequest(BaseModel):
             category=self.category,
             min_price=self.min_price,
             max_price=self.max_price,
-            sort=self.sort,
+            sort=sort,
             limit=self.limit,
             cursor=cursor,
         )
