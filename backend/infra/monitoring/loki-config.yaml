@@ -1,0 +1,66 @@
+# Однонодовый Loki (issue #328), хранилище чанков — существующий MinIO
+# (bucket MINIO_BUCKET_NAME_LOKI, создаётся monitoring-minio-init до старта
+# этого сервиса). Локально на диске остаётся только TSDB-индекс.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  # Даже в single-binary режиме роли Loki (querier/query-frontend/
+  # query-scheduler) общаются друг с другом по gRPC на loopback — этот порт
+  # не для внешних клиентов.
+  grpc_listen_port: 9096
+  # Дефолтные лимиты gRPC/HTTP Loki (4 МБ на сообщение, 100 конкурентных
+  # стримов) рассчитаны на единичный сервис, а не на весь backend-стек
+  # разом — под нагрузкой Grafana Explore с широким временным диапазоном
+  # это ловит ResourceExhausted на внутреннем querier -> query-frontend
+  # вызове. Поднимаем то, через что реально проходит объём логов:
+  http_server_read_timeout: 120s   # сколько Loki ждёт медленную (Promtail push) запись
+  http_server_write_timeout: 60s   # сколько Loki ждёт медленное (Grafana query) чтение
+  grpc_server_max_recv_msg_size: 104857600  # 100 МБ — верхняя граница одного internal gRPC-сообщения
+  grpc_server_max_send_msg_size: 104857600
+  grpc_server_max_concurrent_streams: 500   # одновременные internal gRPC-стримы querier'а
+
+# Однонодовый ring без Consul/etcd — единственный инстанс Loki сам себе
+# кластер, KV-стор ему не нужен.
+common:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+  replication_factor: 1
+  path_prefix: /loki
+  storage:
+    s3:
+      endpoint: minio:9000
+      # AWS SDK требует непустой регион даже для не-AWS S3-совместимого
+      # хранилища; MinIO его не проверяет — значение произвольное.
+      region: us-east-1
+      bucketnames: ${MINIO_BUCKET_NAME_LOKI}
+      access_key_id: ${MINIO_ROOT_USER}
+      secret_access_key: ${MINIO_ROOT_PASSWORD}
+      insecure: true          # локальный MinIO без TLS — обычный HTTP
+      s3forcepathstyle: true  # MinIO не резолвит virtual-hosted-style (bucket.host/...), только path-style (host/bucket/...)
+      http_config:
+        response_header_timeout: 10s  # не виснуть бесконечно, если MinIO не отвечает
+
+schema_config:
+  configs:
+    - from: 2024-01-01  # дата не имеет значения для локального dev-стека — просто якорь схемы в прошлом
+      store: tsdb        # актуальный формат индекса Loki (сменил boltdb-shipper)
+      object_store: s3   # где лежат сами чанки логов — MinIO из common.storage.s3 выше
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    # Сам индекс (не чанки — они в S3) живёт на локальном диске контейнера,
+    # том monitoring_loki_data.
+    active_index_directory: /loki/index
+    cache_location: /loki/index_cache
+
+limits_config:
+  # Извлечение числовых метрик из текста лога (pattern ingester) не нужно —
+  # у нас источник метрик отдельный (Prometheus scrape'ит /metrics).
+  metric_aggregation_enabled: false

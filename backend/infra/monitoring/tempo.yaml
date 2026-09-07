@@ -1,0 +1,50 @@
+# Однопроцессный Tempo (issue #328, ADR 0015), хранилище трейсов —
+# существующий MinIO (bucket MINIO_BUCKET_NAME_TEMPO, создаётся
+# monitoring-minio-init до старта этого сервиса). Принимает только OTLP/gRPC
+# от `observability.tracing` (backend/libs/observability) — HTTP-приёмник не
+# нужен, инструментированные процессы всегда экспортируют по gRPC.
+server:
+  http_listen_port: 3200  # HTTP API — по нему Grafana ходит за трейсами (/api/traces/{id}, /api/search)
+  grpc_listen_port: 9095  # internal gRPC между ролями Tempo (querier <-> query-frontend) в single-binary режиме — не для внешних клиентов
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          # Дефолт биндится на localhost — недостижим для других контейнеров
+          # (app-процессы шлют на tempo:4317), нужен явный 0.0.0.0.
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: ${MINIO_BUCKET_NAME_TEMPO}
+      endpoint: minio:9000
+      access_key: ${MINIO_ROOT_USER}
+      secret_key: ${MINIO_ROOT_PASSWORD}
+      insecure: true       # локальный MinIO без TLS — обычный HTTP
+      forcepathstyle: true # MinIO не резолвит virtual-hosted-style (bucket.host/...), только path-style (host/bucket/...)
+    wal:
+      # Ingester пишет сюда завершённые, но ещё не выгруженные в S3 блоки
+      # трейсов (на случай рестарта контейнера) — локальный диск, том
+      # monitoring_tempo_data.
+      path: /var/tempo/wal
+
+# Каждый поиск по трейсам из Grafana (вкладка Search) заново сканирует
+# блоки в S3 — при частых повторных запросах (например, дашборд с
+# автообновлением) это лишняя нагрузка на MinIO и на сам Tempo. Redis
+# кэширует результат поиска на время его актуальности (expiration), так
+# что повторный запрос с теми же параметрами не бьёт по хранилищу заново.
+cache:
+  background:
+    writeback_goroutines: 10  # сколько горутин параллельно пишут результат в Redis, не блокируя ответ клиенту
+  caches:
+    - roles:
+        - frontend-search  # кэшируется только результат поиска трейсов, не сами трейсы по ID
+      redis:
+        endpoint: monitoring-redis:6379
+        db: 0
+        expiration: 1h     # старше — считается протухшим и пересчитывается заново
+        timeout: 500ms     # таймаут обращения к Redis — при недоступности кэша поиск просто идёт мимо него в S3

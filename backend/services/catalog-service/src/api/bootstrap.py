@@ -33,7 +33,7 @@ from infrastructure.db.entity_configurations.models import ProductModel
 from infrastructure.db.owner_read_model import SqlOwnerReadModel
 from infrastructure.db.unit_of_work import SqlCatalogUnitOfWork
 from infrastructure.identity_gateway import IdentityGatewayAdapter
-from infrastructure.storage import ensure_minio_buckets, get_storage
+from infrastructure.storage import ensure_minio_bucket, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ async def main() -> None:
     if not settings.catalog_database_url:
         raise RuntimeError("CATALOG_DATABASE_URL must be configured")
 
-    await ensure_minio_buckets()
+    await ensure_minio_bucket()
 
     import os
 
