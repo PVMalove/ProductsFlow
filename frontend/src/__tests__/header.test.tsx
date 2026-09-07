@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/store';
 import { authApi } from '@/lib/api/auth';
 
 const mockPush = jest.fn();
+let mockPathname = '/';
 
 jest.mock('@/lib/api/auth', () => ({
   authApi: {
@@ -17,6 +18,7 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
+  usePathname: () => mockPathname,
 }));
 
 describe('Header', () => {
@@ -24,6 +26,7 @@ describe('Header', () => {
     useAuthStore.setState({ actor: null, isLoading: false });
     jest.clearAllMocks();
     mockPush.mockClear();
+    mockPathname = '/';
   });
 
   it('renders Guest links when not authenticated', () => {
@@ -39,6 +42,13 @@ describe('Header', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Вход' }));
 
     expect(screen.getByRole('dialog', { name: 'Вход' })).toBeInTheDocument();
+  });
+
+  it('keeps the login-page link for guests away from the home page', () => {
+    mockPathname = '/catalog';
+    render(<Header />);
+
+    expect(screen.getByRole('link', { name: 'Вход' })).toHaveAttribute('href', '/login');
   });
 
   it('updates the header after a guest signs in without navigating away', async () => {
