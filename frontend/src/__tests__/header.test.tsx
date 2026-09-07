@@ -3,22 +3,30 @@ import { Header } from '@/components/layout/header';
 import { useAuthStore } from '@/lib/store';
 import { authApi } from '@/lib/api/auth';
 
+const mockPush = jest.fn();
+let mockPathname = '/';
+
 jest.mock('@/lib/api/auth', () => ({
   authApi: {
+    login: jest.fn(),
+    getMe: jest.fn(),
     logout: jest.fn(),
   },
 }));
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
   }),
+  usePathname: () => mockPathname,
 }));
 
 describe('Header', () => {
   beforeEach(() => {
     useAuthStore.setState({ actor: null, isLoading: false });
     jest.clearAllMocks();
+    mockPush.mockClear();
+    mockPathname = '/';
   });
 
   it('renders Guest links when not authenticated', () => {
@@ -26,6 +34,47 @@ describe('Header', () => {
     expect(screen.getByText('Вход')).toBeInTheDocument();
     expect(screen.getByText('Регистрация')).toBeInTheDocument();
     expect(screen.queryByText('Мои товары')).not.toBeInTheDocument();
+  });
+
+  it('opens an authorization dialog for a guest', () => {
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вход' }));
+
+    expect(screen.getByRole('dialog', { name: 'Вход' })).toBeInTheDocument();
+  });
+
+  it('keeps the login-page link for guests away from the home page', () => {
+    mockPathname = '/catalog';
+    render(<Header />);
+
+    expect(screen.getByRole('link', { name: 'Вход' })).toHaveAttribute('href', '/login');
+  });
+
+  it('updates the header after a guest signs in without navigating away', async () => {
+    jest.mocked(authApi.login).mockResolvedValue({
+      access_token: 'access-token',
+      token_type: 'bearer',
+    });
+    jest.mocked(authApi.getMe).mockResolvedValue({
+      id: 'user-1',
+      role: 'user',
+      email: 'user@example.com',
+    });
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вход' }));
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'user@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Пароль'), {
+      target: { value: 'password-123' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Войти' }));
+
+    expect(await screen.findByText('user@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Вход' })).not.toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('renders User links when authenticated as USER', () => {

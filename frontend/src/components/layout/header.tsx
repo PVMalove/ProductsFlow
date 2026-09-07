@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { AuthDialog } from '@/components/auth/auth-dialog';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store';
 import { authApi } from '@/lib/api/auth';
@@ -9,6 +10,7 @@ import { authApi } from '@/lib/api/auth';
 export function Header() {
   const { actor, isLoading, clearAuth } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
@@ -61,11 +63,15 @@ export function Header() {
             </div>
           ) : (
             <>
-              <Link href="/login">
-                <Button variant="ghost" className="text-slate-300 hover:text-white">
-                  Вход
-                </Button>
-              </Link>
+              {pathname === '/' ? (
+                <AuthDialog />
+              ) : (
+                <Link href="/login">
+                  <Button variant="ghost" className="text-slate-300 hover:text-white">
+                    Вход
+                  </Button>
+                </Link>
+              )}
               <Link href="/register">
                 <Button variant="default">Регистрация</Button>
               </Link>
