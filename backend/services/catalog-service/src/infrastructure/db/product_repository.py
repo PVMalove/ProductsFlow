@@ -1,12 +1,13 @@
 import uuid
+from datetime import datetime
 
 from kernel_domain.result import Result
 from kernel_platform.outbox.drain import drain_events_to_outbox
-from kernel_platform.pagination import encode_cursor
 from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.catalog_list_cursor import encode_catalog_cursor
 from application.ports import (
     ProductAuditAction,
     ProductCommandPort,
@@ -15,8 +16,9 @@ from application.ports import (
 from domain.entities.product import Product
 from domain.product_image import ProductImage
 from domain.repositories import (
-    Cursor,
+    CatalogListCursor,
     PageInfo,
+    ProductListSortOption,
     ProductPage,
 )
 from domain.repositories import (
@@ -60,6 +62,19 @@ def _to_image_domain(row: ProductImageModel) -> ProductImage:
         size_bytes=row.size_bytes,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _catalog_cursor(
+    row: ProductModel, *, sort: ProductListSortOption
+) -> CatalogListCursor:
+    sort_value: datetime | float = (
+        row.created_at if sort is ProductListSortOption.NEWEST else float(row.price)
+    )
+    return CatalogListCursor(
+        sort=sort,
+        sort_value=sort_value,
+        product_id=row.id,
     )
 
 
@@ -245,8 +260,12 @@ class ProductRepository:
         self,
         *,
         limit: int,
-        after: Cursor | None = None,
-        before: Cursor | None = None,
+        after: CatalogListCursor | None = None,
+        before: CatalogListCursor | None = None,
+        category: str | None = None,
+        min_price: float | None = None,
+        max_price: float | None = None,
+        sort: ProductListSortOption = ProductListSortOption.NEWEST,
     ) -> ProductPage:
         # Списки не персонализированы и не имеют admin-обхода (ADR 0008)
         # — деактивированный Товар и Товар деактивированного (или ещё не
@@ -262,22 +281,57 @@ class ProductRepository:
                 ProductModel.is_active.is_(True), OwnerReadModelRow.is_active.is_(True)
             )
         )
+        if category is not None:
+            base_stmt = base_stmt.where(ProductModel.category == category)
+        if min_price is not None:
+            base_stmt = base_stmt.where(ProductModel.price >= min_price)
+        if max_price is not None:
+            base_stmt = base_stmt.where(ProductModel.price <= max_price)
+
+        sort_col = (
+            ProductModel.created_at
+            if sort == ProductListSortOption.NEWEST
+            else ProductModel.price
+        )
+        sort_desc = sort in (
+            ProductListSortOption.NEWEST,
+            ProductListSortOption.PRICE_DESC,
+        )
+
         if before is not None:
-            stmt = base_stmt.where(
-                tuple_(ProductModel.created_at, ProductModel.id)
-                > (before.created_at, before.id)
-            ).order_by(ProductModel.created_at.asc(), ProductModel.id.asc())
+            if sort_desc:
+                stmt = base_stmt.where(
+                    tuple_(sort_col, ProductModel.id)
+                    > (before.sort_value, before.product_id)
+                ).order_by(sort_col.asc(), ProductModel.id.asc())
+            else:
+                stmt = base_stmt.where(
+                    tuple_(sort_col, ProductModel.id)
+                    < (before.sort_value, before.product_id)
+                ).order_by(sort_col.desc(), ProductModel.id.desc())
+
             page, has_prev = await self._overfetch(stmt, limit)
             page.reverse()
             has_more = True
         else:
             stmt = base_stmt
             if after is not None:
-                stmt = stmt.where(
-                    tuple_(ProductModel.created_at, ProductModel.id)
-                    < (after.created_at, after.id)
-                )
-            stmt = stmt.order_by(ProductModel.created_at.desc(), ProductModel.id.desc())
+                if sort_desc:
+                    stmt = stmt.where(
+                        tuple_(sort_col, ProductModel.id)
+                        < (after.sort_value, after.product_id)
+                    )
+                else:
+                    stmt = stmt.where(
+                        tuple_(sort_col, ProductModel.id)
+                        > (after.sort_value, after.product_id)
+                    )
+
+            if sort_desc:
+                stmt = stmt.order_by(sort_col.desc(), ProductModel.id.desc())
+            else:
+                stmt = stmt.order_by(sort_col.asc(), ProductModel.id.asc())
+
             page, has_more = await self._overfetch(stmt, limit)
             has_prev = after is not None
 
@@ -293,12 +347,14 @@ class ProductRepository:
             items=[_to_domain(row) for row in page],
             page_info=PageInfo(
                 next_cursor=(
-                    encode_cursor(page[-1].created_at, page[-1].id)
+                    encode_catalog_cursor(_catalog_cursor(page[-1], sort=sort))
                     if has_more
                     else None
                 ),
                 prev_cursor=(
-                    encode_cursor(page[0].created_at, page[0].id) if has_prev else None
+                    encode_catalog_cursor(_catalog_cursor(page[0], sort=sort))
+                    if has_prev
+                    else None
                 ),
                 has_more=has_more,
                 has_prev=has_prev,

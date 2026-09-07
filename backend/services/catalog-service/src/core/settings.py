@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # (`backend/docker-compose.yml`), не публичный хост.
     catalog_identity_base_url: str = "http://identity-api:8000"
     minio_endpoint: str = "http://minio:9000"
-    minio_public_endpoint: str = "http://localhost:9002"
+    minio_public_endpoint: str = "http://gateway"
     minio_root_user: str = "minio-admin"
     minio_root_password: str = "minio-secret-key"
     minio_bucket_name_product: str = "product-chunks"

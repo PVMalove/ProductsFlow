@@ -38,12 +38,12 @@ class FakeProductSearch:
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]:

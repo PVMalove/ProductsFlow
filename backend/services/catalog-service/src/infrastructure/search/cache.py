@@ -21,7 +21,11 @@ from typing import Protocol
 from kernel_platform.pagination import Page, PageInfo
 
 from application.ports import ProductSearchPort
-from application.search_cursor import ProductSortOption, SearchCursor
+from application.search_cursor import (
+    ProductSortOption,
+    SearchCursor,
+    resolve_search_sort,
+)
 from contracts.product import ProductView
 from infrastructure.metrics.search_metrics import SEARCH_CACHE_REQUESTS
 
@@ -42,7 +46,7 @@ class RedisLike(Protocol):
 
 
 def _cache_key(
-    query: str,
+    query: str | None,
     *,
     category: str | None,
     min_price: float | None,
@@ -56,7 +60,7 @@ def _cache_key(
     индексе матчится через `normalizer: lowercase`, см. `opensearch.py`)."""
     canonical = json.dumps(
         [
-            query.strip().casefold(),
+            query.strip().casefold() if query is not None else None,
             category.strip().casefold() if category is not None else None,
             min_price,
             max_price,
@@ -107,22 +111,23 @@ class CachedProductSearch:
 
     async def search(
         self,
-        query: str,
+        query: str | None = None,
         *,
         category: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
-        sort: ProductSortOption = ProductSortOption.RELEVANCE,
+        sort: ProductSortOption | None = None,
         limit: int = 20,
         cursor: SearchCursor | None = None,
     ) -> Page[ProductView]:
+        resolved_sort = resolve_search_sort(query, sort)
         if cursor is not None:
             return await self._search_inner(
                 query,
                 category=category,
                 min_price=min_price,
                 max_price=max_price,
-                sort=sort,
+                sort=resolved_sort,
                 limit=limit,
                 cursor=cursor,
             )
@@ -132,7 +137,7 @@ class CachedProductSearch:
             category=category,
             min_price=min_price,
             max_price=max_price,
-            sort=sort,
+            sort=resolved_sort,
             limit=limit,
         )
         cached = await self._get(key)
@@ -146,7 +151,7 @@ class CachedProductSearch:
             category=category,
             min_price=min_price,
             max_price=max_price,
-            sort=sort,
+            sort=resolved_sort,
             limit=limit,
             cursor=None,
         )
@@ -155,7 +160,7 @@ class CachedProductSearch:
 
     async def _search_inner(
         self,
-        query: str,
+        query: str | None,
         *,
         category: str | None,
         min_price: float | None,

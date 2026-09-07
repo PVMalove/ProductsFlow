@@ -13,7 +13,7 @@ services:
     environment:
       APP_ENV: prod
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_ENDPOINT: http://localhost:9004
+      MINIO_PUBLIC_ENDPOINT: http://gateway
     restart: unless-stopped
 
   support-api:

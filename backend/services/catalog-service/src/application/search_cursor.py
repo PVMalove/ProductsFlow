@@ -22,6 +22,19 @@ class ProductSortOption(enum.StrEnum):
     NEWEST = "newest"
 
 
+def resolve_search_sort(
+    query: str | None, sort: ProductSortOption | None
+) -> ProductSortOption:
+    """Selects the public search default without overriding an explicit sort."""
+    if sort is not None:
+        return sort
+    return (
+        ProductSortOption.RELEVANCE
+        if query and query.strip()
+        else ProductSortOption.NEWEST
+    )
+
+
 @dataclass(frozen=True)
 class SearchCursor:
     """Keyset-позиция публичного поиска — граница текущей сортировки плюс

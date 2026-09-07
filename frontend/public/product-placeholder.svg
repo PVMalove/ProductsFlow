@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title description">
+  <title id="title">Изображение товара отсутствует</title>
+  <desc id="description">Серый плейсхолдер с контуром коробки</desc>
+  <rect width="640" height="480" fill="#e2e8f0"/>
+  <path d="M190 180 320 115l130 65v150L320 395 190 330Zm130-65v150m130-85-130 85-130-85m130 215V265" fill="none" stroke="#64748b" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/>
+</svg>
