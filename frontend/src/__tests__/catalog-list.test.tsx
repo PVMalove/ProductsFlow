@@ -22,6 +22,7 @@ jest.mock('@/hooks/useCursorInfiniteQuery', () => ({
 }));
 
 const filters: CatalogFilters = {
+  query: null,
   category: null,
   minPrice: null,
   maxPrice: null,

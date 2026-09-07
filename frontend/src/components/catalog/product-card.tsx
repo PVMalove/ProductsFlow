@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Button } from '@/components/ui/button';
 import type { ProductView } from '@/lib/api/products';
 
@@ -9,7 +11,11 @@ interface ProductCardProps {
 export function ProductCard({ product, canEdit }: ProductCardProps) {
   return (
     <article className="flex flex-col gap-2 rounded-lg border bg-white p-4 shadow-sm dark:bg-zinc-900">
-      <h2 className="text-lg font-semibold">{product.name}</h2>
+      <h2 className="text-lg font-semibold">
+        <Link href={`/catalog/${product.id}`} className="hover:underline">
+          {product.name}
+        </Link>
+      </h2>
       <p className="line-clamp-2 flex-grow text-sm text-gray-500">
         {product.description}
       </p>
