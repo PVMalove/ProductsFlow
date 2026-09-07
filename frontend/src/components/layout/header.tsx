@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AuthDialog } from '@/components/auth/auth-dialog';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store';
 import { authApi } from '@/lib/api/auth';
@@ -61,11 +62,7 @@ export function Header() {
             </div>
           ) : (
             <>
-              <Link href="/login">
-                <Button variant="ghost" className="text-slate-300 hover:text-white">
-                  Вход
-                </Button>
-              </Link>
+              <AuthDialog />
               <Link href="/register">
                 <Button variant="default">Регистрация</Button>
               </Link>
