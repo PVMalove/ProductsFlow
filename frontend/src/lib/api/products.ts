@@ -63,7 +63,7 @@ export async function uploadProductImage(id: string, file: File): Promise<{ imag
   return res.data.data;
 }
 
-export async function getProductImage(id: string): Promise<{ image_url: string }> {
+export async function getProductImage(id: string): Promise<{ image_url: string } | null> {
   const res = await apiClient.get<ApiResponse<{ image_url: string }>>(`/products/${id}/image`);
   return res.data.data;
 }
