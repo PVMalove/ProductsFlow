@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store';
 import { authApi } from '@/lib/api/auth';
 
 export function Header() {
-  const { actor, clearAuth } = useAuthStore();
+  const { actor, isLoading, clearAuth } = useAuthStore();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -32,17 +32,17 @@ export function Header() {
           <nav className="flex items-center gap-4">
             {actor ? (
               <>
-                <Link href="/owner" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/owner/dashboard" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Мои товары
                 </Link>
-                <Link href="/" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/catalog" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Поиск
                 </Link>
-                <Link href="/support" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/support/tickets/new" className="text-sm text-slate-300 hover:text-white transition-colors">
                   Поддержка
                 </Link>
                 {actor.role === 'admin' && (
-                  <Link href="/admin" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
+                  <Link href="/admin/audit-log" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
                     Админка
                   </Link>
                 )}
@@ -52,7 +52,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          {actor ? (
+          {isLoading ? null : actor ? (
             <div className="flex items-center gap-4">
               <span className="text-sm text-slate-400">{actor.email}</span>
               <Button variant="destructive" size="sm" onClick={handleLogout}>

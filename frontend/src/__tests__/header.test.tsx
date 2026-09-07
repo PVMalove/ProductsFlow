@@ -39,6 +39,18 @@ describe('Header', () => {
     expect(screen.queryByText('Админка')).not.toBeInTheDocument();
     expect(screen.getByText('user@example.com')).toBeInTheDocument();
     expect(screen.getByText('Выйти')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Мои товары' })).toHaveAttribute(
+      'href',
+      '/owner/dashboard',
+    );
+    expect(screen.getByRole('link', { name: 'Поиск' })).toHaveAttribute(
+      'href',
+      '/catalog',
+    );
+    expect(screen.getByRole('link', { name: 'Поддержка' })).toHaveAttribute(
+      'href',
+      '/support/tickets/new',
+    );
   });
 
   it('renders Admin link when authenticated as ADMIN', () => {
@@ -46,7 +58,10 @@ describe('Header', () => {
       actor: { id: '2', role: 'admin', email: 'admin@example.com' },
     });
     render(<Header />);
-    expect(screen.getByText('Админка')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Админка' })).toHaveAttribute(
+      'href',
+      '/admin/audit-log',
+    );
   });
 
   it('calls logout API and clears store on logout click', async () => {

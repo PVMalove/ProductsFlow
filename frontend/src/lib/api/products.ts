@@ -1,6 +1,7 @@
 import type { CatalogFilters } from '../catalog-filters';
 import { buildApiBaseUrl } from '../api-url';
 import { apiClient } from '../apiClient';
+import { FetchResponseError } from './fetch-response-error';
 import type { ApiResponse } from './types';
 
 export interface ProductView {
@@ -40,7 +41,7 @@ export async function getProducts({
   });
 
   if (!res.ok) {
-    throw new Error('Failed to fetch products');
+    throw new FetchResponseError('Failed to fetch products', res.status);
   }
 
   return res.json();

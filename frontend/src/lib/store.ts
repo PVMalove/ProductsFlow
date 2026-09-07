@@ -17,7 +17,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   actor: null,
   isLoading: true,
-  setActor: (actor) => set({ actor }),
+  setActor: (actor) => set({ actor, isLoading: false }),
   setLoading: (isLoading) => set({ isLoading }),
   clearAuth: () => set({ actor: null, isLoading: false }),
 }));
