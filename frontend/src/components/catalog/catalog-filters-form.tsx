@@ -6,46 +6,37 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { serializeCatalogFilters } from '@/lib/catalog-filters';
 import type { CatalogFilters, CatalogSort } from '@/lib/catalog-filters';
 
 interface CatalogFiltersFormProps {
   filters: CatalogFilters;
 }
 
-function setOptionalParam(
-  params: URLSearchParams,
-  name: string,
-  value: string,
-) {
-  if (value) params.set(name, value);
-  else params.delete(name);
-}
-
 export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [q, setQ] = useState(filters.q ?? '');
+  const [searchQuery, setSearchQuery] = useState(filters.query ?? '');
   const [minPrice, setMinPrice] = useState(filters.minPrice?.toString() ?? '');
   const [maxPrice, setMaxPrice] = useState(filters.maxPrice?.toString() ?? '');
   const [sort, setSort] = useState<CatalogSort>(filters.sort);
 
-  const isSearchInvalid = q.trim().length === 1;
+  const isSearchInvalid = searchQuery.trim().length === 1;
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSearchInvalid) return;
     
-    const params = new URLSearchParams();
-    if (filters.category) params.set('category', filters.category);
-    setOptionalParam(params, 'q', q.trim());
-    setOptionalParam(params, 'min_price', minPrice);
-    setOptionalParam(params, 'max_price', maxPrice);
+    const params = serializeCatalogFilters({
+      query: searchQuery.trim(),
+      category: filters.category,
+      minPrice: minPrice ? Number(minPrice) : null,
+      maxPrice: maxPrice ? Number(maxPrice) : null,
+      sort,
+    });
 
-    if (sort === 'newest') params.delete('sort');
-    else params.set('sort', sort);
-
-    const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname);
+    const queryStr = params.toString();
+    router.push(queryStr ? `${pathname}?${queryStr}` : pathname);
   }
 
   return (
@@ -59,11 +50,11 @@ export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
           id="q"
           type="text"
           placeholder="Search products..."
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
         />
         {isSearchInvalid && (
-          <span className="text-xs text-red-500">Минимум 2 символа</span>
+          <span className="text-xs text-red-500">Minimum 2 characters</span>
         )}
       </div>
       <div className="flex flex-col gap-1.5">

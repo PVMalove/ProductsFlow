@@ -18,7 +18,7 @@ describe('parseCatalogFilters', () => {
         sort: 'price_desc',
       }),
     ).toEqual({
-      q: 'drill',
+      query: 'drill',
       category: 'Tools',
       minPrice: 10.5,
       maxPrice: 99,

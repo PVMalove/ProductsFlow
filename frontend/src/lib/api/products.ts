@@ -1,3 +1,4 @@
+import { serializeCatalogFilters } from '../catalog-filters';
 import type { CatalogFilters } from '../catalog-filters';
 import { buildApiBaseUrl } from '../api-url';
 import { apiClient } from '../apiClient';
@@ -18,25 +19,17 @@ interface GetProductsParams extends CatalogFilters {
   cursor?: string | null;
 }
 
-export async function getProducts({
-  cursor,
-  q,
-  category,
-  minPrice,
-  maxPrice,
-  sort,
-}: GetProductsParams): Promise<ApiResponse<ProductView[]>> {
+export async function getProducts(params: GetProductsParams): Promise<ApiResponse<ProductView[]>> {
   const baseUrl = buildApiBaseUrl(
     process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
   );
   const url = new URL(`${baseUrl}/products/search`);
 
-  if (cursor) url.searchParams.set('after', cursor);
-  if (q) url.searchParams.set('q', q);
-  if (category) url.searchParams.set('category', category);
-  if (minPrice !== null) url.searchParams.set('min_price', minPrice.toString());
-  if (maxPrice !== null) url.searchParams.set('max_price', maxPrice.toString());
-  url.searchParams.set('sort', sort);
+  const searchParams = serializeCatalogFilters(params);
+  if (params.cursor) searchParams.set('after', params.cursor);
+  if (params.sort) searchParams.set('sort', params.sort); // override default sorting if omitted by serializer
+  
+  url.search = searchParams.toString();
 
   const res = await fetch(url.toString(), {
     cache: 'no-store',
