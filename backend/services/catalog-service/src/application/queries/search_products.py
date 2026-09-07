@@ -6,17 +6,21 @@ from kernel_domain.result import Result
 from kernel_platform.pagination import DEFAULT_PAGE_LIMIT, Page
 
 from application.ports import ProductSearchPort
-from application.search_cursor import ProductSortOption, SearchCursor
+from application.search_cursor import (
+    ProductSortOption,
+    SearchCursor,
+    resolve_search_sort,
+)
 from contracts.product import ProductView
 
 
 @dataclass(frozen=True)
 class SearchProductsQuery:
-    q: str
+    q: str | None = None
     category: str | None = None
     min_price: float | None = None
     max_price: float | None = None
-    sort: ProductSortOption = ProductSortOption.RELEVANCE
+    sort: ProductSortOption | None = None
     limit: int = DEFAULT_PAGE_LIMIT
     cursor: SearchCursor | None = None
 
@@ -28,12 +32,13 @@ class SearchProductsQueryHandler:
         self._search = search
 
     async def execute(self, query: SearchProductsQuery) -> Result[Page[ProductView]]:
+        sort = resolve_search_sort(query.q, query.sort)
         page = await self._search.search(
             query.q,
             category=query.category,
             min_price=query.min_price,
             max_price=query.max_price,
-            sort=query.sort,
+            sort=sort,
             limit=query.limit,
             cursor=query.cursor,
         )

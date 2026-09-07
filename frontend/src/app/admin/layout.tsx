@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { actor } = useAuthStore();
+  const { actor, isLoading } = useAuthStore();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -15,12 +15,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (mounted && actor?.role !== 'admin') {
+    if (mounted && !isLoading && actor?.role !== 'admin') {
       router.replace('/');
     }
-  }, [actor, mounted, router]);
+  }, [actor, isLoading, mounted, router]);
 
-  if (!mounted || actor?.role !== 'admin') {
+  if (!mounted || isLoading || actor?.role !== 'admin') {
     return null; // or a loading spinner
   }
 

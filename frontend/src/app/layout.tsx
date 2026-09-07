@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ReactQueryProvider from "@/providers/react-query-provider";
+import { AuthSessionProvider } from "@/providers/auth-session-provider";
 import { Header } from "@/components/layout/header";
 
 const geistSans = Geist({
@@ -27,10 +28,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <ReactQueryProvider>
-          <Header />
-          <main className="flex-1">
-            {children}
-          </main>
+          <AuthSessionProvider>
+            <Header />
+            <main className="flex-1">
+              {children}
+            </main>
+          </AuthSessionProvider>
         </ReactQueryProvider>
       </body>
     </html>

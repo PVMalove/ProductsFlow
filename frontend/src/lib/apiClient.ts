@@ -1,12 +1,22 @@
 import axios from 'axios';
 import { useAuthStore } from './store';
+import { buildApiBaseUrl } from './api-url';
+import { clearAccessToken, getAccessToken } from './auth-token';
 
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
+  baseURL: buildApiBaseUrl(process.env.NEXT_PUBLIC_API_URL),
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const accessToken = getAccessToken();
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
 });
 
 apiClient.interceptors.response.use(
@@ -14,6 +24,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const store = useAuthStore.getState();
+      clearAccessToken();
       // Only clear and redirect if we actually had an actor
       // to avoid redirect loops on public pages that might 401
       if (store.actor) {
