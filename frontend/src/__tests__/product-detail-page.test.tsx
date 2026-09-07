@@ -4,12 +4,18 @@ import { render, screen } from '@testing-library/react';
 import ProductDetailPage from '@/app/catalog/[id]/page';
 import { getProduct } from '@/lib/api/products';
 
+const mockUseParams = jest.fn();
+
 jest.mock('@/components/catalog/product-image', () => ({
-  ProductImage: ({ alt }: { alt: string }) => <img alt={alt} />,
+  ProductImage: ({ alt }: { alt: string }) => <div aria-label={alt} />,
 }));
 
 jest.mock('@/lib/api/products', () => ({
   getProduct: jest.fn(),
+}));
+
+jest.mock('next/navigation', () => ({
+  useParams: () => mockUseParams(),
 }));
 
 const product = {
@@ -25,29 +31,28 @@ const product = {
 describe('ProductDetailPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseParams.mockReturnValue({ id: product.id });
   });
 
-  it('renders product details returned by the product endpoint', async () => {
+  it('loads and renders product details using the route parameter in the browser', async () => {
     (getProduct as jest.Mock).mockResolvedValue(product);
 
-    render(
-      await ProductDetailPage({ params: Promise.resolve({ id: product.id }) }),
-    );
+    render(<ProductDetailPage />);
 
-    expect(screen.getByRole('heading', { name: product.name })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: product.name })).toBeInTheDocument();
     expect(screen.getByText(product.description)).toBeInTheDocument();
     expect(screen.getByText('$125.00')).toBeInTheDocument();
+    expect(getProduct).toHaveBeenCalledWith(product.id);
   });
 
   it('shows the universal unavailable state for a product endpoint 404', async () => {
     (getProduct as jest.Mock).mockRejectedValue({ response: { status: 404 } });
+    mockUseParams.mockReturnValue({ id: 'missing-product' });
 
-    render(
-      await ProductDetailPage({ params: Promise.resolve({ id: 'missing-product' }) }),
-    );
+    render(<ProductDetailPage />);
 
     expect(
-      screen.getByText('Товар не существует или снят с публикации'),
+      await screen.findByText('Товар не существует или снят с публикации'),
     ).toBeInTheDocument();
   });
 });

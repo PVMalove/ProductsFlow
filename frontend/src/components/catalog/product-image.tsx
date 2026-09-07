@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 import { getProductImage } from '@/lib/api/products';
 
@@ -25,7 +26,6 @@ export function ProductImage({ productId, alt, className }: ProductImageProps) {
 
   useEffect(() => {
     let isCurrent = true;
-    setImageSrc(PRODUCT_IMAGE_FALLBACK);
 
     void getProductImage(productId)
       .then((image) => {
@@ -45,9 +45,12 @@ export function ProductImage({ productId, alt, className }: ProductImageProps) {
   }, [productId]);
 
   return (
-    <img
+    <Image
       src={imageSrc}
       alt={alt}
+      width={640}
+      height={480}
+      unoptimized
       className={className}
       onError={() => setImageSrc(PRODUCT_IMAGE_FALLBACK)}
     />

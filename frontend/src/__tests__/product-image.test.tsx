@@ -19,9 +19,8 @@ describe('ProductImage', () => {
     render(<ProductImage productId="product-1" alt="Test product" />);
 
     await waitFor(() => expect(getProductImage).toHaveBeenCalledWith('product-1'));
-    expect(screen.getByRole('img', { name: 'Test product' })).toHaveAttribute(
-      'src',
-      '/product-placeholder.svg',
+    expect(screen.getByRole('img', { name: 'Test product' }).getAttribute('src')).toMatch(
+      /\/product-placeholder\.svg$/,
     );
   });
 
@@ -31,9 +30,8 @@ describe('ProductImage', () => {
     render(<ProductImage productId="product-1" alt="Test product" />);
 
     await waitFor(() => expect(getProductImage).toHaveBeenCalledWith('product-1'));
-    expect(screen.getByRole('img', { name: 'Test product' })).toHaveAttribute(
-      'src',
-      '/product-placeholder.svg',
+    expect(screen.getByRole('img', { name: 'Test product' }).getAttribute('src')).toMatch(
+      /\/product-placeholder\.svg$/,
     );
   });
 
@@ -55,6 +53,6 @@ describe('ProductImage', () => {
 
     fireEvent.error(image);
 
-    expect(image).toHaveAttribute('src', '/product-placeholder.svg');
+    expect(image.getAttribute('src')).toMatch(/\/product-placeholder\.svg$/);
   });
 });
