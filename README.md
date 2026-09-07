@@ -24,9 +24,9 @@ ProductsFlow — распределённая микросервисная пл�
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. **Единая точка входа — Nginx Gateway**: и в dev (`8080:80`), и в prod (`80:80`) это единственный сервис, публикующий порт наружу; `identity-api`/`catalog-api`/`support-api` порты на хост не пробрасывают ни в одном из профилей. Отдельно от него — изолированная E2E-тестовая инфраструктура (свой Nginx-Gateway), поднимаемая и уничтожаемая pytest-фикстурой на время прогона.
 
-![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity](docs/architecture/diagrams/macro-architecture.png)
+![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity; все три сервиса используют Shared Kernel (kernel-domain, kernel-platform, observability); MinIO переиспользуется opt-in LGTM Monitoring оверлеем](docs/architecture/diagrams/macro-architecture.png)
 
-[Открыть интерактивную схему](docs/architecture/diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория; подробная схема с воркерами и Shared Kernel — [backend_architecture.md §3](docs/architecture/backend_architecture.md)).
+[Открыть интерактивную схему](docs/architecture/diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория; подробности по воркерам — [backend_architecture.md §3](docs/architecture/backend_architecture.md)).
 
 - **`identity-service`** — учётные записи, ролевая модель (`user`/`admin`), выдача stateless JWT (RS256), единственный producer доменных событий.
 - **`catalog-service`** — товары, видимость, картинки (MinIO); проверяет JWT через JWKS-кэш (`IdentityClient`) и делает синхронный добор к identity на холодном старте read-модели и на админской ветке.

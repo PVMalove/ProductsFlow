@@ -79,7 +79,7 @@ backend/services/<service>/
 
 Сервисы **не имеют общих баз данных** и не импортируют код друг друга. Клиент обращается к сервисам только через единый Nginx Gateway (см. глоссарий); синхронные межсервисные вызовы сведены к двум узким точкам в catalog ([ADR 0011](../adr/0011-catalog-service-event-integration.md)).
 
-![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity](diagrams/macro-architecture.png)
+![Макро-архитектура: клиент → Gateway → три изолированных сервиса, каждый со своей БД и общим RabbitMQ, catalog дополнительно синхронно ходит в identity; все три сервиса используют Shared Kernel (kernel-domain, kernel-platform, observability); MinIO переиспользуется opt-in LGTM Monitoring оверлеем](diagrams/macro-architecture.png)
 
 [Открыть интерактивную схему](diagrams/macro-architecture.html) (pan/zoom, переключение темы, трассировка связей — открывать локально в браузере, GitHub не рендерит HTML из репозитория).
 
