@@ -3,10 +3,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from kernel_platform.http.exception_handlers import register_error_handlers
+from observability.db_metrics import instrument_sqlalchemy_sessionmaker
 from observability.formatters import configure_logging
-from observability.metrics import register_http_metrics
+from observability.metrics import register_exception_metrics, register_http_metrics
 from observability.middleware import RequestContextMiddleware
-from observability.tracing import instrument_fastapi
+from observability.tracing import (
+    instrument_fastapi,
+    instrument_httpx,
+    instrument_sqlalchemy,
+)
 
 from api.tickets import router as tickets_router
 from application.errors import ApplicationError
@@ -20,12 +25,21 @@ configure_logging(settings.app_env, "support-service")
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.support_database_url:
         app.state.sessionmaker = build_sessionmaker(settings.support_database_url)
+        instrument_sqlalchemy_sessionmaker(
+            app, app.state.sessionmaker, service_name="support-service"
+        )
+        instrument_sqlalchemy(app, app.state.sessionmaker)
     yield
 
 
 app = FastAPI(title="support-service", lifespan=lifespan)
-register_error_handlers(app, service_error_type=ApplicationError)
+register_error_handlers(
+    app,
+    service_error_type=ApplicationError,
+    on_unhandled_exception=register_exception_metrics("support-service"),
+)
 app.add_middleware(RequestContextMiddleware)
 register_http_metrics(app, service_name="support-service")
 instrument_fastapi(app, service_name="support-service")
+instrument_httpx()
 app.include_router(tickets_router)

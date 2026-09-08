@@ -6,7 +6,7 @@ ifeq ($(OS),Windows_NT)
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 endif
-.PHONY: check test format lint architecture-check build up_dev up_prod keys \
+.PHONY: check test format lint architecture-check build up_dev up_prod up_monitoring keys \
 	setup demo gateway-smoke \
 	db-revision db-upgrade db-downgrade db-current db-history help _require-pkg
 
@@ -90,11 +90,14 @@ up_prod: ## Поднять prod-конфигурацию (docker-compose.yml + d
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build $(service)
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f identity-bootstrap catalog-bootstrap support-bootstrap
 
+up_monitoring: ## Поднять LGTM overlay в dev-профиле (с Gateway :8080)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up -d
+
 down: ## Остановить все контейнеры (docker compose down)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.monitoring.yml down
 
 down_v: ## Остановить все контейнеры и удалить все тома (docker compose down -v)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml down -v
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.monitoring.yml down -v
 
 setup: ## Поднять *-db + MinIO + RabbitMQ + search infrastructure, дождаться health, прогнать миграции всех *-bootstrap (без сида, без *-api/*-worker)
 	docker compose up -d --wait identity-db catalog-db support-db minio rabbitmq opensearch redis

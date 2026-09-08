@@ -39,13 +39,13 @@ export default function NewTicketPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-2xl mt-8">
+    <div className="container mx-auto mt-8 max-w-2xl p-4">
       <h1 className="text-2xl font-bold mb-6">Create Support Ticket</h1>
       
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+      <div className="rounded-md border border-white/10 bg-[#282f37] p-6 shadow-xl shadow-black/10">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="subject" className="mb-1 block text-sm font-medium text-slate-200">
               Subject
             </label>
             <input
@@ -54,7 +54,7 @@ export default function NewTicketPage() {
               {...register('subject', { 
                 required: 'Subject is required',
               })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-input bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               placeholder="Brief summary of the issue"
             />
             {errors.subject && (
@@ -63,7 +63,7 @@ export default function NewTicketPage() {
           </div>
 
           <div>
-            <label htmlFor="first_message" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="first_message" className="mb-1 block text-sm font-medium text-slate-200">
               First Message
             </label>
             <textarea
@@ -72,7 +72,7 @@ export default function NewTicketPage() {
                 required: 'Message is required',
               })}
               rows={5}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-input bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               placeholder="Describe your problem in detail"
             />
             {errors.first_message && (
@@ -81,18 +81,18 @@ export default function NewTicketPage() {
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 rounded-md">
+            <div className="rounded-md bg-red-500/10 p-3 text-red-300">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="p-3 bg-green-50 text-green-700 rounded-md">
+            <div className="rounded-md bg-emerald-400/10 p-3 text-emerald-300">
               Ticket submitted successfully.
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-6">
+          <div className="mt-6 flex justify-end gap-3 border-t border-white/10 pt-4">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Submitting...' : 'Submit Ticket'}
             </Button>

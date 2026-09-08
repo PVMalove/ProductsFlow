@@ -7,7 +7,7 @@ service-specific класса — исключение сервиса перед
 kernel_platform не получает зависимость от catalog/identity/support."""
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from http import HTTPStatus
 from typing import Protocol, cast
 
@@ -122,28 +122,51 @@ async def _structured_error_handler(_request: Request, exc: Exception) -> JSONRe
     )
 
 
-async def _unhandled_exception_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
-    logger.exception(
-        "Unhandled exception while processing %s", request.url, exc_info=exc
-    )
-    return _error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        code="INTERNAL_ERROR",
-        message="Внутренняя ошибка сервера",
-    )
+def _make_unhandled_exception_handler(
+    on_unhandled_exception: Callable[[Exception], None] | None,
+):
+    async def _unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        logger.exception(
+            "Unhandled exception while processing %s", request.url, exc_info=exc
+        )
+        if on_unhandled_exception is not None:
+            try:
+                on_unhandled_exception(exc)
+            except Exception:
+                logger.warning(
+                    "on_unhandled_exception hook itself raised; ignoring",
+                    exc_info=True,
+                )
+        return _error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_ERROR",
+            message="Внутренняя ошибка сервера",
+        )
+
+    return _unhandled_exception_handler
 
 
 def register_error_handlers(
-    app: FastAPI, *, service_error_type: type[Exception]
+    app: FastAPI,
+    *,
+    service_error_type: type[Exception],
+    on_unhandled_exception: Callable[[Exception], None] | None = None,
 ) -> None:
     """Регистрирует platform-owned exception handlers на FastAPI-приложении
     сервиса. `service_error_type` — базовый класс ожидаемых application-
     исключений самого сервиса (например, catalog `ApplicationError`);
-    kernel_platform его не импортирует, только принимает здесь."""
+    kernel_platform его не импортирует, только принимает здесь.
+
+    `on_unhandled_exception` — опциональный best-effort хук (например,
+    метрика "exceptions by type" из `observability.metrics`) на действительно
+    неожиданные (500) исключения; kernel_platform не тянет зависимость на
+    observability/prometheus, только принимает готовый колбэк."""
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_error_handler)
     app.add_exception_handler(ApiError, _structured_error_handler)
     app.add_exception_handler(service_error_type, _structured_error_handler)
-    app.add_exception_handler(Exception, _unhandled_exception_handler)
+    app.add_exception_handler(
+        Exception, _make_unhandled_exception_handler(on_unhandled_exception)
+    )

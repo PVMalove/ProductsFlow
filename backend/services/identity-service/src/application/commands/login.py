@@ -1,5 +1,6 @@
 """Команда и handler логина."""
 
+import logging
 from dataclasses import dataclass
 
 from kernel_domain.result import Result
@@ -9,6 +10,8 @@ from domain.entities.user import User
 from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.email import Email
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,13 +41,20 @@ class LoginCommandHandler:
         async with self._uow:
             email_result = Email.create(command.email)
             if email_result.is_err:
+                logger.warning("Вход отклонён: неверные учётные данные")
                 return Result[User].fail(IdentityErrors.invalid_credentials())
             user = await self._uow.users.get_by_email(email_result.value)
             if user is None or not self._password_hasher.verify(
                 command.password, user.password_hash
             ):
+                logger.warning("Вход отклонён: неверные учётные данные")
                 return Result[User].fail(IdentityErrors.invalid_credentials())
             if not user.is_active:
+                logger.warning(
+                    "Вход отклонён: учётная запись деактивирована user_id=%s",
+                    user.id.value,
+                )
                 return Result[User].fail(IdentityErrors.user_deactivated())
             await self._uow.commit()
+            logger.info("Успешный вход: user_id=%s", user.id.value)
             return Result[User].ok(user)

@@ -16,6 +16,11 @@ class ProductView:
     category: str
     user_id: uuid.UUID
     is_active: bool
+    # Populated after the fact by list/search handlers (see
+    # application.queries.attach_image_urls) — never set here, so a cached
+    # search page (infrastructure/search/cache.py) never freezes in a
+    # presigned URL that could outlive its expiry.
+    image_url: str | None = None
 
     @classmethod
     def from_domain(cls, product: Product) -> "ProductView":

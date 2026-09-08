@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 """Команда и handler upsert-product-image."""
 
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -16,6 +17,8 @@ from application.ports import (
 )
 from domain.unit_of_work import CatalogUnitOfWork
 from domain.value_objects.product_id import ProductId
+
+logger = logging.getLogger(__name__)
 
 SEED_KEY_PREFIX = "seed/"
 IMAGE_KEY_TEMPLATE = "products/{product_id}/image"
@@ -60,6 +63,10 @@ class UpsertProductImageCommandHandler:
                 ProductId.create(command.product_id)
             )
             if product is None:
+                logger.warning(
+                    "Загрузка изображения отклонена: товар не найден product_id=%s",
+                    command.product_id,
+                )
                 raise ProductNotFoundError
             await self._authorizer.require_owner_or_admin(command.actor, product)
             existing = await self._uow.products.get_product_image(product.id)
@@ -83,6 +90,12 @@ class UpsertProductImageCommandHandler:
                 await self._storage.delete_object(self._bucket_name, existing.s3_key)
             await self._uow.commit()
 
+        logger.info(
+            "Изображение товара загружено: product_id=%s actor=%s replaced=%s",
+            command.product_id,
+            command.actor.user_id,
+            existing is not None,
+        )
         return Result[ProductImageMutation].ok(
             ProductImageMutation(replaced=existing is not None)
         )

@@ -33,21 +33,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center px-5">
+      <Card className="w-full max-w-md border border-white/10 shadow-2xl shadow-black/20">
         <CardHeader>
           <CardTitle className="text-2xl text-center">Register</CardTitle>
           <CardDescription className="text-center">Create a new account</CardDescription>
         </CardHeader>
         <CardContent>
           {success ? (
-            <div className="p-4 text-center text-green-700 bg-green-50 rounded-md">
+            <div className="rounded-md bg-emerald-400/10 p-4 text-center text-emerald-300">
               Registration successful! Redirecting to login...
             </div>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               {globalError && (
-                <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
+                <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
                   {globalError}
                 </div>
               )}
@@ -80,9 +80,9 @@ export default function RegisterPage() {
           )}
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
-            <Link href="/login" className="text-blue-600 hover:underline">
+            <Link href="/login" className="text-blue-400 hover:underline">
               Log in
             </Link>
           </p>

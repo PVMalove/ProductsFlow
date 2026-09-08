@@ -99,7 +99,7 @@ Swagger UI сервисов доступен через Gateway и по прям
 
 ## Наблюдаемость (LGTM overlay, опционально)
 
-Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; более подробная схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. Своего Make-таргета намеренно нет — запускается явной командой:
+Локальный стек Prometheus + Loki + Promtail + Tempo + Grafana — opt-in Compose overlay поверх уже поднятого backend-стека (ADR 0015; более подробная схема потоков данных — [backend_architecture.md §5.3](docs/architecture/backend_architecture.md)). Использует существующий MinIO как S3-хранилище Loki/Tempo и отдельный `monitoring-redis` как кэш поиска трейсов Tempo; ничего не публикует наружу кроме Grafana. В dev-профиле используйте Make-таргет:
 
 ![Схема LGTM-оверлея: три независимых потока (метрики/логи/трейсы) от identity/catalog/support сходятся в Grafana](docs/architecture/diagrams/observability-lgtm-overlay.png)
 
@@ -107,10 +107,12 @@ Swagger UI сервисов доступен через Gateway и по прям
 
 ```bash
 cd backend
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up -d
+make up_monitoring
 ```
 
-Grafana — http://localhost:3300 (логин/пароль по умолчанию `admin`/`admin`, переопределяются `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`).
+Grafana — http://localhost:3300 (логин/пароль по умолчанию `admin`/`admin`, переопределяются `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`). Dashboard **FastAPI Full Observability (ProductsFlow)** показывает RED/availability, health и uptime API, DB latency/pool/errors, exception breakdown, async publish/consume traces, Catalog Search DLQ/pending-event health и логи. Переключатель `Async worker` выбирает отдельный worker-процесс для outbox spans.
+
+Prometheus также вычисляет локальные правила для unavailable service, 5xx, restart-loop, насыщения пула и ошибок SQL, а также правила Catalog Search (включая DLQ). Alertmanager в Compose overlay намеренно не развёрнут: подключение Slack/PagerDuty/e-mail зависит от окружения и секретов.
 
 **Смоук-проверка** (подтверждает связку HTTP-запрос → Loki-лог → Tempo-трейс):
 

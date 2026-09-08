@@ -1,3 +1,4 @@
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -8,6 +9,8 @@ from domain.entities.ticket import TicketClosedError, TicketMessageInvalidBodyEr
 from domain.errors import SupportErrors
 from domain.unit_of_work import SupportUnitOfWork
 from domain.value_objects.ticket_id import TicketId
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -34,10 +37,23 @@ class AddTicketMessageCommandHandler:
                     is_admin=command.is_admin,
                 )
             except TicketClosedError:
+                logger.warning(
+                    "Добавление сообщения отклонено: тикет закрыт ticket_id=%s",
+                    command.ticket_id.value,
+                )
                 return Result[TicketView].fail(SupportErrors.ticket_closed_conflict())
             except TicketMessageInvalidBodyError:
                 return Result[TicketView].fail(SupportErrors.invalid_body())
             if ticket is None:
+                logger.warning(
+                    "Добавление сообщения отклонено: тикет не найден ticket_id=%s",
+                    command.ticket_id.value,
+                )
                 return Result[TicketView].fail(SupportErrors.ticket_not_found())
             await self._uow.commit()
+        logger.info(
+            "Сообщение добавлено в тикет: ticket_id=%s actor_id=%s",
+            command.ticket_id.value,
+            command.actor_id,
+        )
         return Result[TicketView].ok(TicketView.from_domain(ticket))

@@ -1,5 +1,6 @@
 """Команда и handler register-user."""
 
+import logging
 from dataclasses import dataclass
 
 from kernel_domain.errors import Error, ErrorList
@@ -12,6 +13,8 @@ from domain.errors import IdentityErrors
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.email import Email
 from domain.value_objects.raw_password import RawPassword
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,7 @@ class RegisterUserCommandHandler:
             email = email_result.value
             password = password_result.value
             if await self._uow.users.exists_by_email(email):
+                logger.warning("Регистрация отклонена: email уже зарегистрирован")
                 return Result[UserView].fail(IdentityErrors.email_already_registered())
 
             result = User.register(email, self._password_hasher.hash(password.value))
@@ -60,4 +64,7 @@ class RegisterUserCommandHandler:
                 return Result[UserView].fail(result.error)
             await self._uow.users.add(result.value)
             await self._uow.commit()
+            logger.info(
+                "Пользователь зарегистрирован: user_id=%s", result.value.id.value
+            )
             return Result[UserView].ok(UserView.from_user(result.value))

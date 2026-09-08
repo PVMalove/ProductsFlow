@@ -32,8 +32,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center px-5">
+      <Card className="w-full max-w-md border border-white/10 shadow-2xl shadow-black/20">
         <CardHeader>
           <CardTitle className="text-2xl text-center">Login</CardTitle>
           <CardDescription className="text-center">Enter your credentials to access your account</CardDescription>
@@ -41,7 +41,7 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {globalError && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
+              <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
                 {globalError}
               </div>
             )}
@@ -73,9 +73,9 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-blue-600 hover:underline">
+            <Link href="/register" className="text-blue-400 hover:underline">
               Register
             </Link>
           </p>

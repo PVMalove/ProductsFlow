@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 from kernel_platform.pagination import Page
 
-from application.ports import ProductQueryPort
+from application.ports import ProductImageUrlBuilder, ProductQueryPort
+from application.queries.attach_image_urls import attach_image_urls
 from contracts.product import ProductView
 from domain.repositories import CatalogListCursor, ProductListSortOption
 
@@ -34,8 +35,15 @@ class ListProductsQueryHandler:
     маппятся в transport-neutral ProductView, страница — в Page (ADR 0002, issue #221).
     """
 
-    def __init__(self, repository: ProductQueryPort) -> None:
+    def __init__(
+        self,
+        repository: ProductQueryPort,
+        storage: ProductImageUrlBuilder,
+        bucket_name: str,
+    ) -> None:
         self._repository = repository
+        self._storage = storage
+        self._bucket_name = bucket_name
 
     async def execute(self, query: ListProductsQuery) -> Result[Page[ProductView]]:
         page = await self._repository.list(
@@ -48,4 +56,10 @@ class ListProductsQueryHandler:
             sort=query.sort,
         )
         items = [ProductView.from_domain(item) for item in page.items]
+        items = await attach_image_urls(
+            items,
+            repository=self._repository,
+            storage=self._storage,
+            bucket_name=self._bucket_name,
+        )
         return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

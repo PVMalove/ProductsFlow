@@ -2,10 +2,13 @@
 # Tempo + Grafana поверх уже поднятого backend-стека. Использует
 # существующий MinIO как S3-хранилище Loki/Tempo — своей БД/бакета не
 # заводит. Наружу публикуется только Grafana; всё остальное — во внутренней
-# backend-network. Не вводит новый Make target (см. ADR 0015) — запускается
-# явной командой:
+# backend-network. Для dev-профиля запускается явной командой (она сохраняет
+# публикацию Gateway на :8080):
 #
-#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up -d
+#
+# `make up_monitoring` запускает этот же dev-профиль. Для prod добавьте
+# `docker-compose.prod.yml` к явной команде вместо dev override.
 #
 # Смоук-процедура — в README.md, раздел «Наблюдаемость (LGTM overlay)».
 x-minio-credentials: &minio-credentials
@@ -82,6 +85,8 @@ services:
     image: prom/prometheus:v3.5.0
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/rules/productsflow.yml:ro
+      - ./services/catalog-service/observability/alerts.yml:/etc/prometheus/rules/catalog-search.yml:ro
       - monitoring_prometheus_data:/prometheus
     networks:
       - backend-network

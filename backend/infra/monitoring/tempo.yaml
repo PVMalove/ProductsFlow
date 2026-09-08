@@ -32,6 +32,28 @@ storage:
       # monitoring_tempo_data.
       path: /var/tempo/wal
 
+# local-blocks — единственный включённый processor: хранит недавние спаны
+# локально и обслуживает TraceQL-метрики (`| rate()`, `| count_over_time()`
+# и т.п.) сам, без экспорта в Prometheus (span-metrics/service-graphs здесь
+# не нужны — HTTP RED-метрики уже даёт productsflow_<service>_http_* из
+# observability.metrics). Без этого блока querier в single-binary режиме
+# падает на TraceQL-метриках с "empty ring": ring метрик-генератора пуст,
+# потому что сам генератор нигде не сконфигурирован и не поднят.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  traces_storage:
+    path: /var/tempo/generator/traces
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write: []
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: ["local-blocks"]
+
 # Каждый поиск по трейсам из Grafana (вкладка Search) заново сканирует
 # блоки в S3 — при частых повторных запросах (например, дашборд с
 # автообновлением) это лишняя нагрузка на MinIO и на сам Tempo. Redis

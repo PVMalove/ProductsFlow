@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 import pytest
@@ -95,6 +96,11 @@ class FakeRepository:
     async def get_product_image(self, product_id: ProductId) -> ProductImage | None:
         return None
 
+    async def get_product_images_by_ids(
+        self, product_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProductImage]:
+        return {}
+
     async def upsert_product_image(
         self,
         product_id: ProductId,
@@ -142,6 +148,13 @@ class FakeIdentity:
     async def fetch_current_user(self, token: str) -> IdentityUser:
         self.fetches += 1
         return IdentityUser(id=OWNER_ID, role=self.role, is_active=True)
+
+
+class FakeImageStorage:
+    async def build_presigned_url(
+        self, bucket_name: str, key: str, expires_in: int = 3600
+    ) -> str:
+        return f"http://storage/{bucket_name}/{key}"
 
 
 class FakeAuditReader:
@@ -314,9 +327,9 @@ async def test_remaining_handlers_delegate_to_repository_and_audit_port() -> Non
     assert deactivate_result.is_ok
     assert deactivate_result.value == ProductView.from_domain(product)
 
-    list_result = await ListProductsQueryHandler(repo).execute(
-        ListProductsQuery(limit=20, after=None, before=None)
-    )
+    list_result = await ListProductsQueryHandler(
+        repo, FakeImageStorage(), "test-bucket"
+    ).execute(ListProductsQuery(limit=20, after=None, before=None))
     audit = await GetProductAuditQueryHandler(
         repo, FakeAuditReader(), identity
     ).execute(GetProductAuditQuery(product_id=product.id.value, actor=actor))

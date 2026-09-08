@@ -1,7 +1,10 @@
+import logging
 import uuid
 from dataclasses import dataclass
 
 from domain.unit_of_work import SupportUnitOfWork
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,4 +27,17 @@ class ProcessUserDeletionCommandHandler:
             )
             if processed:
                 await self._uow.commit()
+        if processed:
+            logger.info(
+                "Обработано удаление пользователя: user_id=%s message_id=%s",
+                command.user_id,
+                command.message_id,
+            )
+        else:
+            logger.warning(
+                "Удаление пользователя не обработано "
+                "(дубликат/неизвестное сообщение): user_id=%s message_id=%s",
+                command.user_id,
+                command.message_id,
+            )
         return processed

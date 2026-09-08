@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 import pytest
@@ -13,6 +13,7 @@ from application.search_cursor import (
     encode_search_cursor,
 )
 from contracts.product import ProductView
+from domain.product_image import ProductImage
 
 _PRODUCT = ProductView(
     id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
@@ -63,13 +64,38 @@ class FakeProductSearch:
         return self._page
 
 
+class _NoImagesRepository:
+    """Stands in for the image-batch-lookup side of `ProductQueryPort` in
+    these tests — they exercise the search-port forwarding contract, not
+    image attachment (covered separately by the list endpoint's real-DB
+    integration tests and by attach_image_urls's own unit coverage), and
+    none of these fixture products ever have an uploaded image anyway."""
+
+    async def get_product_images_by_ids(
+        self, product_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProductImage]:
+        return {}
+
+
+class _UnusedImageStorage:
+    async def build_presigned_url(
+        self, bucket_name: str, key: str, expires_in: int = 3600
+    ) -> str:
+        raise AssertionError(
+            "build_presigned_url should not be called — _NoImagesRepository "
+            "never returns a matching image"
+        )
+
+
 @contextmanager
 def _overridden_search(search: FakeProductSearch) -> Iterator[None]:
     from api.dependencies import get_search_products_handler
     from api.main import app
 
     app.dependency_overrides[get_search_products_handler] = lambda: (
-        SearchProductsQueryHandler(search)
+        SearchProductsQueryHandler(
+            search, _NoImagesRepository(), _UnusedImageStorage(), "test-bucket"
+        )
     )
     try:
         yield
@@ -97,6 +123,7 @@ async def test_public_search_returns_bff_envelope_with_active_text_matches(
                 "category": "Tools",
                 "user_id": "00000000-0000-0000-0000-000000000002",
                 "is_active": True,
+                "image_url": None,
             }
         ],
         "meta": {
@@ -119,7 +146,9 @@ async def test_public_search_returns_bff_envelope_with_active_text_matches(
     ]
 
 
-async def test_public_catalog_without_text_defaults_to_newest(catalog_client) -> None:
+async def test_public_catalog_without_text_defaults_to_newest(
+    catalog_client,
+) -> None:
     search = FakeProductSearch()
     with _overridden_search(search):
         response = await catalog_client.get("/api/v1/products/search")
@@ -212,7 +241,9 @@ async def test_public_search_combines_category_price_sort_and_cursor_in_one_requ
     }
 
 
-async def test_public_search_rejects_an_unsupported_sort_value(catalog_client) -> None:
+async def test_public_search_rejects_an_unsupported_sort_value(
+    catalog_client,
+) -> None:
     with _overridden_search(FakeProductSearch()):
         response = await catalog_client.get(
             "/api/v1/products/search", params={"q": "drill", "sort": "cheapest"}
@@ -261,7 +292,9 @@ async def test_public_search_rejects_a_cursor_encoded_for_a_different_sort(
     assert response.json()["error"]["code"] == "PRODUCT_SEARCH_INVALID_CURSOR"
 
 
-async def test_public_search_rejects_a_malformed_cursor(catalog_client) -> None:
+async def test_public_search_rejects_a_malformed_cursor(
+    catalog_client,
+) -> None:
     with _overridden_search(FakeProductSearch()):
         response = await catalog_client.get(
             "/api/v1/products/search",

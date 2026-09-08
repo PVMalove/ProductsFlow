@@ -1,5 +1,6 @@
 """Команда и handler change-user-role."""
 
+import logging
 from dataclasses import dataclass
 
 from kernel_domain.result import Result
@@ -9,6 +10,8 @@ from domain.errors import IdentityErrors
 from domain.role import Role
 from domain.unit_of_work import IdentityUnitOfWork
 from domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -29,10 +32,24 @@ class ChangeUserRoleCommandHandler:
         async with self._uow:
             user = await self._uow.users.get_by_id(command.target_user_id)
             if user is None:
+                logger.warning(
+                    "Смена роли отклонена: пользователь не найден user_id=%s",
+                    command.target_user_id.value,
+                )
                 return Result[User].fail(IdentityErrors.user_not_found())
             result = user.change_role(command.role)
             if result.is_err:
+                logger.warning(
+                    "Смена роли отклонена: user_id=%s code=%s",
+                    command.target_user_id.value,
+                    result.error.code,
+                )
                 return Result[User].fail(result.error)
             await self._uow.users.save(user)
             await self._uow.commit()
+            logger.info(
+                "Роль пользователя изменена: user_id=%s role=%s",
+                command.target_user_id.value,
+                command.role,
+            )
             return Result[User].ok(user)

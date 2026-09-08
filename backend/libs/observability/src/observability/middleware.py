@@ -20,6 +20,8 @@ from observability.context import (
 
 logger = logging.getLogger(__name__)
 
+_METRICS_ENDPOINT = "/metrics"
+
 
 class TokenVerifier(Protocol):
     """Форма, совместимая с `IdentityClient.verify_token` (identity передаёт
@@ -62,11 +64,16 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         Флоу:
         1. Выцепляет `X-Request-ID` из хэдеров или генерит свежий UUIDv4. Пишет в `contextvars`.
-        2. Дергает парсинг токена для инжекта `actor_id` в контекст.
-        3. Засекает `perf_counter` и прокидывает запрос дальше по ASGI-пайплайну.
-        4. В блоке `finally` считает `duration_ms` и пишет один жирный лог уровня INFO: метрики запроса — в `extra`, плюс `request_id`/сырые `X-User-Id`/`X-User-Role` — в тексте сообщения (issue #292/ADR 0005 anti-spoofing observability).
-        5. Откатывает `contextvars` через `reset()`, чтобы не запрачило соседние таски в том же event loop.
-        6. Прошивает `X-Request-ID` в response.
+        2. Биндит `trace_id`/`span_id` из текущего OTel-спана — раньше, чем что-либо
+           ещё в этом методе может залогировать (в частности шаг 3), иначе та строка
+           лога окажется без trace_id/span_id, в отличие от всех остальных для того
+           же запроса.
+        3. Дергает парсинг токена для инжекта `actor_id` в контекст (сам может залогировать
+           неудачную верификацию — см. пункт 2 про порядок).
+        4. Засекает `perf_counter` и прокидывает запрос дальше по ASGI-пайплайну.
+        5. В блоке `finally` считает `duration_ms` и пишет один жирный лог уровня INFO: метрики запроса — в `extra`, плюс `request_id`/сырые `X-User-Id`/`X-User-Role` — в тексте сообщения (issue #292/ADR 0005 anti-spoofing observability).
+        6. Откатывает `contextvars` через `reset()`, чтобы не запрачило соседние таски в том же event loop.
+        7. Прошивает `X-Request-ID` в response.
 
         Args:
             request (Request): Входящий Starlette-реквест.
@@ -76,8 +83,12 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             Response: Отформатированный ответ, в который добавлен `X-Request-ID` хэдер."""
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         request_id_reset = request_id_var.set(request_id)
-        actor_id_reset = await self._set_actor_id(request)
+        # Trace context first: _set_actor_id can itself log (e.g. a bearer
+        # token that fails verification) — if that ran before trace/span
+        # were bound, that one log line would show trace_id/span_id as null
+        # while every other line for the same request has them.
         trace_id_reset, span_id_reset = self._set_trace_context()
+        actor_id_reset = await self._set_actor_id(request)
         started_at = time.perf_counter()
         status_code = 500
         try:
@@ -87,25 +98,30 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1000
-            # x_user_id/x_user_role — сырые значения хэдеров как они дошли до
-            # сервиса (в норме — пустые: gateway их зануляет, ADR 0005/issue
-            # #286). Единственный способ автоматически подтвердить это
-            # anti-spoofing поведение по issue #292 — их непустое значение
-            # здесь сигнализирует о попытке подделки или об обходе gateway.
-            logger.info(
-                "%s %s request_id=%s x_user_id=%r x_user_role=%r",
-                request.method,
-                request.url.path,
-                request_id,
-                request.headers.get("x-user-id", ""),
-                request.headers.get("x-user-role", ""),
-                extra={
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": status_code,
-                    "duration_ms": duration_ms,
-                },
-            )
+            # Prometheus polls /metrics every scrape_interval (prometheus.yml)
+            # — logging that on every scrape is pure noise, not application
+            # activity, and floods Loki (same reasoning as /metrics being
+            # excluded from HTTP metrics and traces elsewhere).
+            if request.url.path != _METRICS_ENDPOINT:
+                # x_user_id/x_user_role — сырые значения хэдеров как они дошли до
+                # сервиса (в норме — пустые: gateway их зануляет, ADR 0005/issue
+                # #286). Единственный способ автоматически подтвердить это
+                # anti-spoofing поведение по issue #292 — их непустое значение
+                # здесь сигнализирует о попытке подделки или об обходе gateway.
+                logger.info(
+                    "%s %s request_id=%s x_user_id=%r x_user_role=%r",
+                    request.method,
+                    request.url.path,
+                    request_id,
+                    request.headers.get("x-user-id", ""),
+                    request.headers.get("x-user-role", ""),
+                    extra={
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": status_code,
+                        "duration_ms": duration_ms,
+                    },
+                )
             request_id_var.reset(request_id_reset)
             if actor_id_reset is not None:
                 actor_id_var.reset(actor_id_reset)

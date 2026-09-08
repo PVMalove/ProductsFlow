@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 import enum
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -67,16 +67,30 @@ class IdentityGateway(Protocol):
     async def fetch_current_user(self, token: str) -> IdentityUser: ...
 
 
-class ProductImageStorage(Protocol):
+class ProductImageUrlBuilder(Protocol):
+    """Narrow slice of `ProductImageStorage` — all that list/search's
+    image-URL attachment (`attach_image_urls`) actually needs."""
+
+    async def build_presigned_url(
+        self, bucket_name: str, key: str, expires_in: int = 3600
+    ) -> str: ...
+
+
+class ProductImageStorage(ProductImageUrlBuilder, Protocol):
     async def put_object(
         self, bucket_name: str, key: str, body: bytes, content_type: str
     ) -> None: ...
 
     async def delete_object(self, bucket_name: str, key: str) -> None: ...
 
-    async def build_presigned_url(
-        self, bucket_name: str, key: str, expires_in: int = 3600
-    ) -> str: ...
+
+class ProductImageLookupPort(Protocol):
+    """Narrow slice of `ProductQueryPort` — all that list/search's
+    image-URL attachment (`attach_image_urls`) actually needs."""
+
+    async def get_product_images_by_ids(
+        self, product_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProductImage]: ...
 
 
 class ProductAuditAction(enum.StrEnum):
@@ -151,7 +165,7 @@ class ProductCommandPort(Protocol):
     ) -> None: ...
 
 
-class ProductQueryPort(Protocol):
+class ProductQueryPort(ProductImageLookupPort, Protocol):
     async def get_by_id(self, product_id: ProductId) -> Product | None: ...
 
     async def get_product_image(self, product_id: ProductId) -> ProductImage | None: ...
@@ -259,7 +273,9 @@ __all__ = [
     "OwnerSearchStateStore",
     "ProductCommandPort",
     "ProductImage",
+    "ProductImageLookupPort",
     "ProductImageStorage",
+    "ProductImageUrlBuilder",
     "ProductAuditEntry",
     "ProductAuditReader",
     "ProductQueryPort",

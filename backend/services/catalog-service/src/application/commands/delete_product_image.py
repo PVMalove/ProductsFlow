@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 """Команда и handler delete-product-image."""
 
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -16,6 +17,8 @@ from application.ports import (
 )
 from domain.unit_of_work import CatalogUnitOfWork
 from domain.value_objects.product_id import ProductId
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,10 +56,18 @@ class DeleteProductImageCommandHandler:
                 ProductId.create(command.product_id)
             )
             if product is None:
+                logger.warning(
+                    "Удаление изображения отклонено: товар не найден product_id=%s",
+                    command.product_id,
+                )
                 raise ProductNotFoundError
             await self._authorizer.require_owner_or_admin(command.actor, product)
             image = await self._uow.products.get_product_image(product.id)
             if image is None:
+                logger.warning(
+                    "Удаление изображения отклонено: изображение не найдено product_id=%s",
+                    command.product_id,
+                )
                 raise ProductImageNotFoundError
 
             await self._uow.products.delete_product_image(
@@ -65,4 +76,9 @@ class DeleteProductImageCommandHandler:
             if not image.s3_key.startswith(SEED_KEY_PREFIX):
                 await self._storage.delete_object(self._bucket_name, image.s3_key)
             await self._uow.commit()
+        logger.info(
+            "Изображение товара удалено: product_id=%s actor=%s",
+            command.product_id,
+            command.actor.user_id,
+        )
         return Result[None].ok(None)

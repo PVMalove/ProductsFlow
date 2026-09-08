@@ -1,9 +1,7 @@
 # Prometheus alerting rules для публичного поиска Catalog (issue #293,
-# epic #283). Ни Prometheus, ни Alertmanager сейчас не развёрнуты в
-# docker-compose.yml (см. `docs/architecture.md` монолита — метрики/алертинг
-# запланированы отдельным эффортом) — этот файл декларирует именно те три
-# условия, что требует acceptance criteria issue #293, и подключается
-# `rule_files:` в тот момент, когда Prometheus появится в стеке.
+# epic #283). Monitoring overlay монтирует этот файл в Prometheus вместе с
+# platform rules (`backend/infra/monitoring/alerts.yml`). Alertmanager намеренно
+# не входит в локальный overlay: способ доставки уведомлений — решение среды.
 #
 # Метрики публикуют `catalog-api` (`GET /metrics`) и `catalog-search-worker`
 # (отдельный prometheus_client-HTTP-сервер, порт

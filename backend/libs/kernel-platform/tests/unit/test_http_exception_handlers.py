@@ -185,3 +185,51 @@ async def test_unexpected_exception_is_hidden_behind_a_safe_500(
     }
     assert "secret" not in response.text
     assert "postgres://" not in response.text
+
+
+def _build_app_with_boom(on_unhandled_exception) -> FastAPI:
+    app = FastAPI()
+    register_error_handlers(
+        app,
+        service_error_type=_DemoServiceError,
+        on_unhandled_exception=on_unhandled_exception,
+    )
+
+    @app.get("/boom")
+    async def _boom() -> None:
+        raise RuntimeError("kaboom")
+
+    return app
+
+
+async def test_on_unhandled_exception_hook_receives_the_exception() -> None:
+    received: list[Exception] = []
+    transport = httpx.ASGITransport(
+        app=_build_app_with_boom(received.append), raise_app_exceptions=False
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/boom")
+
+    assert response.status_code == 500
+    assert len(received) == 1
+    assert isinstance(received[0], RuntimeError)
+
+
+async def test_on_unhandled_exception_hook_failure_does_not_break_the_500_response() -> (
+    None
+):
+    def _broken_hook(exc: Exception) -> None:
+        raise ValueError("hook itself is broken")
+
+    transport = httpx.ASGITransport(
+        app=_build_app_with_boom(_broken_hook), raise_app_exceptions=False
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/boom")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {"code": "INTERNAL_ERROR", "message": "Внутренняя ошибка сервера"}
+    }

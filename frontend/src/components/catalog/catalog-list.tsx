@@ -21,20 +21,20 @@ function CatalogSkeleton() {
   return (
     <div
       aria-label="Loading..."
-      className="mx-auto flex w-full max-w-4xl flex-col gap-8 p-4"
+      className="mx-auto flex w-full max-w-6xl flex-col gap-6"
     >
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, index) => (
           <div
             key={index}
-            className="flex animate-pulse flex-col gap-2 rounded-lg border bg-white p-4 shadow-sm dark:bg-zinc-900"
+            className="flex min-h-72 animate-pulse flex-col gap-2 rounded-md border border-white/10 bg-[#282f37] p-4"
           >
-            <div className="mb-2 h-6 w-3/4 rounded bg-gray-200 dark:bg-zinc-800" />
-            <div className="h-4 w-full flex-grow rounded bg-gray-200 dark:bg-zinc-800" />
-            <div className="h-4 w-5/6 rounded bg-gray-200 dark:bg-zinc-800" />
+            <div className="mb-2 h-6 w-3/4 rounded bg-slate-700" />
+            <div className="h-4 w-full flex-grow rounded bg-slate-700" />
+            <div className="h-4 w-5/6 rounded bg-slate-700" />
             <div className="mt-4 flex items-center justify-between">
-              <div className="h-5 w-16 rounded bg-gray-200 dark:bg-zinc-800" />
-              <div className="h-5 w-20 rounded bg-gray-200 dark:bg-zinc-800" />
+              <div className="h-5 w-16 rounded bg-slate-700" />
+              <div className="h-5 w-20 rounded bg-slate-700" />
             </div>
           </div>
         ))}
@@ -76,10 +76,10 @@ export default function CatalogList({
   const filtersKey = getCatalogFiltersKey(filters);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 p-4">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <CatalogFiltersForm key={filtersKey} filters={filters} />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {products.map((product) => (
           <ProductCard
             key={product.id}

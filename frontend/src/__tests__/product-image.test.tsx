@@ -55,4 +55,29 @@ describe('ProductImage', () => {
 
     expect(image.getAttribute('src')).toMatch(/\/product-placeholder\.svg$/);
   });
+
+  it('retries a newly supplied image URL after a prior image load failure', () => {
+    const { rerender } = render(
+      <ProductImage
+        productId="product-1"
+        alt="Test product"
+        imageUrl="http://minio:9000/product-images/products/product-1/old?signature=old"
+      />,
+    );
+    const image = screen.getByRole('img', { name: 'Test product' });
+    fireEvent.error(image);
+
+    rerender(
+      <ProductImage
+        productId="product-2"
+        alt="Next product"
+        imageUrl="http://minio:9000/product-images/products/product-2/new?signature=new"
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Next product' })).toHaveAttribute(
+      'src',
+      '/media/product-images/products/product-2/new?signature=new',
+    );
+  });
 });

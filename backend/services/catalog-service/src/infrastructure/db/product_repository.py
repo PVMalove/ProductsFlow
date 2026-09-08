@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
 from kernel_domain.result import Result
@@ -199,6 +200,18 @@ class ProductRepository:
             )
         )
         return _to_image_domain(row) if row is not None else None
+
+    async def get_product_images_by_ids(
+        self, product_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProductImage]:
+        if not product_ids:
+            return {}
+        rows = await self.session.scalars(
+            select(ProductImageModel).where(
+                ProductImageModel.product_id.in_(product_ids)
+            )
+        )
+        return {row.product_id: _to_image_domain(row) for row in rows}
 
     async def upsert_product_image(
         self,

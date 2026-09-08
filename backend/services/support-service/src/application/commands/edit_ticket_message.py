@@ -1,3 +1,4 @@
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -14,6 +15,8 @@ from domain.entities.ticket import (
 from domain.errors import SupportErrors
 from domain.unit_of_work import SupportUnitOfWork
 from domain.value_objects.ticket_id import TicketId
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -40,18 +43,40 @@ class EditTicketMessageCommandHandler:
                     is_admin=command.is_admin,
                 )
             except TicketMessageNotFoundError:
+                logger.warning(
+                    "Редактирование сообщения отклонено: сообщение не найдено "
+                    "ticket_id=%s message_id=%s",
+                    command.ticket_id.value,
+                    command.message_id,
+                )
                 return Result[TicketView].fail(SupportErrors.ticket_message_not_found())
             except (
                 TicketClosedError,
                 TicketMessageImmutableError,
                 TicketMessageAlreadyDeletedError,
             ):
+                logger.warning(
+                    "Редактирование сообщения отклонено: сообщение неизменяемо "
+                    "ticket_id=%s message_id=%s",
+                    command.ticket_id.value,
+                    command.message_id,
+                )
                 return Result[TicketView].fail(
                     SupportErrors.ticket_message_immutable("изменить")
                 )
             except TicketMessageInvalidBodyError:
                 return Result[TicketView].fail(SupportErrors.invalid_body())
             if ticket is None:
+                logger.warning(
+                    "Редактирование сообщения отклонено: тикет не найден ticket_id=%s",
+                    command.ticket_id.value,
+                )
                 return Result[TicketView].fail(SupportErrors.ticket_not_found())
             await self._uow.commit()
+        logger.info(
+            "Сообщение отредактировано: ticket_id=%s message_id=%s actor_id=%s",
+            command.ticket_id.value,
+            command.message_id,
+            command.actor_id,
+        )
         return Result[TicketView].ok(TicketView.from_domain(ticket))

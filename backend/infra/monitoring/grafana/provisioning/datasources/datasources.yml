@@ -28,3 +28,17 @@ datasources:
           datasourceUid: tempo
           url: '$${__value.raw}'
           urlDisplayLabel: "Открыть трейс в Tempo"
+
+  - name: OpenSearch (catalog)
+    uid: opensearch-catalog
+    type: elasticsearch
+    access: proxy
+    url: http://opensearch:9200
+    database: catalog-products
+    editable: false
+    jsonData:
+      flavor: opensearch
+      version: "3.1.0"
+      timeField: created_at
+      logMessageField: name
+      logLevelField: category

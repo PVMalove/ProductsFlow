@@ -13,6 +13,7 @@ export interface ProductView {
   category: string;
   user_id: string;
   is_active: boolean;
+  image_url: string | null;
 }
 
 interface GetProductsParams extends CatalogFilters {
@@ -20,8 +21,13 @@ interface GetProductsParams extends CatalogFilters {
 }
 
 export async function getProducts(params: GetProductsParams): Promise<ApiResponse<ProductView[]>> {
+  // Server-side (SSR prefetch) needs an absolute URL — Node's fetch can't
+  // resolve a relative one. In the browser, fall back to a relative path so
+  // requests go through next.config.ts's rewrite (same-origin, no CORS)
+  // instead of hitting the gateway cross-origin.
   const baseUrl = buildApiBaseUrl(
-    process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
+    process.env.NEXT_PUBLIC_API_URL ||
+      (typeof window === 'undefined' ? 'http://127.0.0.1:8080' : undefined),
   );
   const url = new URL(`${baseUrl}/products/search`);
 

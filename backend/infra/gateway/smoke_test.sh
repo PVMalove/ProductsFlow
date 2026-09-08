@@ -135,6 +135,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "CORS: allowlisted browser origin and preflight"
+# ---------------------------------------------------------------------------
+cors_headers="$(curl -s -D - -o /dev/null -X OPTIONS "$GATEWAY_URL/api/v1/products" \
+  -H 'Origin: http://localhost:3000' \
+  -H 'Access-Control-Request-Method: GET' \
+  -H 'Access-Control-Request-Headers: Authorization, Content-Type')"
+if printf '%s' "$cors_headers" | tr -d '\r' | grep -qi '^HTTP/.* 204' \
+  && printf '%s' "$cors_headers" | tr -d '\r' | grep -qi '^access-control-allow-origin: http://localhost:3000$' \
+  && printf '%s' "$cors_headers" | tr -d '\r' | grep -qi '^access-control-allow-credentials: true$'; then
+  ok "allowlisted origin receives a credentialed CORS preflight response"
+else
+  bad "allowlisted origin did not receive the expected CORS preflight headers"
+fi
+
+untrusted_cors_headers="$(curl -s -D - -o /dev/null "$GATEWAY_URL/api/v1/products" \
+  -H 'Origin: https://untrusted.example')"
+if ! printf '%s' "$untrusted_cors_headers" | tr -d '\r' | grep -qi '^access-control-allow-origin:'; then
+  ok "untrusted origin receives no CORS allow-origin header"
+else
+  bad "untrusted origin unexpectedly received an allow-origin header"
+fi
+sleep 1
+
+# ---------------------------------------------------------------------------
 section "Correlation id (X-Request-ID)"
 # ---------------------------------------------------------------------------
 GIVEN_ID="smoke-292-$(date +%s)-given"
@@ -260,7 +284,7 @@ else
 fi
 sleep 1
 
-assert_rate_limited "products_read_limit (20 r/s)" GET /api/v1/products 15
+assert_rate_limited "products_read_limit (60 r/s)" GET /api/v1/products 45
 sleep 1
 
 assert_rate_limited "products_write_limit (2 r/s)" POST /api/v1/products 8 \

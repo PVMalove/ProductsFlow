@@ -9,9 +9,13 @@ from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from starlette.applications import Starlette
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,11 @@ def configure_tracing(
 def instrument_fastapi(
     app: FastAPI, service_name: str, *, endpoint: str | None = None
 ) -> TracerProvider | None:
-    """Add server spans to a FastAPI app, excluding the Prometheus endpoint."""
+    """Add concise server spans to a FastAPI app.
+
+    Prometheus scrapes and ASGI's per-chunk receive/send implementation spans
+    are excluded; the request's server span and any child database spans remain.
+    """
     provider = configure_tracing(service_name, endpoint=endpoint)
     if provider is None:
         return None
@@ -77,6 +85,67 @@ def instrument_fastapi(
     FastAPIInstrumentor.instrument_app(
         app,
         tracer_provider=provider,
-        excluded_urls=r"^/metrics$",
+        # ASGI instrumentation matches excluded_urls against the *full* URL
+        # (get_host_port_url_tuple), e.g. "http://catalog-api:8000/metrics"
+        # — an anchored "^/metrics$" never matches that and silently traced
+        # every scrape. No leading "^" so it matches regardless of scheme/host.
+        excluded_urls=r"/metrics$",
+        # Multipart uploads often arrive in several ASGI receive() calls and a
+        # response may have separate start/body sends.  Those implementation
+        # spans make a single request look duplicated in Tempo without adding
+        # useful request-level observability.
+        exclude_spans=["receive", "send"],
     )
     return provider
+
+
+def instrument_httpx(*, tracer_provider: TracerProvider | None = None) -> None:
+    """Trace every httpx client process-wide and propagate W3C trace context
+    on outgoing requests. Without this, a call from one service to another
+    (e.g. catalog-service's IdentityClient calling identity-service) never
+    connects into one distributed trace — each service only ever sees its
+    own inbound-request span, never the caller's. HTTPXClientInstrumentor
+    patches the shared HTTPTransport/AsyncHTTPTransport classes, so it
+    applies retroactively even to httpx.AsyncClient instances already
+    constructed at module import time.
+
+    `tracer_provider` defaults to the process-wide global (set by
+    `configure_tracing`/`instrument_fastapi`) — pass one explicitly only to
+    isolate a test from that global, process-wide singleton."""
+    try:
+        HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
+    except Exception:
+        logger.warning(
+            "HTTPX tracing instrumentation is unavailable; continuing without it",
+            exc_info=True,
+        )
+
+
+def instrument_sqlalchemy(
+    app: Starlette,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    tracer_provider: TracerProvider | None = None,
+) -> None:
+    """Turn SQL statements into child spans nested under the current HTTP
+    span, so a slow request's trace shows which query was responsible —
+    complements db_metrics.py's aggregate duration histogram, which can
+    only say a service's queries got slower, not which one.
+
+    Guarded like observability.db_metrics's own instrumentation: `lifespan`
+    builds a fresh sessionmaker per entry, but repeated `TestClient(app)`
+    entries in unit tests share one module-level `app` — instrumenting the
+    same engine twice would double every query's spans."""
+    if getattr(app.state, "_sqlalchemy_tracing_registered", False):
+        return
+    try:
+        engine = sessionmaker.kw["bind"].sync_engine
+        SQLAlchemyInstrumentor().instrument(
+            engine=engine, tracer_provider=tracer_provider
+        )
+    except Exception:
+        logger.warning(
+            "SQLAlchemy tracing instrumentation is unavailable; continuing without it",
+            exc_info=True,
+        )
+    app.state._sqlalchemy_tracing_registered = True

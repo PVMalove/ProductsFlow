@@ -24,27 +24,27 @@ export function Header() {
   };
 
   return (
-    <header className="border-b bg-slate-900 border-slate-800">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="text-xl font-bold text-white">
+    <header className="border-b border-white/10 bg-[#20262e]/95 backdrop-blur">
+      <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link href="/" className="text-sm font-bold tracking-tight text-white sm:text-base">
             ProductsFlow
           </Link>
 
-          <nav className="flex items-center gap-4">
+          <nav className="hidden items-center gap-4 sm:flex">
             {actor ? (
               <>
-                <Link href="/owner/dashboard" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/owner/dashboard" className="text-xs text-slate-400 hover:text-white transition-colors">
                   Мои товары
                 </Link>
-                <Link href="/catalog" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/catalog" className="text-xs text-slate-400 hover:text-white transition-colors">
                   Поиск
                 </Link>
-                <Link href="/support/tickets/new" className="text-sm text-slate-300 hover:text-white transition-colors">
+                <Link href="/support/tickets/new" className="text-xs text-slate-400 hover:text-white transition-colors">
                   Поддержка
                 </Link>
                 {actor.role === 'admin' && (
-                  <Link href="/admin/audit-log" className="text-sm font-semibold text-slate-100 hover:text-white transition-colors">
+                  <Link href="/admin/audit-log" className="text-xs font-semibold text-slate-200 hover:text-white transition-colors">
                     Админка
                   </Link>
                 )}
@@ -53,11 +53,11 @@ export function Header() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {isLoading ? null : actor ? (
             <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-400">{actor.email}</span>
-              <Button variant="destructive" size="sm" onClick={handleLogout}>
+              <span className="hidden text-xs text-slate-400 md:inline">{actor.email}</span>
+              <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:border-slate-400 hover:bg-slate-800 hover:text-white" onClick={handleLogout}>
                 Выйти
               </Button>
             </div>
@@ -67,13 +67,13 @@ export function Header() {
                 <AuthDialog />
               ) : (
                 <Link href="/login">
-                  <Button variant="ghost" className="text-slate-300 hover:text-white">
+                  <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white">
                     Вход
                   </Button>
                 </Link>
               )}
               <Link href="/register">
-                <Button variant="default">Регистрация</Button>
+                <Button size="sm">Регистрация</Button>
               </Link>
             </>
           )}

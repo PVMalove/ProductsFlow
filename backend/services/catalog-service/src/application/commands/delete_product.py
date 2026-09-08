@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 """Команда и handler delete-product."""
 
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -14,6 +15,8 @@ from application.ports import (
 )
 from domain.unit_of_work import CatalogUnitOfWork
 from domain.value_objects.product_id import ProductId
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -43,10 +46,19 @@ class DeleteProductCommandHandler:
                 ProductId.create(command.product_id)
             )
             if product is None:
+                logger.warning(
+                    "Удаление товара отклонено: товар не найден product_id=%s",
+                    command.product_id,
+                )
                 raise ProductNotFoundError
             await self._authorizer.require_owner_or_admin(command.actor, product)
             deleted = await self._uow.products.delete(product.id)
             if deleted is None:
                 raise ProductNotFoundError
             await self._uow.commit()
+        logger.info(
+            "Товар удалён: product_id=%s actor=%s",
+            command.product_id,
+            command.actor.user_id,
+        )
         return Result[None].ok(None)

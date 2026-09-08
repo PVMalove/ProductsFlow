@@ -1,0 +1,51 @@
+groups:
+  - name: productsflow-platform.rules
+    rules:
+      - alert: ProductsFlowServiceDown
+        expr: up{job=~"identity-service|catalog-service|support-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ProductsFlow service {{ $labels.job }} is down"
+          description: "Prometheus has not scraped {{ $labels.job }} successfully for two minutes."
+
+      - alert: ProductsFlowHighServerErrorRate
+        expr: >-
+          sum by (job) (rate({__name__=~"productsflow_.*_http_requests_total",status=~"5.."}[5m]))
+          / sum by (job) (rate({__name__=~"productsflow_.*_http_requests_total"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ProductsFlow {{ $labels.job }} has elevated 5xx rate"
+          description: "More than 5% of requests have been answered with 5xx for five minutes."
+
+      - alert: ProductsFlowRestartLoop
+        expr: changes(process_start_time_seconds{job=~"identity-service|catalog-service|support-service"}[15m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ProductsFlow {{ $labels.job }} restarted repeatedly"
+          description: "The process start time changed more than twice in 15 minutes."
+
+      - alert: ProductsFlowDbPoolSaturated
+        expr: >-
+          {__name__=~"productsflow_.*_db_pool_connections",state="checked_out"}
+          / ignoring (state) {__name__=~"productsflow_.*_db_pool_connections",state="size"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ProductsFlow {{ $labels.job }} database pool is saturated"
+          description: "More than 80% of configured SQLAlchemy pool capacity is checked out."
+
+      - alert: ProductsFlowDbQueryFailures
+        expr: sum by (job) (increase({__name__=~"productsflow_.*_db_query_errors_total"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ProductsFlow {{ $labels.job }} has SQL query failures"
+          description: "At least one SQL statement failed in the last five minutes."

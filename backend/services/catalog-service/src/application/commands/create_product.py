@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 """Команда и handler create-product."""
 
+import logging
 from dataclasses import dataclass
 
 from kernel_domain.result import Result
@@ -13,6 +14,8 @@ from application.ports import (
 )
 from contracts.product import ProductView
 from domain.unit_of_work import CatalogUnitOfWork
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,16 @@ class CreateProductCommandHandler:
                 user_id=command.actor.user_id,
             )
             if result.is_err:
+                logger.warning(
+                    "Создание товара отклонено: actor=%s code=%s",
+                    command.actor.user_id,
+                    result.error.code,
+                )
                 return Result[ProductView].fail(result.error)
             await self._uow.commit()
+        logger.info(
+            "Товар создан: product_id=%s actor=%s",
+            result.value.id.value,
+            command.actor.user_id,
+        )
         return Result[ProductView].ok(ProductView.from_domain(result.value))

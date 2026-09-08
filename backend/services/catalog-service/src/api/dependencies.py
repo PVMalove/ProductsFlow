@@ -105,16 +105,25 @@ CreateProductDI = Annotated[
 
 def get_list_products_handler(
     repository: ProductRepositoryDI,
+    storage: StorageDI,
 ) -> ListProductsQueryHandler:
-    return ListProductsQueryHandler(repository)
+    return ListProductsQueryHandler(
+        repository, storage, settings.minio_bucket_name_product
+    )
 
 
 ListProductsDI = Annotated[ListProductsQueryHandler, Depends(get_list_products_handler)]
 
 
-def get_search_products_handler(request: Request) -> SearchProductsQueryHandler:
+def get_search_products_handler(
+    request: Request,
+    repository: ProductRepositoryDI,
+    storage: StorageDI,
+) -> SearchProductsQueryHandler:
     search: ProductSearchPort = request.app.state.product_search
-    return SearchProductsQueryHandler(search)
+    return SearchProductsQueryHandler(
+        search, repository, storage, settings.minio_bucket_name_product
+    )
 
 
 SearchProductsDI = Annotated[

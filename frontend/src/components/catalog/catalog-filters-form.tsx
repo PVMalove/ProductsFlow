@@ -42,7 +42,7 @@ export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
   return (
     <form
       onSubmit={applyFilters}
-      className="mb-4 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow-sm dark:bg-zinc-900"
+      className="mb-1 flex flex-wrap items-end gap-3 rounded-md border border-white/10 bg-[#282f37] p-4"
     >
       <div className="flex flex-col gap-1.5 w-full sm:w-auto sm:flex-grow">
         <Label htmlFor="q">Search</Label>
@@ -85,7 +85,7 @@ export function CatalogFiltersForm({ filters }: CatalogFiltersFormProps) {
         <Label htmlFor="sort">Sort By</Label>
         <select
           id="sort"
-          className="flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:focus:ring-zinc-300"
+          className="flex h-8 w-full items-center justify-between rounded-lg border border-input bg-input/30 px-2.5 py-1 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50"
           value={sort}
           onChange={(event) => setSort(event.target.value as CatalogSort)}
         >

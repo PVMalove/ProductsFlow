@@ -1,5 +1,6 @@
 import enum
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
@@ -64,6 +65,10 @@ class ProductRepository(Protocol):
     async def delete(self, product_id: ProductId) -> Product | None: ...
 
     async def get_product_image(self, product_id: ProductId) -> ProductImage | None: ...
+
+    async def get_product_images_by_ids(
+        self, product_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProductImage]: ...
 
     async def upsert_product_image(
         self,

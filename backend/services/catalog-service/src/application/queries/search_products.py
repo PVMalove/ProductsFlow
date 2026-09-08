@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 from kernel_platform.pagination import DEFAULT_PAGE_LIMIT, Page
 
-from application.ports import ProductSearchPort
+from application.ports import (
+    ProductImageLookupPort,
+    ProductImageUrlBuilder,
+    ProductSearchPort,
+)
+from application.queries.attach_image_urls import attach_image_urls
 from application.search_cursor import (
     ProductSortOption,
     SearchCursor,
@@ -28,8 +33,17 @@ class SearchProductsQuery:
 class SearchProductsQueryHandler:
     """Returns public active Product matches from the search read model."""
 
-    def __init__(self, search: ProductSearchPort) -> None:
+    def __init__(
+        self,
+        search: ProductSearchPort,
+        repository: ProductImageLookupPort,
+        storage: ProductImageUrlBuilder,
+        bucket_name: str,
+    ) -> None:
         self._search = search
+        self._repository = repository
+        self._storage = storage
+        self._bucket_name = bucket_name
 
     async def execute(self, query: SearchProductsQuery) -> Result[Page[ProductView]]:
         sort = resolve_search_sort(query.q, query.sort)
@@ -42,4 +56,10 @@ class SearchProductsQueryHandler:
             limit=query.limit,
             cursor=query.cursor,
         )
-        return Result[Page[ProductView]].ok(page)
+        items = await attach_image_urls(
+            page.items,
+            repository=self._repository,
+            storage=self._storage,
+            bucket_name=self._bucket_name,
+        )
+        return Result[Page[ProductView]].ok(Page(items=items, page_info=page.page_info))

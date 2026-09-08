@@ -1,0 +1,701 @@
+{
+  "title": "FastAPI Full Observability (ProductsFlow)",
+  "uid": "productsflow-fastapi-observability",
+  "tags": ["productsflow", "fastapi"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "custom",
+        "label": "Service (metrics / traces)",
+        "description": "Value = productsflow_<service>_* metric subsystem; display text = OTEL service.name used by Tempo.",
+        "query": "identity-service : identity_service,catalog-service : catalog_service,support-service : support_service",
+        "current": { "text": "catalog-service", "value": "catalog_service" },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "compose_service",
+        "type": "custom",
+        "label": "Container (logs)",
+        "description": "docker-compose service name — what Promtail's compose_service label actually carries, distinct from the service.name used for metrics/traces.",
+        "query": "identity-api,catalog-api,support-api",
+        "current": { "text": "catalog-api", "value": "catalog-api" },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "worker",
+        "type": "custom",
+        "label": "Async worker (traces)",
+        "description": "OTEL service.name of an outbox publisher process. Workers are separate from the HTTP API.",
+        "query": "identity-worker,catalog-outbox-worker",
+        "current": { "text": "catalog-outbox-worker", "value": "catalog-outbox-worker" },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "handler",
+        "type": "query",
+        "label": "Endpoint",
+        "description": "Route template (handler label) — filters the HTTP panels below. Re-queried whenever $service changes. Deliberately NOT :regex-formatted: Grafana's escapeRegex backslash-escapes { and }, but PromQL's string literal parser rejects \\{ as an unknown escape sequence — it would break every route with a path param (e.g. /api/v1/products/{product_id}). Raw braces are safe here since RE2 only treats {..} as a repetition count when the content is numeric.",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(productsflow_${service}_http_requests_total, handler)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "HTTP (Prometheus — productsflow_${service}_http_*)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "RPS — total",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Total requests (counter)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(productsflow_${service}_http_requests_total{handler=~\"${handler}\"})"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "description": "Cumulative count since the process started (resets on restart) — RPS shows current load, this shows how much traffic a service has actually handled."
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(productsflow_${service}_http_requests_total{status=~\"5..\",handler=~\"${handler}\"}[$__rate_interval])) / sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Requests in progress",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "productsflow_${service}_http_requests_inprogress"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Saturation, not throughput: a slow downstream dependency looks the same as low traffic on the RPS graph until requests visibly start piling up here."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "DB query RPS",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(productsflow_${service}_db_query_duration_seconds_count[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "DB query P99 latency",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum(rate(productsflow_${service}_db_query_duration_seconds_bucket[$__rate_interval])) by (le))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request latency — P50 / P95 / P99",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "refId": "P50",
+          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum(rate(productsflow_${service}_http_request_duration_seconds_bucket{handler=~\"${handler}\"}[$__rate_interval])) by (le))"
+        },
+        {
+          "refId": "P95",
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum(rate(productsflow_${service}_http_request_duration_seconds_bucket{handler=~\"${handler}\"}[$__rate_interval])) by (le))"
+        },
+        {
+          "refId": "P99",
+          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum(rate(productsflow_${service}_http_request_duration_seconds_bucket{handler=~\"${handler}\"}[$__rate_interval])) by (le))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "RPS by status code",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{status}}",
+          "expr": "sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval])) by (status)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "RPS by endpoint",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{method}} {{handler}}",
+          "expr": "sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval])) by (method, handler)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "4xx / 5xx rate by endpoint",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{status}} {{handler}}",
+          "expr": "sum(rate(productsflow_${service}_http_requests_total{status=~\"[45]..\",handler=~\"${handler}\"}[$__rate_interval])) by (status, handler)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Top 10 slowest endpoints (avg duration)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{handler}}",
+          "expr": "topk(10, sum(rate(productsflow_${service}_http_request_duration_seconds_sum{handler=~\"${handler}\"}[$__rate_interval])) by (handler) / sum(rate(productsflow_${service}_http_request_duration_seconds_count{handler=~\"${handler}\"}[$__rate_interval])) by (handler))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Unhandled exceptions by type",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{exception_type}}",
+          "expr": "sum(rate(productsflow_${service}_http_exceptions_total[$__rate_interval])) by (exception_type)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "description": "Only unhandled (500) exceptions are counted — expected 4xx errors (validation, not-found, etc.) never reach this counter."
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "P99 latency by endpoint",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{handler}}",
+          "expr": "histogram_quantile(0.99, sum(rate(productsflow_${service}_http_request_duration_seconds_bucket{handler=~\"${handler}\"}[$__rate_interval])) by (handler, le))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "description": "Unlike the aggregate P50/P95/P99 panel above, this splits P99 by endpoint — a single slow route can hide in an aggregate percentile behind many fast ones."
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Availability (non-5xx) % by endpoint",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{handler}}",
+          "expr": "1 - sum by (handler) (rate(productsflow_${service}_http_requests_total{status=~\"5..\",handler=~\"${handler}\"}[$__rate_interval])) / sum by (handler) (rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.95 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Availability treats only server-side 5xx responses as unavailable; client mistakes and redirects do not lower the indicator."
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Top 10 endpoints — requests",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 38 },
+      "timeFrom": "24h",
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{handler}}",
+          "expr": "topk(10, sum by (handler) (increase(productsflow_${service}_http_requests_total[$__range])))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      },
+      "description": "The ten route templates with the most requests in a fixed 24-hour window. It ignores the endpoint selector so the block remains a whole-service overview."
+    },
+    {
+      "id": 26,
+      "type": "bargauge",
+      "title": "Requests Average Duration",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 47 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{handler}}",
+          "expr": "sum(productsflow_${service}_http_request_duration_seconds_sum{handler=~\"${handler}\"}) by (handler) / sum(productsflow_${service}_http_request_duration_seconds_count{handler=~\"${handler}\"}) by (handler)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "continuous-GrYlRd" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "lcd",
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "maxVizHeight": 300,
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "LCD bar gauge: one row per endpoint, a continuous green-to-red duration scale, and the current average on the right. It uses the process-lifetime average, so values remain visible while traffic is idle and reset on process restart."
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "Runtime & availability (Prometheus)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Service health",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 56 },
+      "targets": [{ "refId": "A", "instant": true, "expr": "up{job=\"${service:text}\"}" }],
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "description": "Prometheus scrape health of the selected HTTP service."
+    },
+    {
+      "id": 29,
+      "type": "stat",
+      "title": "Process uptime",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 56 },
+      "targets": [{ "refId": "A", "instant": true, "expr": "time() - process_start_time_seconds{job=\"${service:text}\"}" }],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "description": "Drops on a process restart; use it with health to spot restart loops."
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Availability (non-5xx)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 56 },
+      "targets": [{ "refId": "A", "expr": "1 - sum(rate(productsflow_${service}_http_requests_total{status=~\"5..\",handler=~\"${handler}\"}[$__rate_interval])) / sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.99 }, { "color": "green", "value": 0.999 }] } }, "overrides": [] },
+      "description": "Only 5xx responses count as unavailable."
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Unhandled exceptions",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 56 },
+      "targets": [{ "refId": "A", "expr": "sum(increase(productsflow_${service}_http_exceptions_total[$__range]))" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }] } }, "overrides": [] },
+      "description": "Unexpected exceptions over the selected dashboard range."
+    },
+    {
+      "id": 32,
+      "type": "row",
+      "title": "Database saturation & errors (Prometheus)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "DB query latency — P50 / P95 / P99",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 62 },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum(rate(productsflow_${service}_db_query_duration_seconds_bucket[$__rate_interval])) by (le))" },
+        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum(rate(productsflow_${service}_db_query_duration_seconds_bucket[$__rate_interval])) by (le))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum(rate(productsflow_${service}_db_query_duration_seconds_bucket[$__rate_interval])) by (le))" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "DB queries per HTTP request",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 62 },
+      "targets": [{ "refId": "A", "expr": "sum(rate(productsflow_${service}_db_query_duration_seconds_count[$__rate_interval])) / sum(rate(productsflow_${service}_http_requests_total{handler=~\"${handler}\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "description": "An elevated value can reveal N+1 patterns even when individual queries remain fast."
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "DB pool connections",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 62 },
+      "targets": [{ "refId": "A", "legendFormat": "{{state}}", "expr": "productsflow_${service}_db_pool_connections" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "description": "QueuePool capacity, checked-out connections, and overflow are collected at scrape time."
+    },
+    {
+      "id": 36,
+      "type": "table",
+      "title": "Top DB query errors",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 62 },
+      "targets": [{ "refId": "A", "instant": true, "expr": "topk(10, sum(increase(productsflow_${service}_db_query_errors_total[$__range])) by (exception_type))", "format": "table" }],
+      "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "exception_type": "Exception", "Value": "Errors" } } }],
+      "description": "Failed SQL statements grouped by exception class over the selected range."
+    },
+    {
+      "id": 37,
+      "type": "table",
+      "title": "Top unhandled exceptions",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 70 },
+      "targets": [{ "refId": "A", "instant": true, "expr": "topk(10, sum(increase(productsflow_${service}_http_exceptions_total[$__range])) by (exception_type))", "format": "table" }],
+      "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "exception_type": "Exception", "Value": "Count" } } }],
+      "description": "Use the log stream to inspect a selected failure in context and follow its TraceID."
+    },
+    {
+      "id": 38,
+      "type": "row",
+      "title": "Async delivery (Tempo — outbox / RabbitMQ spans)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 78 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 39,
+      "type": "timeseries",
+      "title": "Outbox publish RPS",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 79 },
+      "targets": [{ "refId": "A", "queryType": "traceql", "query": "{resource.service.name=\"${worker}\" && name=\"publish_message\"} | rate()" }],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "description": "Outbox publish attempts traced by the selected worker."
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Consumer RPS",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 79 },
+      "targets": [{ "refId": "A", "queryType": "traceql", "query": "{name=\"consume_message\"} | rate()" }],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "description": "Consumer processing rate across services; spans retain the publisher trace context."
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Async delivery errors",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 79 },
+      "targets": [
+        { "refId": "A", "legendFormat": "publish", "queryType": "traceql", "query": "{name=\"publish_message\" && status=error} | rate()" },
+        { "refId": "B", "legendFormat": "consume", "queryType": "traceql", "query": "{name=\"consume_message\" && status=error} | rate()" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "description": "Errors in instrumented publish or consume spans. Queue depth is not inferred from traces."
+    },
+    {
+      "id": 42,
+      "type": "row",
+      "title": "Catalog Search queue health (Prometheus)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 87 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Catalog Search DLQ depth",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 88 },
+      "targets": [{ "refId": "A", "expr": "catalog_search_dlq_depth" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "description": "Messages that exhausted the Catalog Search consumer retry path."
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Catalog Search oldest pending event age",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 88 },
+      "targets": [{ "refId": "A", "expr": "catalog_search_oldest_pending_event_age_seconds" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 10 }, { "color": "red", "value": 60 }] } }, "overrides": [] },
+      "description": "Age of the oldest event currently being processed; it is not a destructive peek at the RabbitMQ queue head."
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Traces (Tempo — TraceQL metrics, span-derived)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 96 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Span RPS",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 97 },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"${service:text}\"} | rate()"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "description": "Rate of spans per second, computed directly by Tempo's metrics-generator (local-blocks processor, tempo.yaml) — independent of the HTTP RPS panel above, since it counts spans rather than instrumented HTTP responses."
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Span error rate",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 97 },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"${service:text}\" && status=error} | rate()"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Span P99 duration",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 97 },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"${service:text}\"} | quantile_over_time(duration, 0.99)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Logs (Loki)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 105 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 106 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{detected_level}}",
+          "expr": "sum by (detected_level) (count_over_time({compose_service=\"${compose_service}\"}[$__interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 60,
+            "lineWidth": 0,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "/info/i" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "/warn/i" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "/error/i" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "/critical|fatal/i" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          }
+        ]
+      },
+      "description": "Stacked area, colored by detected_level — adapted from 'Log Type Rate' in grafana.com/grafana/dashboards/16110 (same underlying query as before, restyled)."
+    },
+    {
+      "id": 16,
+      "type": "logs",
+      "title": "Log stream",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 106 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{compose_service=\"${compose_service}\"}"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true },
+      "description": "Jump to a trace from a log line via the Loki datasource's TraceID derived field (see provisioning/datasources/datasources.yml) — a dedicated trace-search panel isn't wired up here: this Tempo (single-binary, split HTTP/gRPC ports) doesn't support the Grafana Tempo datasource's non-streaming TraceQL search, and enabling gRPC streaming would mean exposing Tempo's internal-only gRPC port externally."
+    }
+  ]
+}
