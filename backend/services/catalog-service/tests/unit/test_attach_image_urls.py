@@ -27,9 +27,7 @@ class ImageStorage:
         return f"https://storage.test/{bucket_name}/{key}?expires={expires_in}"
 
 
-async def test_attach_image_urls_batches_lookup_and_preserves_products_without_images() -> (
-    None
-):
+async def test_attach_image_urls_batches_and_preserves_no_image() -> None:
     image_product_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
     product_without_image_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
     image = ProductImage(
