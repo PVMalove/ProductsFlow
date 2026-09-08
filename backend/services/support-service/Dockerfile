@@ -18,7 +18,7 @@ COPY libs/observability/src libs/observability/src
 COPY services/support-service/src services/support-service/src
 RUN uv sync --package support-service --locked --no-dev
 
-FROM python:3.14-slim
+FROM python:3.14-bookworm-slim AS runtime
 WORKDIR /srv
 
 COPY --from=builder /srv/.venv /srv/.venv

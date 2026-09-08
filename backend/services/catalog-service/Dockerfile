@@ -19,7 +19,7 @@ COPY services/catalog-service/src services/catalog-service/src
 COPY services/catalog-service/assets services/catalog-service/assets
 RUN uv sync --package catalog-service --locked --no-dev
 
-FROM python:3.14-slim
+FROM python:3.14-bookworm-slim AS runtime
 WORKDIR /srv
 
 COPY --from=builder /srv/.venv /srv/.venv

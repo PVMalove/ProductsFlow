@@ -216,7 +216,7 @@ async def test_on_unhandled_exception_hook_receives_the_exception() -> None:
     assert isinstance(received[0], RuntimeError)
 
 
-async def test_on_unhandled_exception_hook_failure_does_not_break_the_500_response() -> (
+async def test_on_unhandled_exception_hook_fail_does_not_break_the_500_response() -> (
     None
 ):
     def _broken_hook(exc: Exception) -> None:
