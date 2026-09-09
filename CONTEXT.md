@@ -1,6 +1,6 @@
 # ProductsFlow
 
-Сервис учёта товаров (catalog-service), аутентификации (identity-service) и поддержки (support-service): CRUD-операции над товарами, управление пользователями и неизменяемый audit trail всех мутаций.
+Сервис учёта товаров (catalog-service), аутентификации (identity-service) и поддержки (support-service), расширяемый commerce-контекстами checkout, inventory и payment.
 
 ## Роли
 
@@ -97,6 +97,24 @@ _Avoid_: Полная замена объекта
 Создаётся или заменяется одним и тем же вызовом — вызывающая сторона не обязана заранее знать, была ли у Товара Картинка: строка `ProductImage` создаётся или обновляется одним SQL-upsert по `product_id` (см. ADR 0008). Права — только Владелец Товара или Admin, иначе отказ в доступе. Удаляется отдельной операцией; если у видимого вызывающему Товара Картинки нет — ошибка "не найдено". Ключ объекта в хранилище стабилен (`products/{id}/image`, без расширения формата в имени) — повторная загрузка тому же Товару перезаписывает один и тот же объект. Общий seed-объект (`seed/placeholder.jpg`), на который изначально указывают Картинки многих сидированных Товаров, никогда не удаляется (см. ADR 0008). Оба мутирующих действия пишутся в Audit-лог Товара (`IMAGE_UPDATED`/`IMAGE_DELETED`) — задокументированное исключение из общего правила «Audit-лог создаётся автоматически через ORM-события» (ADR 0007/0008), см. ADR 0008.
 _Avoid_: Фото, изображение — в коде и API это «Картинка» (`ProductImage`, «нет картинки»)
 
+## Поиск товаров
+
+**Публичный поиск товаров**:
+Поисковая выдача витрины для любого Наблюдателя, включающая только активные Товары активных Владельцев; она не предоставляет Владельцу или Администратору обход правил видимости.
+_Avoid_: Административный поиск, поиск моих скрытых товаров
+
+**Поисковая выдача**:
+Упорядоченный набор Товаров, соответствующих текстовому запросу и выбранным фильтрам категории или цены; в MVP не включает фасеты.
+_Avoid_: Полный каталог, результаты без фильтрации видимости
+
+**Актуальность поисковой проекции**:
+Время от фиксации изменения Товара до его отражения в поисковом индексе; целевое значение для 99% изменений — не более 10 секунд.
+_Avoid_: Синхронная консистентность, свежесть ответа из кэша
+
+**Свежесть ответа публичного поиска**:
+Максимальная задержка между фиксацией изменения Товара и его отражением в HTTP-ответе публичного поиска; в MVP допускается до 70 секунд из-за актуальности поисковой проекции и кэша.
+_Avoid_: Актуальность поисковой проекции
+
 ## Прочее
 
 ## Наблюдаемость
@@ -124,3 +142,113 @@ _Avoid_: Курсор — для этого конкретного эндпои�
 **BFF API**:
 HTTP API, потребляемый frontend приложения; его бизнесовые endpoint'ы используют единый конверт ответа. JWKS, health checks, внутренние worker-триггеры и OAuth2 token endpoint для стандартного OAuth2-клиента не относятся к BFF API.
 _Avoid_: Любой HTTP endpoint
+
+## Commerce
+
+Commerce contexts manage customer checkout, inventory availability, and payment for purchases.
+
+### Ordering
+
+**Cart**:
+A server-side, customer-owned collection of intended purchase lines that exists before an Order is created.
+_Avoid_: Basket, client cart
+
+**Cart Line**:
+A requested quantity of one product in a Cart; it is mutable until checkout.
+_Avoid_: Order line, item
+
+**Order**:
+The customer’s immutable commercial commitment created from a Cart at checkout, with its own lifecycle and a fixed commercial snapshot.
+_Avoid_: Purchase, transaction
+
+**Order Line**:
+A product, requested quantity, unit price, discount, and product description captured inside an Order.
+_Avoid_: Cart line, item
+
+**Commercial Snapshot**:
+The price, discount, currency, and product data recorded in an Order at checkout, independent of subsequent catalogue changes.
+_Avoid_: Current price, live product
+
+**Money**:
+A monetary amount in Russian rubles represented as an integer number of kopecks in the first release.
+_Avoid_: Float price, decimal amount
+
+**Checkout Quote**:
+The authoritative response from Catalog that validates requested products and supplies the commercial data from which an Order snapshot is made.
+_Avoid_: Client price, price lookup
+
+**Partial Checkout**:
+The checkout outcome in which an Order contains only Cart Lines that Inventory can reserve; unavailable Cart Lines are not ordered.
+_Avoid_: Partial payment, backorder
+
+**Pending Order**:
+An Order whose checkout process has started but has not yet reached capture or a terminal failure.
+_Avoid_: Draft cart, completed order
+
+**Unavailable Cart Line**:
+A Cart Line that Inventory did not reserve during checkout and that remains in the Cart with that outcome.
+_Avoid_: Cancelled order line, rejected order
+
+**Checkout Selection**:
+The versioned set of Cart Lines frozen when checkout starts; it cannot be changed until its Saga reaches a terminal result.
+_Avoid_: Live cart, order line
+
+**Order Cancellation**:
+The customer-requested termination of a Pending Order before capture, requiring reversal of its outstanding reservations and payment authorization.
+_Avoid_: Refund, return
+
+**Order Status**:
+The customer-visible lifecycle state of an Order: `PENDING`, `COMPLETED`, `CANCELLED`, `EXPIRED`, or `FAILED`.
+_Avoid_: Saga step, message status
+
+**Saga Step**:
+The durable internal stage of checkout coordination, distinct from an Order Status.
+_Avoid_: Order status, event status
+
+**Anonymized Order**:
+An Order retained for financial and operational records after its customer's identity has been removed, with `customer_id` removed and without personally identifying customer data.
+_Avoid_: Deleted order, customer order
+
+### Inventory
+
+**Available Stock**:
+The quantity of a product that Inventory may allocate to new reservations.
+_Avoid_: On-hand stock, free balance
+
+**Inventory Pool**:
+The one logical stock location from which the first release allocates a product.
+_Avoid_: Warehouse network, fulfilment route
+
+**Stock Adjustment**:
+An audited administrator-authorized change to a product’s Available Stock.
+_Avoid_: Direct database edit, catalogue update
+
+**Inventory Reservation**:
+A time-limited allocation of a product quantity to one Order, which prevents that quantity being allocated again before it is confirmed or released.
+_Avoid_: Hold, stock lock
+
+**Reservation Expiry**:
+The moment after which an unconfirmed Inventory Reservation is released and can no longer support its Order.
+_Avoid_: Cancellation, payment expiry
+
+**Allocation**:
+The reversible assignment of a reserved quantity to an authorized Order before funds are captured and before fulfillment consumes it.
+_Avoid_: Irreversible stock deduction, reservation
+
+### Payments
+
+**Payment Authorization**:
+A payment provider’s reversible approval to hold an Order amount before funds are captured.
+_Avoid_: Charge, payment
+
+**Capture**:
+The operation that converts a Payment Authorization into a completed transfer of funds.
+_Avoid_: Authorize, charge
+
+**Payment Reconciliation**:
+The determination of a payment operation’s actual outcome from its provider and idempotency key after its response is unknown.
+_Avoid_: Retry, manual payment check
+
+**Test PSP**:
+A deterministic simulated payment provider used to exercise authorization, void, capture, and reconciliation without transferring real funds.
+_Avoid_: Production payment provider, mock payment

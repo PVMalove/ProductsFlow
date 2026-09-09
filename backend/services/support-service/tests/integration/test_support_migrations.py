@@ -21,6 +21,7 @@ _REVISION_FILES = [
     "0003_message_moderation.py",
     "0004_user_deletion_inbox.py",
     "0005_user_projection.py",
+    "0006_command_inbox.py",
 ]
 _REVISIONS = [run_path(str(_VERSIONS_DIR / name)) for name in _REVISION_FILES]
 
@@ -29,6 +30,7 @@ _TABLES = (
     "ticket_messages",
     "tickets",
     "outbox_messages",
+    "inbox_messages",
     "user_projection",
 )
 
