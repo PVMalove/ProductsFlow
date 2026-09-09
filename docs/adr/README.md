@@ -53,3 +53,9 @@
 | ADR | Название |
 |---|---|
 | [0014](0014-error-collections-and-bff-validation-details.md) | Коллекции доменных ошибок и детали ошибок в BFF |
+
+## 7. Поиск
+
+| ADR | Название |
+|---|---|
+| [0015](0015-catalog-search-read-model.md) | Catalog: поисковая read-model на OpenSearch |
