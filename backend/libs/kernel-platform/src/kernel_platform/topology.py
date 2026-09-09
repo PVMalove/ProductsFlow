@@ -76,16 +76,16 @@ async def declare_topology(
 
 async def declare_command_topology(
     channel: AbstractChannel,
-    service_name: str,
     command_type: str,
     *,
-    queue_name: str | None = None,
+    retry_stage_ttl_ms: Mapping[str, int] | None = None,
 ) -> AbstractQueue:
-    """Declares one durable command queue owned by ``service_name``.
+    """Declares the one durable queue owned by a command type.
 
-    Commands are point-to-point messages: a queue is bound to one exact,
-    versioned routing key instead of an event wildcard.  Declaring the same
-    owner/type pair again is safe during consumer restarts.
+    Commands are point-to-point messages: their versioned routing key maps to
+    one stable queue name rather than a service-defined queue.  Repeated
+    declarations therefore reuse the exact same queue and cannot turn one
+    command into a broker fan-out.
     """
     commands_exchange = await channel.declare_exchange(
         COMMANDS_EXCHANGE_NAME, ExchangeType.TOPIC, durable=True
@@ -93,7 +93,7 @@ async def declare_command_topology(
     dlx = await channel.declare_exchange(
         DLX_EXCHANGE_NAME, ExchangeType.DIRECT, durable=True
     )
-    owner_queue_name = queue_name or f"{service_name}.{command_type}"
+    owner_queue_name = f"commands.{command_type}"
     owner_queue = await channel.declare_queue(
         owner_queue_name,
         durable=True,
@@ -104,7 +104,10 @@ async def declare_command_topology(
         },
     )
     await owner_queue.bind(commands_exchange, routing_key=command_type)
-    for suffix, ttl_ms in RETRY_STAGE_TTL_MS.items():
+    stage_ttl_ms = (
+        RETRY_STAGE_TTL_MS if retry_stage_ttl_ms is None else retry_stage_ttl_ms
+    )
+    for suffix, ttl_ms in stage_ttl_ms.items():
         await channel.declare_queue(
             f"{owner_queue_name}.{suffix}",
             durable=True,

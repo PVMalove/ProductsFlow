@@ -44,9 +44,7 @@ async def test_duplicate_command_is_acked_without_repeating_its_business_effect(
     channel: AbstractChannel,
     command_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    queue = await declare_command_topology(
-        channel, "kernel-command-consumer-test", "inventory.reserve.v1"
-    )
+    queue = await declare_command_topology(channel, "inventory.reserve.v1")
     commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
     command = Command(
         command_id=uuid.uuid4(),
@@ -111,9 +109,7 @@ async def test_command_consumer_continues_the_publisher_w3c_trace(
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     monkeypatch.setattr(trace, "get_tracer_provider", lambda: provider)
-    queue = await declare_command_topology(
-        channel, "kernel-command-trace-test", "payment.authorize.v1"
-    )
+    queue = await declare_command_topology(channel, "payment.authorize.v1")
     commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
     handled = asyncio.Event()
 
@@ -148,3 +144,40 @@ async def test_command_consumer_continues_the_publisher_w3c_trace(
     assert consume_span.parent is not None
     assert consume_span.parent.span_id == publish_span.context.span_id
     assert consume_span.context.trace_id == checkout_span.context.trace_id
+
+
+async def test_command_retry_preserves_the_command_envelope(
+    channel: AbstractChannel,
+    command_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    command_type = "inventory.release.v1"
+    queue = await declare_command_topology(
+        channel,
+        command_type,
+        retry_stage_ttl_ms={"retry.5s": 100, "retry.30s": 100, "retry.2m": 100},
+    )
+    commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
+    command = Command(
+        command_id=uuid.uuid4(),
+        command_type=command_type,
+        causation_id=uuid.uuid4(),
+        correlation_id="checkout-44",
+        payload={"order_id": "order-44"},
+    )
+    attempts: list[uuid.UUID] = []
+    retried_successfully = asyncio.Event()
+
+    async def handler(_session: AsyncSession, received: Command) -> None:
+        attempts.append(received.command_id)
+        if len(attempts) == 1:
+            raise RuntimeError("transient failure")
+        retried_successfully.set()
+
+    consumer_tag = await consume_command(queue, command_session_factory, handler)
+    try:
+        await publish_command(commands_exchange, command, timeout_seconds=5.0)
+        await asyncio.wait_for(retried_successfully.wait(), timeout=5)
+    finally:
+        await queue.cancel(consumer_tag)
+
+    assert attempts == [command.command_id, command.command_id]

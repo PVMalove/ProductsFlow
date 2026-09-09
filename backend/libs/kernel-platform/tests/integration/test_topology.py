@@ -93,8 +93,8 @@ async def test_command_topology_routes_a_versioned_command_to_its_only_owner(
 ) -> None:
     """A command is delivered only through its owner's durable queue."""
     command_type = "inventory.reserve.v1"
-    queue = await declare_command_topology(channel, "kernel-command-test", command_type)
-    command_queue_name = "kernel-command-test.inventory.reserve.v1"
+    queue = await declare_command_topology(channel, command_type)
+    command_queue_name = "commands.inventory.reserve.v1"
     commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
     await channel.declare_queue(
         command_queue_name,
@@ -143,3 +143,15 @@ async def test_command_topology_routes_a_versioned_command_to_its_only_owner(
         "correlation_id": "checkout-42",
         "payload": {"order_id": "order-42"},
     }
+
+
+async def test_command_topology_reuses_one_queue_for_the_same_command_type(
+    channel: AbstractChannel,
+) -> None:
+    command_type = "payment.authorize.v1"
+
+    first_owner_queue = await declare_command_topology(channel, command_type)
+    second_owner_queue = await declare_command_topology(channel, command_type)
+
+    assert first_owner_queue.name == "commands.payment.authorize.v1"
+    assert second_owner_queue.name == first_owner_queue.name
