@@ -7,6 +7,7 @@ from aio_pika.abc import AbstractChannel, AbstractQueue
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 
 DLX_EXCHANGE_NAME = "productsflow.dlx"
+COMMANDS_EXCHANGE_NAME = "productsflow.commands"
 RETRY_STAGE_TTL_MS = {"retry.5s": 5000, "retry.30s": 30000, "retry.2m": 120000}
 
 
@@ -71,3 +72,48 @@ async def declare_topology(
     dlq = await channel.declare_queue(f"{main_queue_name}.dlq", durable=True)
     await dlq.bind(dlx, routing_key=main_queue_name)
     return main_queue
+
+
+async def declare_command_topology(
+    channel: AbstractChannel,
+    service_name: str,
+    command_type: str,
+    *,
+    queue_name: str | None = None,
+) -> AbstractQueue:
+    """Declares one durable command queue owned by ``service_name``.
+
+    Commands are point-to-point messages: a queue is bound to one exact,
+    versioned routing key instead of an event wildcard.  Declaring the same
+    owner/type pair again is safe during consumer restarts.
+    """
+    commands_exchange = await channel.declare_exchange(
+        COMMANDS_EXCHANGE_NAME, ExchangeType.TOPIC, durable=True
+    )
+    dlx = await channel.declare_exchange(
+        DLX_EXCHANGE_NAME, ExchangeType.DIRECT, durable=True
+    )
+    owner_queue_name = queue_name or f"{service_name}.{command_type}"
+    owner_queue = await channel.declare_queue(
+        owner_queue_name,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-dead-letter-exchange": DLX_EXCHANGE_NAME,
+            "x-dead-letter-routing-key": owner_queue_name,
+        },
+    )
+    await owner_queue.bind(commands_exchange, routing_key=command_type)
+    for suffix, ttl_ms in RETRY_STAGE_TTL_MS.items():
+        await channel.declare_queue(
+            f"{owner_queue_name}.{suffix}",
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": owner_queue_name,
+                "x-message-ttl": ttl_ms,
+            },
+        )
+    dlq = await channel.declare_queue(f"{owner_queue_name}.dlq", durable=True)
+    await dlq.bind(dlx, routing_key=owner_queue_name)
+    return owner_queue

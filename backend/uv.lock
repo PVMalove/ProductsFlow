@@ -1151,6 +1151,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+    { name = "test-support" },
     { name = "testcontainers", extra = ["rabbitmq"] },
     { name = "vulture" },
 ]
@@ -1178,6 +1179,7 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.16.1" },
+    { name = "test-support", editable = "libs/test-support" },
     { name = "testcontainers", extras = ["rabbitmq"], specifier = ">=4.15.0" },
     { name = "vulture", specifier = ">=2.14" },
 ]

@@ -1,13 +1,19 @@
 # ruff: noqa: E501
+import json
+import uuid
+
 import aio_pika
 import pytest
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel
 
+from kernel_platform.commands import Command, publish_command
 from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import (
+    COMMANDS_EXCHANGE_NAME,
     DLX_EXCHANGE_NAME,
     RETRY_STAGE_TTL_MS,
+    declare_command_topology,
     declare_topology,
 )
 
@@ -80,3 +86,60 @@ async def test_main_queue_receives_event_matching_wildcard_binding(
     await incoming.ack()
 
     assert incoming.body == b'{"user_id": 1}'
+
+
+async def test_command_topology_routes_a_versioned_command_to_its_only_owner(
+    channel: AbstractChannel,
+) -> None:
+    """A command is delivered only through its owner's durable queue."""
+    command_type = "inventory.reserve.v1"
+    queue = await declare_command_topology(channel, "kernel-command-test", command_type)
+    command_queue_name = "kernel-command-test.inventory.reserve.v1"
+    commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
+    await channel.declare_queue(
+        command_queue_name,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-dead-letter-exchange": DLX_EXCHANGE_NAME,
+            "x-dead-letter-routing-key": command_queue_name,
+        },
+    )
+    for suffix, ttl_ms in RETRY_STAGE_TTL_MS.items():
+        await channel.declare_queue(
+            f"{command_queue_name}.{suffix}",
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": command_queue_name,
+                "x-message-ttl": ttl_ms,
+            },
+        )
+    command_dlq = await channel.declare_queue(f"{command_queue_name}.dlq", durable=True)
+    command_dlx = await channel.get_exchange(DLX_EXCHANGE_NAME)
+    await command_dlq.bind(command_dlx, routing_key=command_queue_name)
+    command = Command(
+        command_id=uuid.uuid4(),
+        command_type=command_type,
+        causation_id=uuid.uuid4(),
+        correlation_id="checkout-42",
+        payload={"order_id": "order-42"},
+    )
+
+    confirmation = await publish_command(
+        commands_exchange, command, timeout_seconds=5.0
+    )
+    assert confirmation is not None
+
+    incoming = await queue.get(fail=True)
+    await incoming.ack()
+
+    assert incoming.message_id == str(command.command_id)
+    assert incoming.type == command_type
+    assert json.loads(incoming.body) == {
+        "command_id": str(command.command_id),
+        "command_type": command_type,
+        "causation_id": str(command.causation_id),
+        "correlation_id": "checkout-42",
+        "payload": {"order_id": "order-42"},
+    }
