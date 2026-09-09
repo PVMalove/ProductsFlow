@@ -92,7 +92,7 @@ async def test_command_topology_routes_a_versioned_command_to_its_only_owner(
     channel: AbstractChannel,
 ) -> None:
     """A command is delivered only through its owner's durable queue."""
-    command_type = "inventory.reserve.v1"
+    command_type = f"inventory.reserve.topology.{uuid.uuid4().hex}.v1"
     queue = await declare_command_topology(channel, command_type)
     command_queue_name = "commands.inventory.reserve.v1"
     commands_exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
