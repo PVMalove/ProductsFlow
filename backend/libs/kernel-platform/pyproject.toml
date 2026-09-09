@@ -27,6 +27,7 @@ dependencies = [
 # dev-окружении, --no-editable при сборке production-образа.
 [tool.uv.sources]
 kernel-domain = { workspace = true }
+test-support = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -47,6 +48,7 @@ dev = [
     # test_topology.py (issue #99-style заглушка вместо libs/test-support,
     # ).
     "testcontainers[rabbitmq]>=4.15.0",
+    "test-support",
     "vulture>=2.14",
 ]
 

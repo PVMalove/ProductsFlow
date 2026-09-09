@@ -146,6 +146,7 @@ async def consume(
                     headers=message.headers,
                     content_type=message.content_type,
                     message_id=message.message_id,
+                    type=message.type,
                     delivery_mode=message.delivery_mode,
                 ),
                 routing_key=stage_queue_name,
