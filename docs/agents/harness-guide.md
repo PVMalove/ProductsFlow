@@ -1,6 +1,10 @@
 # Справочник команд и скиллов Agent Harness
 
-Гайд по установке и использованию харнесса из [PVMalove/claude-agent-harness](https://github.com/PVMalove/claude-agent-harness) — портативного набора скиллов, правил, хуков и документов для Claude Code, Codex, Kimi Code, OpenCode и Hermes Agent, который одной командой разворачивается в любой проект (раздел 0) и дальше живёт там независимо от исходного репозитория. По умолчанию используется доменно-нейтральная capability **project-foundation** из 5 скиллов; инженерные проекты могут выбрать **mattpocock-suite** (25 upstream-скиллов) или эту сборку — capability **pvmalove-suite** с локальными доработками (раздел 7).
+Гайд по установке и использованию харнесса из [PVMalove/claude-agent-harness](https://github.com/PVMalove/claude-agent-harness) — портативного набора скиллов, правил, хуков и документов для Claude Code, Codex, Kimi Code, OpenCode и Hermes Agent, который одной командой разворачивается в любой проект (раздел 0) и дальше живёт там независимо от исходного репозитория. По умолчанию используется доменно-нейтральная capability **project-foundation** из 5 скиллов; инженерные проекты могут выбрать **mattpocock-suite** (25 upstream-скиллов) или эту сборку — capability **pvmalove-suite** с локальными доработками (раздел 7). Для согласованной backend-работы несколькими ролями есть отдельная opt-in capability **backend-orchestration**; её настройка и запуск вынесены в [руководство по backend-оркестрации](./backend-orchestration.md).
+
+Целостное описание действующей архитектуры, lifecycle coordinator, ролей, clean-room QA и локального
+state находится в [current-state.md](./current-state.md). Этот гайд остаётся справочником установки,
+команд и skills.
 
 Разбивает разработку с AI-агентами на строгие фазы — от устранения неопределённости через спецификацию и тикетирование до TDD-реализации вертикальных слайсов и автоматического ревью (три сквозных примера — раздел 14) — плюс метки триажа (раздел 8), проектные надстройки `qa-gate`/`pr-composer` (раздел 6) и детерминированные hooks (раздел 9) поверх апстрима.
 
@@ -47,10 +51,23 @@ cd claude-agent-harness
 | Даёт | `grilling`, `handoff`, `writing-for-agents`, `research`, `domain-modeling` | Полный pipeline спека→тикеты→implement→commit+push (разделы 1-5) + личные доработки (раздел 7) |
 | Проектные файлы | Нет | `.harness/project.json`, hooks, `docs/agents/*.md` (см. ниже) |
 
+`backend-orchestration` расширяет `pvmalove-suite`, поэтому выбирается одной capability — `--capability backend-orchestration`, а не вместе с `pvmalove-suite`. Она добавляет role manifest'ы, `.harness/orchestration.json`, playbook и optional Orca adapter; не запускает воркеры без явно одобренного dispatch. Полный порядок действий, включая пример конфигурации и immutable brief, — в [отдельном руководстве](./backend-orchestration.md).
+
+Это строго opt-in маршрут: он включается только при выбранной capability и валидной
+`.harness/orchestration.json`; иначе обычное поведение `/implement` остаётся без изменений. Один
+batch хранит ticket, issue-ветку, worktree и history evidence, а каждый его dispatch имеет
+собственный immutable brief, terminal report и новое явное человеческое approval. Developer создаёт
+candidate commit; coordinator детерминированно оценивает риск по DoD, diff и developer trigger,
+при необходимости назначает независимые оси Standards и Spec, затем обязательно запускает полный
+clean-room QA для того же SHA. Report остаётся `reported` до решения человека. Только developer
+публикует принятый SHA; после этого `/to-pull-requests` вручную ведёт PR workflow. Adapter только
+транспортирует уже утверждённый dispatch и не принимает report, не запускает следующий шаг и не
+создаёт либо не мержит PR.
+
 | | `mattpocock-suite` как есть | Своя capability (по образцу `pvmalove-suite`) |
 |---|---|---|
 | Когда | Апстримный pipeline устраивает без изменений | Нужны свои правки — лейблы, языки, доп. скиллы |
-| Механизм | `--capability mattpocock-suite` напрямую | `extends`/`overrides`/`additions` в `harness/CAPABILITIES.json` (ADR 0001 в `docs/adr/`), первопартийные копии файлов, не диффы (ADR 0002) |
+| Механизм | `--capability mattpocock-suite` напрямую | `extends`/`overrides`/`additions` в `harness/CAPABILITIES.json`, полные first-party файлы и проверяемый snapshot ([ADR 0001](../adr/0001-portable-capability-snapshots.md)) |
 | Апдейт апстрима | `harness update` подтягивает всё как есть | Унаследованное подтягивается тем же `update`; за переопределёнными скиллами следите вручную — `scripts/check-upstream-drift` (см. «Политика репозитория» в README харнесса) показывает, что из них реально поменялось выше по течению |
 
 **`init` — первая установка в проект, где харнесса ещё нет.** Требует, чтобы `<repo>` уже был git-репозиторием; падает с «already exists; use update», если `.harness/harness.lock` уже есть.
@@ -80,11 +97,11 @@ python harness\bin\harness init C:\path\to\repository `
 ```
 
 - `--project-type`/`--stack` — чисто информационные, идут в `AGENTS.md`, на поведение CLI не влияют (`--stack` повторяем).
-- `--capability` — повторяем; без флага вообще — `project-foundation` (5 лёгких скиллов на любой тип проекта, не только software: `grilling`, `handoff`, `writing-for-agents`, `research`, `domain-modeling`). Для инженерного пайплайна — `mattpocock-suite` (чистый апстрим, 25 скиллов) или `pvmalove-suite` (эта сборка, расширяет `mattpocock-suite`, раздел 7); указывать обе сразу CLI не даст.
+- `--capability` — повторяем; без флага вообще — `project-foundation` (5 лёгких скиллов на любой тип проекта, не только software: `grilling`, `handoff`, `writing-for-agents`, `research`, `domain-modeling`). Для инженерного пайплайна — `mattpocock-suite` (чистый апстрим, 25 скиллов), `pvmalove-suite` (эта сборка, расширяет `mattpocock-suite`, раздел 7) или `backend-orchestration` (надстройка над `pvmalove-suite`, [отдельное руководство](./backend-orchestration.md)); указывать взаимно пересекающиеся capability отдельно CLI не даст.
 - `--base-branch` — базовая ветка репозитория (по умолчанию `main`).
 - `--language`/`--pr-base-branch`/`--branch-pattern`/`--qa-gate-command` — читает только `pvmalove-suite`, пишутся в `.harness/project.json`; можно опустить — `init` спросит их интерактивно. `--qa-gate-command` повторяем, порядок сохраняется (раздел 6).
 
-При выборе `pvmalove-suite` `init` дополнительно (один раз, при отсутствии файла — как `AGENTS.md`/`CLAUDE.md`) разворачивает в проект: `docs/agents/{git-workflow,worktrees,artifacts,issue-tracker,triage-labels,harness-guide}.md`, `.claude/hooks/*.sh` + их проводку в `.claude/settings.local.json` (заодно записывается в `.harness/integrations.json`, см. `lock-project-skills` ниже), `.claude/rules/karpathy-guidelines.md`, `.claude/agents/pr-composer.md`, и само `.harness/project.json`.
+При выборе `pvmalove-suite` или `backend-orchestration` `init` дополнительно (один раз, при отсутствии файла — как `AGENTS.md`/`CLAUDE.md`) разворачивает в проект: `docs/agents/{artifacts,backend-orchestration,current-state,git-workflow,harness-guide,issue-tracker,triage-labels,worktrees}.md`, `.claude/hooks/*.sh` + их проводку в `.claude/settings.local.json` (заодно записывается в `.harness/integrations.json`, см. `lock-project-skills` ниже), `.claude/rules/karpathy-guidelines.md`, `.claude/agents/pr-composer.md`, и само `.harness/project.json`. Только `backend-orchestration` дополнительно создаёт `.harness/orchestration/` и шаблон `.harness/orchestration.json`.
 
 **`adopt` — установка в проект, где уже есть свои (не харнесс-управляемые) скиллы под теми же именами.** Не требует пустого `.harness/` (в отличие от `init`) — сохраняет все проектные скиллы, которых нет в выбранной capability; если что-то из выбранной capability совпадает по имени с уже существующим — падает со списком конфликтов, если не передан `--replace-conflicts` (тогда конфликтующие заменяются, остальное не тронуто). Те же `--capability`/pvmalove-флаги, что у `init`:
 
@@ -217,7 +234,7 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 5. Реализация (/implement <id>)            ──► TDD Loop + одобренный Sub-agent Review + commit + push
        │
        ▼
-6. PR (/to-pr)                              ──► qa-gate + PR по шаблону git-workflow.md
+6. PR (/to-pull-requests)                   ──► QA evidence или qa-gate + PR по шаблону git-workflow.md
        │
        ▼
 7. Human QA & Merge                        ──► Приёмка кода разработчиком (hooks блокируют авто-мердж)
@@ -355,7 +372,7 @@ AI-агенты неизбежно «глупеют» и начинают гал
 
 ### `/implement [ссылка_или_номер_тикета]`
 
-Терминальный шаг реализации: завершает работу коммитом и push текущей issue-ветки, затем предлагает отдельный `/to-pr` для PR и закрытия тикета. Принимает конкретный `afk`-тикет, ссылку на эпик (сам выбирает первый тикет с границы), либо ничего — тогда действует Issue First gate. `/to-pr` выбирает только разработчик. Запускается в новой, чистой сессии. Вызывается только вручную.
+Терминальный шаг реализации: завершает работу коммитом и push текущей issue-ветки, затем предлагает отдельный `/to-pull-requests` для PR и закрытия тикета. Принимает конкретный `afk`-тикет, ссылку на эпик (сам выбирает первый тикет с границы), либо ничего — тогда действует Issue First gate. `/to-pull-requests` выбирает только разработчик. Запускается в новой, чистой сессии. Вызывается только вручную.
 
 **Апстримная база** — исходный скилл `mattpocock/skills` уложен в пять строк: закодить тикет по спеке/тикетам, `/tdd` где уместно, регулярно прогонять тайпчек/тесты, `/code-review` по готовности, закоммитить. Никакой осведомлённости о тикетах, блокировках, PR — просто «закодь и закоммить».
 
@@ -377,9 +394,9 @@ AI-агенты неизбежно «глупеют» и начинают гал
 
 После review либо отказа от него спросить разработчика, можно ли закоммитить и запушить. Только после явного согласия проверить, что текущая ветка соответствует `branch_pattern` и не является `base_branch`/`integration/*`, создать semantic commit и запушить его в текущую issue-ветку. Сообщить разработчику хеш коммита и результат push.
 
-**Phase 3 — PR & Wrap-up:** после успешного push предложить `/to-pr <тикет>`. Не запускать его автоматически, не открывать PR, не вызывать `qa-gate`/`pr-composer` и не закрывать тикет из `/implement`.
+**Phase 3 — PR & Wrap-up:** после успешного push предложить `/to-pull-requests <тикет>`. Не запускать его автоматически, не открывать PR, не вызывать `qa-gate`/`pr-composer` и не закрывать тикет из `/implement`.
 
-**Как это сцепляется с соседями:** `/to-pr` запускается вручную и выполняет PR & Wrap-up по `docs/agents/git-workflow.md`; `qa-gate` (раздел 6) и `pr-composer` (раздел 6) используются внутри него. `docs/agents/triage-labels.md`/`issue-tracker.md` держат переходы `workflow::*` и общий с `/wayfinder` frontier-запрос.
+**Как это сцепляется с соседями:** `/to-pull-requests` запускается вручную и выполняет PR & Wrap-up по `docs/agents/git-workflow.md`; в opted-in orchestration-проекте он проверяет accepted QA evidence текущего SHA, в остальных использует `qa-gate`; `pr-composer` (раздел 6) используется внутри него. `docs/agents/triage-labels.md`/`issue-tracker.md` держат переходы `workflow::*` и общий с `/wayfinder` frontier-запрос.
 
 **Субагенты:** настройте их запуск и контроль вручную в используемой программе. Harness не задаёт способ делегирования, ожидания или получения результатов. Файлы `.claude/agents/*.md` (в т.ч. `pr-composer`, раздел 6) — markdown-спецификации задач; программа может использовать их как обычные инструкции.
 
@@ -414,17 +431,17 @@ AI-агенты неизбежно «глупеют» и начинают гал
 - **Назначение:** полный локальный прогон качества — команды из `qa_gate_commands` в `.harness/project.json` (lint/typecheck/test), по очереди, перед открытием PR.
 - **Почему `context: fork`:** запускается в изолированном форкнутом субагенте — весь шум линтеров/тестов не засоряет основную сессию. При провале в основную сессию возвращается **полный** необрезанный вывод упавшей проверки; при успехе — только короткий итог PASS.
 - Поле отсутствует или пустой список — не проходит молча: скилл останавливается и просит заполнить `qa_gate_commands` (`harness init`/`update`, либо правка файла напрямую), а не пропускает проверку.
-- Запускается вручную — `/qa-gate`, а `/to-pr` вызывает его перед созданием PR.
+- Запускается вручную — `/qa-gate`, а `/to-pull-requests` вызывает его перед созданием PR вне valid opted-in orchestration route.
 
 ### `pr-composer` (subagent, `.claude/agents/pr-composer.md`)
 
 - **Назначение:** заполняет структурированный PR-шаблон из `docs/agents/git-workflow.md` §3 (язык — из `.harness/project.json`) — в изолированном контексте, чтобы полный diff и история коммитов не засоряли основную сессию. Тело — не открытие PR: возвращает только готовый markdown, `gh pr create --body` вызывает вызвавшая сессия.
 - **Вход:** номер issue, точная integration-ветка эпика из тикета/родительского эпика (для задачи вне эпика — `base_branch` из `.harness/project.json`), результат последнего `qa-gate` этой сессии, если он запускался — используется для секции «Проверка»; не запускался — честно пишет это в раздел рисков, а не выдумывает покрытие тестами.
-- Запускается вручную в программе из `/to-pr`, если `git-workflow.md` требует структурированный шаблон, а не короткое summary.
+- Запускается вручную в программе из `/to-pull-requests`, если `git-workflow.md` требует структурированный шаблон, а не короткое summary.
 
-### `/to-pr` (skill)
+### `/to-pull-requests` (skill)
 
-Ручной PR & Wrap-up для уже запушенной issue-ветки: проверяет ветку и push, запускает `qa-gate`, готовит тело PR, получает отдельное согласие на `gh pr create`/`glab mr create`, публикует отчёт `task-report::required` и после подтверждённого merge закрывает тикет.
+Ручной PR & Wrap-up для уже запушенной issue-ветки: проверяет ветку и push; при valid opted-in orchestration проверяет accepted QA evidence ровно для текущего SHA без повторного тяжёлого gate, иначе запускает `qa-gate`; затем готовит тело PR, получает отдельное согласие на `gh pr create`/`glab mr create`, публикует отчёт `task-report::required` и после подтверждённого merge закрывает тикет.
 
 ### `/to-guide` (skill)
 
@@ -471,10 +488,10 @@ AI-агенты неизбежно «глупеют» и начинают гал
 
 | Скилл | Что изменено |
 |---|---|
-| `triage` | Заменяет пять канонических состояний апстрима на namespaced-таксономию `workflow::*` (`specs`/`ready`/`in-progress`/`blocked`) + отдельная ось исполнения `hitl`/`afk`; категорийная пара `bug`/`enhancement` не тронута. `wontfix` → `out-of-scope`. См. ADR 0004 в `docs/adr/`. |
+| `triage` | Использует namespaced-таксономию `workflow::*` (`specs`/`ready`/`in-progress`/`blocked`) и отдельную ось исполнения `hitl`/`afk`; категорийная пара `bug`/`enhancement` не меняется. `wontfix` соответствует `out-of-scope`. См. [ADR 0002](../adr/0002-controlled-project-delivery.md). |
 | `to-spec` | Проставляет `workflow::specs` на публикуемый эпик-issue вместо `ready-for-agent` + `epic::<slug>` (последнего больше нет — см. раздел 8); согласует и создаёт при необходимости `integration/<service-or-team>` от `base_branch`, записывает её в эпик, пишет спеку сначала файлом в `docs/tasks/` и публикует через `gh issue create --body-file`, а не инлайн-heredoc. |
 | `to-tickets` | Линкует дочерние тикеты к эпику как native GitHub sub-issues вместо общей метки `epic::<slug>`; тикету, заблокированному другим ещё не закрытым тикетом той же декомпозиции, ставит `workflow::blocked` вместо `workflow::ready`; не переписывает содержимое родительского issue (кроме списка дочерних номеров). |
-| `implement` | Перед стартом по ссылке на тикет с `workflow::blocked` — проверяет блокеры, снимает состояние либо отказывается стартовать; разрешает integration-ветку из тикета/эпика, создаёт issue-ветку от неё и ставит `workflow::in-progress`, начиная работу. После тестов спрашивает, запускать ли двухосевое `/code-review`; при согласии возвращает его отдельные отчёты в основную сессию, затем ждёт согласия на commit и push. После push предлагает `/to-pr`; самостоятельно его не запускает. |
+| `implement` | Перед стартом по ссылке на тикет с `workflow::blocked` — проверяет блокеры, снимает состояние либо отказывается стартовать; разрешает integration-ветку из тикета/эпика, создаёт issue-ветку от неё и ставит `workflow::in-progress`, начиная работу. После тестов спрашивает, запускать ли двухосевое `/code-review`; при согласии возвращает его отдельные отчёты в основную сессию, затем ждёт согласия на commit и push. После push предлагает `/to-pull-requests`; самостоятельно его не запускает. |
 | `ask-matt` | Отражает выбор разработчика: провести двухосевое ревью либо продолжить к commit и push. |
 | `code-review` | Отчёт обязан выводиться на языке из `.harness/project.json` (`### Communication language`). |
 | `grilling` | Вопросы фронтира задаются через тул `AskUserQuestion` (вкладка на вопрос, выбор варианта или свой ответ через «Other») вместо простого пронумерованного текста; текстовый формат остаётся запасным для по-настоящему открытых вопросов, не сводимых к 2-4 вариантам. |
@@ -519,7 +536,7 @@ AI-агенты неизбежно «глупеют» и начинают гал
 | `task-report::required` | `/to-spec`, `/to-tickets` (по умолчанию) | `/implement` обязан опубликовать отчёт о завершении при закрытии — `triage` эту метку не читает и не выставляет. |
 | `out-of-scope` | `/triage` | Замена апстримного `wontfix` — запрос явно отклонён. |
 
-Группировка тикетов эпика больше не лейбл: дочерний тикет линкуется к эпик-issue как native GitHub sub-issue (`docs/agents/issue-tracker.md#wayfinding-operations`) — тот же механизм, которым `wayfinder` уже пользуется для своей карты. Подробности (цвета, локальный markdown-трекер, история решения — ADR 0004 в `docs/adr/`) — в `docs/agents/triage-labels.md`.
+Дочерний тикет связывается с epic issue как native GitHub sub-issue (`docs/agents/issue-tracker.md#wayfinding-operations`); тот же механизм `wayfinder` использует для своей карты. Подробности о цветах и локальном markdown-трекере — в `docs/agents/triage-labels.md`; правила поставки — в [ADR 0002](../adr/0002-controlled-project-delivery.md).
 
 ---
 
@@ -576,7 +593,7 @@ Hook строго разбирает JSON payload и рассматривает 
 
 ## 12. Полный каталог скиллов проекта
 
-Все 25 скиллов апстрима (`.harness/skills/`, capability `mattpocock-suite`) + 4 проектных (`qa-gate`, `to-guide`, `setup-labels`, `to-pr`, раздел 6). «Только вручную» = `disable-model-invocation: true` (не вызывается моделью автоматически, только `/имя`).
+Все 25 скиллов апстрима (`.harness/skills/`, capability `mattpocock-suite`) + 4 проектных (`qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, раздел 6). «Только вручную» = `disable-model-invocation: true` (не вызывается моделью автоматически, только `/имя`).
 
 ### Инженерные
 
@@ -591,7 +608,7 @@ Hook строго разбирает JSON payload и рассматривает 
 | `to-spec` | да | Синтез диалога в спецификацию + публикация в трекер (раздел 2). |
 | `to-tickets` | да | Нарезка спеки/плана на тикеты-вертикальные слайсы с blocking edges (раздел 3). |
 | `wayfinder` | да | Карта решений для работы, не помещающейся в одну сессию (раздел 1). |
-| `implement` | да | Реализация тикета: TDD → подтверждённый code-review → подтверждённый commit+push → предложение `/to-pr` (раздел 4). |
+| `implement` | да | Реализация тикета: TDD → подтверждённый code-review → подтверждённый commit+push → предложение `/to-pull-requests` (раздел 4). |
 | `prototype` | нет | Одноразовый прототип для проверки дизайн-вопроса (модель состояний, вид UI). |
 | `research` | нет | Исследование вопроса по первичным источникам, результат — Markdown-файл в репозитории. |
 | `domain-modeling` | нет | Построение и уточнение доменной модели: `CONTEXT.md`, ADR. |
@@ -621,7 +638,7 @@ Hook строго разбирает JSON payload и рассматривает 
 | `pr-composer` (subagent) | Вручную заполняет структурированный PR-шаблон (раздел 6). |
 | `to-guide` (skill) | `hitl`-аналог `/implement` — гайд с промптами для ручного кодинга вместо реализации агентом (раздел 6). |
 | `setup-labels` (skill) | Разово создаёт/обновляет GitHub-лейблы (`workflow::*`, `hitl`/`afk`, `task-report::required`, `out-of-scope`, `wayfinder:*`) по таблицам `docs/agents/triage-labels.md` — перед первым использованием `triage`/`to-spec`/`to-tickets`/`implement`/`to-guide`/`wayfinder` (раздел 6). |
-| `to-pr` (skill) | Ручной PR & Wrap-up после успешного `/implement` (раздел 6). |
+| `to-pull-requests` (skill) | Ручной PR & Wrap-up после успешного `/implement` (раздел 6). |
 
 ---
 
