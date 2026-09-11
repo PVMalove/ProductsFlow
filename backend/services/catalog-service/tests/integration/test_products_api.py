@@ -674,3 +674,167 @@ async def test_list_products_filters_by_price_range(
     assert 100.0 in prices
     assert 10.0 not in prices
     assert 200.0 not in prices
+
+
+# --- Checkout quote (issue #366) --------------------------------------------
+
+
+async def test_get_checkout_quote_requires_authentication(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    token, _ = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, token)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote", params={"quantity": 1}
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {"code": "UNAUTHORIZED", "message": "Требуется авторизация"}
+    }
+
+
+async def test_get_checkout_quote_returns_price_in_kopecks_for_an_active_product(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    owner_token, _ = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, owner_token, price=19.99)
+    buyer_token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote",
+        params={"quantity": 3},
+        headers=_auth(buyer_token),
+    )
+
+    assert response.status_code == 200
+    envelope = response.json()
+    assert set(envelope.keys()) == {"data", "meta"}
+    assert envelope["meta"] == {}
+    assert envelope["data"] == {
+        "product_id": product["id"],
+        "description": _PRODUCT_PAYLOAD["description"],
+        "unit_price_kopecks": 1999,
+        "quantity": 3,
+        "discount_amount": 0,
+    }
+
+
+async def test_get_checkout_quote_rejects_non_positive_quantity(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    owner_token, _ = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, owner_token)
+    buyer_token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote",
+        params={"quantity": 0},
+        headers=_auth(buyer_token),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "invalid_quantity",
+            "message": "Количество должно быть положительным целым числом",
+        }
+    }
+
+
+async def test_get_checkout_quote_for_unknown_product_returns_404(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{_UNKNOWN_PRODUCT_ID}/quote",
+        params={"quantity": 1},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "CHECKOUT_QUOTE_PRODUCT_NOT_FOUND",
+            "message": "Товар не найден",
+        }
+    }
+
+
+async def test_get_checkout_quote_for_deactivated_product_is_a_conflict(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    owner_token, _ = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, owner_token)
+    await catalog_client.patch(
+        f"/api/v1/products/{product['id']}/deactivate", headers=_auth(owner_token)
+    )
+    buyer_token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote",
+        params={"quantity": 1},
+        headers=_auth(buyer_token),
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "CHECKOUT_QUOTE_PRODUCT_INACTIVE",
+            "message": "Товар деактивирован",
+        }
+    }
+
+
+async def test_get_checkout_quote_when_owner_is_deactivated_is_hidden(
+    catalog_client: httpx.AsyncClient,
+    identity_gateway: FakeIdentityGateway,
+    db_session: AsyncSession,
+) -> None:
+    owner_token, owner_id = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, owner_token)
+    await upsert_owner_read_model(
+        db_session,
+        user_id=owner_id,
+        role="user",
+        is_active=False,
+        last_applied_outbox_id=1,
+    )
+    buyer_token, _ = _register_owner(identity_gateway)
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote",
+        params={"quantity": 1},
+        headers=_auth(buyer_token),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "CHECKOUT_QUOTE_PRODUCT_HIDDEN",
+            "message": "Товар недоступен для оформления",
+        }
+    }
+
+
+async def test_get_checkout_quote_denies_even_the_owner_for_their_own_deactivated_product(
+    catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
+) -> None:
+    """Checkout eligibility строже видимости (issue #366) — в отличие от
+    `GET /{id}`, владелец не получает quote на свой деактивированный товар."""
+    owner_token, _ = _register_owner(identity_gateway)
+    product = await _create_product(catalog_client, owner_token)
+    await catalog_client.patch(
+        f"/api/v1/products/{product['id']}/deactivate", headers=_auth(owner_token)
+    )
+
+    response = await catalog_client.get(
+        f"/api/v1/products/{product['id']}/quote",
+        params={"quantity": 1},
+        headers=_auth(owner_token),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CHECKOUT_QUOTE_PRODUCT_INACTIVE"
