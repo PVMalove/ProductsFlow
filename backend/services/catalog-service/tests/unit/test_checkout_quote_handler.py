@@ -15,6 +15,7 @@ from application.queries.get_checkout_quote import (
 )
 from contracts.checkout_quote import CheckoutQuoteView
 from domain.entities.product import Product
+from domain.errors import CatalogErrors
 from domain.product_image import ProductImage
 from domain.repositories import PageInfo, ProductPage
 from domain.value_objects.product_id import ProductId
@@ -180,6 +181,49 @@ async def test_owner_deactivated_takes_precedence_over_product_deactivated() -> 
     handler = GetCheckoutQuoteQueryHandler(repo, owners)
 
     with pytest.raises(CheckoutQuoteProductHiddenError):
+        await handler.execute(_query(product.id.value, quantity=1))
+
+
+async def test_raises_hidden_based_solely_on_eligibility_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Хендлер обязан выбирать ApplicationError только по коду `Error`,
+    возвращённого `evaluate_checkout_eligibility` — не пересчитывать
+    `owner_is_active` самостоятельно. Здесь `owner_is_active=True` (что,
+    при повторной независимой проверке, привело бы к `...InactiveError`),
+    но замоканный domain-результат — `checkout_quote_hidden`, поэтому
+    единственно верный исход — `CheckoutQuoteProductHiddenError`
+    (issue #366, code-review Standards finding)."""
+    product = _product(is_active=True)
+    repo = FakeProductRepository(product)
+    owners = FakeOwnerReadModel(OwnerSnapshot(OWNER_ID, "user", True, 1))
+    handler = GetCheckoutQuoteQueryHandler(repo, owners)
+    monkeypatch.setattr(
+        "application.queries.get_checkout_quote.evaluate_checkout_eligibility",
+        lambda product, *, owner_is_active: CatalogErrors.checkout_quote_hidden(),
+    )
+
+    with pytest.raises(CheckoutQuoteProductHiddenError):
+        await handler.execute(_query(product.id.value, quantity=1))
+
+
+async def test_raises_inactive_based_solely_on_eligibility_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Зеркальный случай: `owner_is_active=False` (что при независимой
+    проверке привело бы к `...HiddenError`), но замоканный domain-результат —
+    `checkout_quote_inactive`, поэтому единственно верный исход —
+    `CheckoutQuoteProductInactiveError`."""
+    product = _product(is_active=True)
+    repo = FakeProductRepository(product)
+    owners = FakeOwnerReadModel(OwnerSnapshot(OWNER_ID, "user", False, 1))
+    handler = GetCheckoutQuoteQueryHandler(repo, owners)
+    monkeypatch.setattr(
+        "application.queries.get_checkout_quote.evaluate_checkout_eligibility",
+        lambda product, *, owner_is_active: CatalogErrors.checkout_quote_inactive(),
+    )
+
+    with pytest.raises(CheckoutQuoteProductInactiveError):
         await handler.execute(_query(product.id.value, quantity=1))
 
 

@@ -75,7 +75,7 @@ class GetCheckoutQuoteQueryHandler:
 
         error = evaluate_checkout_eligibility(product, owner_is_active=owner_is_active)
         if error is not None:
-            if not owner_is_active:
+            if error.code == CatalogErrors.checkout_quote_hidden().code:
                 raise CheckoutQuoteProductHiddenError
             raise CheckoutQuoteProductInactiveError
 
