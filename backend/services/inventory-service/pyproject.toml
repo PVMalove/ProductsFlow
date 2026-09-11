@@ -1,0 +1,56 @@
+[project]
+name = "inventory-service"
+version = "0.1.0"
+description = "inventory-service — остатки товара (ADR 0016, issue #367): нулевая inventory-запись по Product lifecycle, аудитируемая admin-корректировка."
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "kernel-domain",
+    "kernel-platform",
+    "observability",
+    "pydantic-settings>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "uvicorn>=0.35.0",
+]
+
+[tool.uv.sources]
+kernel-domain = { workspace = true }
+kernel-platform = { workspace = true }
+observability = { workspace = true }
+test-support = { workspace = true }
+
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.16.1",
+    "test-support",
+    "vulture>=2.14",
+]
+
+# Общий [tool.ruff]/[tool.mypy]-конфиг живёт в корневом backend/pyproject.toml
+# (ADR 0020) — этот пакет наследует его через extend, а не дублирует.
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.mypy]
+mypy_path = ["src"]
+exclude = ["^whitelist\\.py$"]
+
+[[tool.mypy.overrides]]
+# asyncpg ships no stubs/py.typed — same treatment identity-service/catalog-service/kernel-platform give it.
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.vulture]
+exclude = [".venv/", "*/alembic/versions/"]
+min_confidence = 80
