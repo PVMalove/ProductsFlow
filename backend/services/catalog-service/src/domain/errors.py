@@ -39,3 +39,21 @@ class CatalogErrors:
     @staticmethod
     def already_deactivated() -> Error:
         return Error.conflict("already_deactivated", "Товар уже деактивирован")
+
+    @staticmethod
+    def invalid_quantity() -> Error:
+        return Error.validation(
+            "invalid_quantity",
+            "Количество должно быть положительным целым числом",
+            invalid_field="quantity",
+        )
+
+    @staticmethod
+    def checkout_quote_hidden() -> Error:
+        return Error.not_found(
+            "checkout_quote_hidden", "Товар недоступен для оформления"
+        )
+
+    @staticmethod
+    def checkout_quote_inactive() -> Error:
+        return Error.conflict("checkout_quote_inactive", "Товар деактивирован")

@@ -22,6 +22,8 @@ from application.commands import (
 from application.image_dto import ProductImageMutation
 from application.ports import Actor, IdentityUser, OwnerSnapshot
 from application.queries import (
+    GetCheckoutQuoteQuery,
+    GetCheckoutQuoteQueryHandler,
     GetProductAuditQuery,
     GetProductAuditQueryHandler,
     GetProductImageQuery,
@@ -53,6 +55,7 @@ def test_catalog_application_handlers_expose_one_handler_per_operation() -> None
         ListProductsQueryHandler,
         GetProductAuditQueryHandler,
         GetProductImageQueryHandler,
+        GetCheckoutQuoteQueryHandler,
     )
     command_dto_types = (
         CreateProductCommand,
@@ -68,6 +71,7 @@ def test_catalog_application_handlers_expose_one_handler_per_operation() -> None
         ListProductsQuery,
         GetProductAuditQuery,
         GetProductImageQuery,
+        GetCheckoutQuoteQuery,
     )
 
     assert all(hasattr(handler_type, "execute") for handler_type in command_types)
