@@ -39,6 +39,12 @@ services:
     ports:
       - "9015:8000"
 
+  inventory-api:
+    environment:
+      APP_ENV: dev
+    ports:
+      - "9016:8000"
+
   minio:
     ports:
       - "9002:9000"
@@ -55,6 +61,10 @@ services:
   support-db:
     ports:
       - "5443:5432"
+
+  inventory-db:
+    ports:
+      - "5444:5432"
 
   gateway:
     ports:

@@ -9,6 +9,7 @@ COPY libs/test-support/pyproject.toml libs/test-support/
 COPY services/identity-service/pyproject.toml services/identity-service/
 COPY services/catalog-service/pyproject.toml services/catalog-service/
 COPY services/support-service/pyproject.toml services/support-service/
+COPY services/inventory-service/pyproject.toml services/inventory-service/
 
 RUN uv sync --package catalog-service --locked --no-dev --no-install-project
 
