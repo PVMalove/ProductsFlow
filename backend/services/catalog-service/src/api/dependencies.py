@@ -21,6 +21,7 @@ from application.ports import (
     IdentityGateway as ApplicationIdentityGateway,
 )
 from application.queries import (
+    GetCheckoutQuoteQueryHandler,
     GetProductAuditQueryHandler,
     GetProductImageQueryHandler,
     GetProductQueryHandler,
@@ -142,6 +143,18 @@ def get_product_handler(
 GetProductDI = Annotated[GetProductQueryHandler, Depends(get_product_handler)]
 
 
+def get_checkout_quote_handler(
+    repository: ProductRepositoryDI,
+    owner_read_model: OwnerReadModelDI,
+) -> GetCheckoutQuoteQueryHandler:
+    return GetCheckoutQuoteQueryHandler(repository, owner_read_model)
+
+
+GetCheckoutQuoteDI = Annotated[
+    GetCheckoutQuoteQueryHandler, Depends(get_checkout_quote_handler)
+]
+
+
 def get_update_product_handler(
     uow: CatalogUnitOfWorkDI, identity: ApplicationIdentityGatewayDI
 ) -> UpdateProductCommandHandler:
@@ -254,6 +267,7 @@ __all__ = [
     "CreateProductDI",
     "DeactivateProductDI",
     "DeleteProductDI",
+    "GetCheckoutQuoteDI",
     "GetProductAuditDI",
     "GetProductDI",
     "GetProductImageDI",

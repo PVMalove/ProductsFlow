@@ -29,6 +29,7 @@ from application.errors import (
 )
 from application.ports import Actor
 from application.queries import (
+    GetCheckoutQuoteQuery,
     GetProductAuditQuery,
     GetProductImageQuery,
     GetProductQuery,
@@ -113,6 +114,21 @@ class ProductGetRequest(BaseModel):
 
     def to_query(self, *, actor: Actor | None) -> GetProductQuery:
         return GetProductQuery(product_id=self.product_id, actor=actor)
+
+
+class ProductQuoteRequest(BaseModel):
+    """Path-bound `product_id` + required query `quantity` (issue #366) — GET,
+    чтобы не давать клиенту канал передать цену. `quantity`-валидация —
+    доменная (`CatalogErrors.invalid_quantity`), не Pydantic-уровня, поэтому
+    здесь нет `ge=1`."""
+
+    product_id: uuid.UUID
+    quantity: int = Query(...)
+
+    def to_query(self, *, actor: Actor) -> GetCheckoutQuoteQuery:
+        return GetCheckoutQuoteQuery(
+            product_id=self.product_id, quantity=self.quantity, actor=actor
+        )
 
 
 class ProductListRequest(BaseModel):

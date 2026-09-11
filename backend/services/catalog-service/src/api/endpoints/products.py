@@ -12,6 +12,7 @@ from api.dependencies import (
     CreateProductDI,
     DeactivateProductDI,
     DeleteProductDI,
+    GetCheckoutQuoteDI,
     GetProductAuditDI,
     GetProductDI,
     ListProductsDI,
@@ -29,10 +30,12 @@ from api.schemas import (
     ProductDeleteRequest,
     ProductGetRequest,
     ProductListRequest,
+    ProductQuoteRequest,
     ProductSearchRequest,
     ProductUpdateRequest,
 )
 from application.ports import ProductAuditEntry
+from contracts.checkout_quote import CheckoutQuoteView
 from contracts.product import ProductView
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
@@ -136,4 +139,15 @@ async def get_product_audit(
 ) -> ApiResponse[list[ProductAuditEntry]]:
     query = request.to_query(actor=to_actor(auth))
     result: Result[list[ProductAuditEntry]] = await handler.execute(query)
+    return match_result(result)
+
+
+@router.get("/{product_id}/quote", response_model=ApiResponse[CheckoutQuoteView])
+async def get_checkout_quote(
+    request: Annotated[ProductQuoteRequest, Depends()],
+    auth: RequiredAuth,
+    handler: GetCheckoutQuoteDI,
+) -> ApiResponse[CheckoutQuoteView]:
+    query = request.to_query(actor=to_actor(auth))
+    result: Result[CheckoutQuoteView] = await handler.execute(query)
     return match_result(result)
