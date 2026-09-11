@@ -46,3 +46,30 @@ def test_already_deactivated_carries_stable_code_without_a_field() -> None:
     assert error.type is ErrorType.CONFLICT
     assert error.invalid_field is None
     assert error.description == "Товар уже деактивирован"
+
+
+def test_invalid_quantity_carries_stable_code_and_public_field() -> None:
+    error = CatalogErrors.invalid_quantity()
+
+    assert error.code == "invalid_quantity"
+    assert error.type is ErrorType.VALIDATION
+    assert error.invalid_field == "quantity"
+    assert error.description == "Количество должно быть положительным целым числом"
+
+
+def test_checkout_quote_hidden_carries_stable_code_without_a_field() -> None:
+    error = CatalogErrors.checkout_quote_hidden()
+
+    assert error.code == "checkout_quote_hidden"
+    assert error.type is ErrorType.NOT_FOUND
+    assert error.invalid_field is None
+    assert error.description == "Товар недоступен для оформления"
+
+
+def test_checkout_quote_inactive_carries_stable_code_without_a_field() -> None:
+    error = CatalogErrors.checkout_quote_inactive()
+
+    assert error.code == "checkout_quote_inactive"
+    assert error.type is ErrorType.CONFLICT
+    assert error.invalid_field is None
+    assert error.description == "Товар деактивирован"
