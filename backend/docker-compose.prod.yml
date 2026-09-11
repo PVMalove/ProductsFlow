@@ -21,6 +21,11 @@ services:
       APP_ENV: prod
     restart: unless-stopped
 
+  inventory-api:
+    environment:
+      APP_ENV: prod
+    restart: unless-stopped
+
   minio:
     ports:
       - "9004:9000"
