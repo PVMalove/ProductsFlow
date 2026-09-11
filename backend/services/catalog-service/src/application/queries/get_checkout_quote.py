@@ -53,9 +53,7 @@ class GetCheckoutQuoteQueryHandler:
         self._repository = repository
         self._owner_read_model = owner_read_model
 
-    async def execute(
-        self, query: GetCheckoutQuoteQuery
-    ) -> Result[CheckoutQuoteView]:
+    async def execute(self, query: GetCheckoutQuoteQuery) -> Result[CheckoutQuoteView]:
         """
         Выполняет запрос на получение checkout quote.
 

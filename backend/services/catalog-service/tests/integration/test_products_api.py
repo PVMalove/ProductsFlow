@@ -819,7 +819,7 @@ async def test_get_checkout_quote_when_owner_is_deactivated_is_hidden(
     }
 
 
-async def test_get_checkout_quote_denies_even_the_owner_for_their_own_deactivated_product(
+async def test_get_checkout_quote_denies_even_the_owner_for_their_deactivated_product(
     catalog_client: httpx.AsyncClient, identity_gateway: FakeIdentityGateway
 ) -> None:
     """Checkout eligibility строже видимости (issue #366) — в отличие от

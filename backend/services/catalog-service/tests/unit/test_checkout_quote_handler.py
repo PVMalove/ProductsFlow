@@ -77,7 +77,9 @@ def _actor() -> Actor:
 
 
 def _query(product_id: uuid.UUID, *, quantity: int) -> GetCheckoutQuoteQuery:
-    return GetCheckoutQuoteQuery(product_id=product_id, quantity=quantity, actor=_actor())
+    return GetCheckoutQuoteQuery(
+        product_id=product_id, quantity=quantity, actor=_actor()
+    )
 
 
 async def test_returns_quote_for_active_product_with_active_owner() -> None:
@@ -181,9 +183,7 @@ async def test_owner_deactivated_takes_precedence_over_product_deactivated() -> 
         await handler.execute(_query(product.id.value, quantity=1))
 
 
-async def test_even_the_owner_does_not_get_a_quote_for_their_own_deactivated_product() -> (
-    None
-):
+async def test_owner_gets_no_quote_for_their_own_deactivated_product() -> None:
     """Checkout eligibility строже видимости — даже владелец не получает
     quote на свой деактивированный товар (issue #366, в отличие от
     `GetProductQueryHandler`)."""
