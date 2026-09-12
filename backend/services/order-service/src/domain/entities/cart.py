@@ -52,7 +52,9 @@ class Cart(Entity[CartId]):
         lines: list[CartLine],
         created_at: datetime,
     ) -> "Cart":
-        return cls(PRIVATE_MARKER, id, user_id=user_id, lines=lines, created_at=created_at)
+        return cls(
+            PRIVATE_MARKER, id, user_id=user_id, lines=lines, created_at=created_at
+        )
 
     def add_line(
         self, *, line_id: uuid.UUID, product_id: uuid.UUID, quantity: int, now: datetime
@@ -67,7 +69,9 @@ class Cart(Entity[CartId]):
             existing.quantity += quantity
             return Result[CartLine].ok(existing)
 
-        line = CartLine(id=line_id, product_id=product_id, quantity=quantity, added_at=now)
+        line = CartLine(
+            id=line_id, product_id=product_id, quantity=quantity, added_at=now
+        )
         self.lines.append(line)
         return Result[CartLine].ok(line)
 

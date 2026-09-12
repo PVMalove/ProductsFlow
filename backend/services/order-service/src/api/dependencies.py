@@ -33,9 +33,7 @@ def get_add_cart_line_handler(uow: CartUnitOfWorkDI) -> AddCartLineCommandHandle
     return AddCartLineCommandHandler(uow)
 
 
-AddCartLineDI = Annotated[
-    AddCartLineCommandHandler, Depends(get_add_cart_line_handler)
-]
+AddCartLineDI = Annotated[AddCartLineCommandHandler, Depends(get_add_cart_line_handler)]
 
 
 def get_update_cart_line_quantity_handler(

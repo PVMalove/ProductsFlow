@@ -1,7 +1,14 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -37,7 +44,9 @@ class CartLineModel(Base):
 
     __tablename__ = "cart_lines"
     __table_args__ = (
-        UniqueConstraint("cart_id", "product_id", name="uq_cart_lines_cart_id_product_id"),
+        UniqueConstraint(
+            "cart_id", "product_id", name="uq_cart_lines_cart_id_product_id"
+        ),
         CheckConstraint("quantity > 0", name="ck_cart_lines_quantity_positive"),
     )
 

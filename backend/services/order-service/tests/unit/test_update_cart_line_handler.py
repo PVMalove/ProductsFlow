@@ -59,7 +59,9 @@ async def test_update_by_another_user_is_denied_before_any_mutation() -> None:
 
     with pytest.raises(CartAccessDeniedError):
         await handler.execute(
-            UpdateCartLineQuantityCommand(actor=other_actor, line_id=line_id, quantity=9)
+            UpdateCartLineQuantityCommand(
+                actor=other_actor, line_id=line_id, quantity=9
+            )
         )
 
     assert cart.lines[0].quantity == 1

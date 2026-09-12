@@ -69,11 +69,11 @@ class CartRepository:
                 await self.session.delete(row)
 
         for line in cart.lines:
-            row = existing_rows.get(line.id)
-            if row is None:
+            existing_row = existing_rows.get(line.id)
+            if existing_row is None:
                 self.session.add(_to_line_model(cart.id.value, line))
             else:
-                row.quantity = line.quantity
+                existing_row.quantity = line.quantity
 
     async def _to_domain(self, row: CartModel) -> Cart:
         line_rows = list(
