@@ -6,12 +6,15 @@ from collections.abc import Awaitable, Callable
 
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
+from kernel_platform.commands import consume_command
 from kernel_platform.consumer import consume
-from kernel_platform.topology import declare_topology
+from kernel_platform.topology import declare_command_topology, declare_topology
 from observability.tracing import configure_tracing
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from api import reservation_sweep
+from api.reservation_commands import COMMAND_HANDLERS
 from core.settings import settings
 from infrastructure.db.inventory_repository import InventoryRepository
 from infrastructure.db.processed_messages import ProcessedMessage
@@ -111,9 +114,11 @@ def build_product_event_handler(
 
 
 async def main() -> None:
-    """Запускает воркер Product-lifecycle консьюмера inventory.
-
-    ADR 0016, issue #367."""
+    """Запускает воркер inventory: Product-lifecycle консьюмер (issue #367),
+    reservation command-консьюмеры и TTL-sweep (issue #370, D5 — расширяет
+    уже существующий `inventory-worker`-процесс, а не новый контейнер,
+    вынужденно из-за write-scope дispatch'а #370; Product-lifecycle код выше
+    не тронут)."""
     configure_tracing("inventory-worker")
     engine = create_async_engine(
         settings.inventory_database_url,
@@ -138,7 +143,19 @@ async def main() -> None:
                 queue, build_product_event_handler(session_factory), prefetch_count=1
             )
             logger.info("inventory-worker: product-event consumer started")
-            await asyncio.Future()
+
+            for command_type, handler in COMMAND_HANDLERS.items():
+                command_queue = await declare_command_topology(channel, command_type)
+                await consume_command(command_queue, session_factory, handler)
+            logger.info("inventory-worker: reservation command consumers started")
+
+            await asyncio.gather(
+                asyncio.Future(),
+                reservation_sweep.run(
+                    session_factory,
+                    interval_seconds=settings.inventory_reservation_sweep_interval_seconds,
+                ),
+            )
     finally:
         await engine.dispose()
 
