@@ -26,6 +26,16 @@ services:
       APP_ENV: prod
     restart: unless-stopped
 
+  # payment-api deliberately fails fast at startup under APP_ENV=prod (issue
+  # #368, architect brief D5/Risk #2): the only PspClient adapter that exists
+  # is MockPspAdapter, gated to non-prod environments — there is no real PSP
+  # integration yet. This overlay entry is kept for symmetry with the other
+  # three services, not because payment-api can serve traffic here today.
+  payment-api:
+    environment:
+      APP_ENV: prod
+    restart: unless-stopped
+
   minio:
     ports:
       - "9004:9000"

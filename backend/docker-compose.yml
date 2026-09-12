@@ -496,6 +496,60 @@ services:
     networks:
       - backend-network
 
+  payment-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: payment
+    volumes:
+      - payment_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  payment-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #368): alembic upgrade head,
+    # then a DB connectivity check — no seed stage, no worker/outbox-worker
+    # (RabbitMQ command/event wiring for payment operations is out of scope
+    # for #368, reserved for #371/#374).
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  payment-api:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_IDENTITY_BASE_URL: ${PAYMENT_IDENTITY_BASE_URL}
+    depends_on:
+      payment-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
   gateway:
     image: nginx:1.27-alpine
     volumes:
@@ -506,6 +560,7 @@ services:
       - catalog-api
       - support-api
       - inventory-api
+      - payment-api
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
       interval: 5s
@@ -524,4 +579,5 @@ volumes:
   catalog_db_data:
   support_db_data:
   inventory_db_data:
+  payment_db_data:
   opensearch_data:
