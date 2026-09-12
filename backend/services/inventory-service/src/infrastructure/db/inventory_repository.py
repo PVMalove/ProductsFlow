@@ -14,7 +14,9 @@ from infrastructure.db.entity_configurations.models import InventoryModel
 
 
 def _to_domain(row: InventoryModel) -> Inventory:
-    return Inventory.reconstitute(row.product_id, quantity=row.quantity)
+    return Inventory.reconstitute(
+        row.product_id, quantity=row.quantity, reserved=row.reserved
+    )
 
 
 class InventoryRepository:
@@ -65,6 +67,47 @@ class InventoryRepository:
         row.quantity = inventory.quantity
         row.pending_audit_reason = reason
         await drain_events_to_outbox(self.session, inventory)
+        return Result[Inventory].ok(inventory)
+
+    async def reserve(
+        self, product_id: uuid.UUID, quantity: int
+    ) -> Result[Inventory] | None:
+        row = await self.session.scalar(
+            select(InventoryModel)
+            .where(InventoryModel.product_id == product_id)
+            .with_for_update()
+        )
+        if row is None:
+            return None
+
+        inventory = _to_domain(row)
+        result = inventory.reserve(quantity)
+        if result.is_err:
+            return Result[Inventory].fail(result.error)
+
+        row.reserved = inventory.reserved
+        # `reserve()`/`release()` не публикуют доменных событий (Trade-offs
+        # брифа #370) — нет `drain_events_to_outbox` здесь, зеркалит
+        # `Inventory.reserve()`'s docstring.
+        return Result[Inventory].ok(inventory)
+
+    async def release(
+        self, product_id: uuid.UUID, quantity: int
+    ) -> Result[Inventory] | None:
+        row = await self.session.scalar(
+            select(InventoryModel)
+            .where(InventoryModel.product_id == product_id)
+            .with_for_update()
+        )
+        if row is None:
+            return None
+
+        inventory = _to_domain(row)
+        result = inventory.release(quantity)
+        if result.is_err:
+            return Result[Inventory].fail(result.error)
+
+        row.reserved = inventory.reserved
         return Result[Inventory].ok(inventory)
 
 
