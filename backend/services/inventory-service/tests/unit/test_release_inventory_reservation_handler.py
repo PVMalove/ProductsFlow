@@ -11,7 +11,11 @@ from application.commands.release_inventory_reservation import (
     ReleaseInventoryReservationCommandHandler,
 )
 from domain.entities.inventory import Inventory
-from domain.entities.reservation import Reservation, ReservationLine, ReservationLineStatus
+from domain.entities.reservation import (
+    Reservation,
+    ReservationLine,
+    ReservationLineStatus,
+)
 from domain.reservation_status import ReservationStatus
 from tests.unit.fake_inventory_repository import FakeInventoryRepository
 from tests.unit.fake_reservation_repository import FakeReservationRepository
@@ -33,7 +37,7 @@ def _reservation(order_id: uuid.UUID, lines: list[ReservationLine]) -> Reservati
     return reservation
 
 
-async def test_execute_releases_confirmed_lines_and_marks_reservation_released() -> None:
+async def test_execute_releases_confirmed_lines_and_marks_released() -> None:
     product_id = uuid.uuid4()
     inventory = _inventory(product_id, 10, 4)
     order_id = uuid.uuid4()
@@ -50,7 +54,9 @@ async def test_execute_releases_confirmed_lines_and_marks_reservation_released()
     )
     inventory_repo = FakeInventoryRepository([inventory])
     reservation_repo = FakeReservationRepository([reservation])
-    handler = ReleaseInventoryReservationCommandHandler(inventory_repo, reservation_repo)
+    handler = ReleaseInventoryReservationCommandHandler(
+        inventory_repo, reservation_repo
+    )
 
     await handler.execute(
         ReleaseInventoryReservationCommand(order_id=order_id, reason="manual")
@@ -87,7 +93,9 @@ async def test_execute_ignores_unavailable_lines_when_restoring_reserved() -> No
     )
     inventory_repo = FakeInventoryRepository([inventory])
     reservation_repo = FakeReservationRepository([reservation])
-    handler = ReleaseInventoryReservationCommandHandler(inventory_repo, reservation_repo)
+    handler = ReleaseInventoryReservationCommandHandler(
+        inventory_repo, reservation_repo
+    )
 
     await handler.execute(
         ReleaseInventoryReservationCommand(order_id=order_id, reason="manual")
@@ -99,7 +107,9 @@ async def test_execute_ignores_unavailable_lines_when_restoring_reserved() -> No
 async def test_execute_is_a_noop_for_an_unknown_order_id() -> None:
     inventory_repo = FakeInventoryRepository()
     reservation_repo = FakeReservationRepository()
-    handler = ReleaseInventoryReservationCommandHandler(inventory_repo, reservation_repo)
+    handler = ReleaseInventoryReservationCommandHandler(
+        inventory_repo, reservation_repo
+    )
 
     await handler.execute(
         ReleaseInventoryReservationCommand(order_id=uuid.uuid4(), reason="manual")
@@ -128,7 +138,9 @@ async def test_execute_is_a_noop_for_an_already_released_reservation() -> None:
     reservation.pull_events()
     inventory_repo = FakeInventoryRepository([inventory])
     reservation_repo = FakeReservationRepository([reservation])
-    handler = ReleaseInventoryReservationCommandHandler(inventory_repo, reservation_repo)
+    handler = ReleaseInventoryReservationCommandHandler(
+        inventory_repo, reservation_repo
+    )
 
     await handler.execute(
         ReleaseInventoryReservationCommand(order_id=order_id, reason="expired")
