@@ -76,7 +76,7 @@ def test_reserve_increases_reserved_when_available_is_sufficient() -> None:
     assert inventory.quantity == 10
 
 
-def test_reserve_rejects_when_available_is_insufficient_and_leaves_reserved_unchanged() -> None:
+def test_reserve_rejects_insufficient_available_and_leaves_reserved_unchanged() -> None:
     inventory = Inventory.create_zero(uuid.uuid4())
     inventory.adjust(10)
     inventory.pull_events()
