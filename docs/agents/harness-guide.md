@@ -8,6 +8,10 @@ state находится в [current-state.md](./current-state.md). Этот г�
 
 Разбивает разработку с AI-агентами на строгие фазы — от устранения неопределённости через спецификацию и тикетирование до TDD-реализации вертикальных слайсов и автоматического ревью (три сквозных примера — раздел 14) — плюс метки триажа (раздел 8), проектные надстройки `qa-gate`/`pr-composer` (раздел 6) и детерминированные hooks (раздел 9) поверх апстрима.
 
+![Навигация по Agent Harness: установка, работа, проверка](../diagrams/previews/harness-guide-navigation.workflow.png)
+
+Редактируемая спецификация и интерактивная версия схемы: [Archify JSON](../diagrams/harness-guide-navigation.workflow.json) и [HTML](../diagrams/harness-guide-navigation.workflow.html).
+
 ---
 
 ## 0. Установка и подключение
@@ -416,11 +420,22 @@ Coordinator-driven конвейер по умолчанию: сама сесси
 dispatched-роли, не эта сессия. PR остаётся отдельной ручной командой `/to-pull-requests`.
 Запускается в новой, чистой сессии. Вызывается только вручную.
 
-Маршрут требует установленной capability `backend-orchestration` (coordinator CLI, role manifest'ы,
-схема) и успешного `harness health .`. **`.harness/orchestration.json` не обязателен**: без него zone
-по умолчанию — весь репозиторий (`repository`), а `model`/`effort` роли берутся из текущей сессии и
-передаются в `dispatch create --model/--effort`. Если coordinator CLI отсутствует или `harness health`
-падает — не чинить и не достраивать opt-in, а отправить пользователя на `/fast-implement`.
+Маршрут требует установленной capability `backend-orchestration`. Проверяется он одной командой,
+она же показывает, что уже в работе:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . dispatch status
+```
+
+Exit 0 — маршрут доступен. **Искать команду `harness` не нужно**: packager CLI живёт в репозитории
+харнесса, а не в захарнесенном проекте, поэтому `harness health` там не запускается и ничего про
+этот маршрут не говорит. Если команда выше отсутствует или падает — не чинить и не достраивать
+opt-in, а отправить пользователя на `/fast-implement`.
+
+**`.harness/orchestration.json` не обязателен**: без него zone по умолчанию — весь репозиторий
+(`repository`), а `model`/`effort` роли берутся из текущей сессии и передаются в
+`dispatch create --model/--effort`. Начинайте coordinator и architect с `medium` effort; повышение
+допустимо только после явного решения разработчика для конкретного труднообратимого вопроса.
 
 Ключевые свойства конвейера:
 
@@ -437,9 +452,20 @@ dispatched-роли, не эта сессия. PR остаётся отдель�
 - **Транспорт — выбор проекта.** `assignment_plans.<role>.transport` = `orca` (isolated worker через
   `orca_adapter.py`) или `in-process` (субагент текущей сессии в worktree того же batch). Оба
   варианта работают с одним и тем же immutable brief и обязаны пройти model self-report. Без конфига
-  транспорт всегда `in-process`.
+  транспорт всегда `in-process`. Для него `dispatch send` лишь фиксирует handoff: следующим действием
+  coordinator немедленно запускает субагента по этому brief, не читая старые dispatch/report/template.
 - **Один тикет за раз.** Batch доводится до терминального состояния до старта следующего — это
   свойство процедуры `/implement`, а не новый lock в `coordinator.py`.
+- **Незакрытое состояние тикета предъявляется человеку.** Перед тем как предлагать batch, сессия
+  смотрит `dispatch status`: там у каждого dispatch есть `ticket`, `batch_id`, `state` и признак
+  `stale`. Найденный остаток прошлой попытки не переиспользуется, не удаляется и не обходится вторым
+  batch — он выносится разработчику, и тот решает, чем закрыть старый batch.
+- **Тупиковый batch закрывается командой, а не правкой файлов.** Воркер, умерший до model
+  self-report, уже не отчитается, а batch без ожидающего отчёта нельзя провести через `batch decide` —
+  такая пара замыкает batch навсегда. Для этого есть `batch abandon`: требует явного approval и
+  причины, переводит batch в `failed`, закрывает все открытые dispatch и **ничего не удаляет**.
+  Инвентарь — `batch list --open` (и `--ticket <id>` для одного тикета). Править
+  `.harness/orchestration/state/` руками нельзя: это и есть аудиторский след.
 - **Последовательность фиксированная.** Длинный путь всегда проходит architect, developer,
   code-review и qa целиком. Risk assessment решает, когда review *обязателен*, но не когда он
   *разрешён*: low-risk кандидат тоже проходит review. Меньше шагов — это `/fast-implement`, а не
@@ -515,14 +541,14 @@ dispatched-роли, не эта сессия. PR остаётся отдель�
 ### `/qa-gate` (skill, `context: fork`)
 
 - **Назначение:** полный локальный прогон качества — команды из `qa_gate_commands` в `.harness/project.json` (lint/typecheck/test), по очереди, перед открытием PR.
-- **Почему `context: fork`:** запускается в изолированном форкнутом субагенте — весь шум линтеров/тестов не засоряет основную сессию. При провале в основную сессию возвращается **полный** необрезанный вывод упавшей проверки; при успехе — только короткий итог PASS.
+- **Почему `context: fork`:** запускается в изолированном форкнутом субагенте — весь шум линтеров/тестов не засоряет основную сессию. Каждую команду оборачивает managed `test_summary.py`: при успехе возвращается короткий PASS, при провале — bounded pytest summary и путь к санитизированному локальному логу. Полный stdout не возвращается агенту автоматически.
 - Поле отсутствует или пустой список — не проходит молча: скилл останавливается и просит заполнить `qa_gate_commands` (`harness init`/`update`, либо правка файла напрямую), а не пропускает проверку.
 - Запускается вручную — `/qa-gate`, а `/to-pull-requests` вызывает его перед созданием PR вне valid opted-in orchestration route.
 
 ### `pr-composer` (subagent, `.claude/agents/pr-composer.md`)
 
-- **Назначение:** заполняет структурированный PR-шаблон из `docs/agents/git-workflow.md` §3 (язык — из `.harness/project.json`) — в изолированном контексте, чтобы полный diff и история коммитов не засоряли основную сессию. Тело — не открытие PR: возвращает только готовый markdown, `gh pr create --body` вызывает вызвавшая сессия.
-- **Вход:** номер issue, точная integration-ветка эпика из тикета/родительского эпика (для задачи вне эпика — `base_branch` из `.harness/project.json`), результат последнего `qa-gate` этой сессии, если он запускался — используется для секции «Проверка»; не запускался — честно пишет это в раздел рисков, а не выдумывает покрытие тестами.
+- **Назначение:** заполняет структурированный PR-шаблон из `docs/agents/git-workflow.md` §3 (язык — из `.harness/project.json`) — в изолированном контексте, чтобы полный diff и история коммитов не засоряли основную сессию. PR не открывает: сохраняет тело только в `.claude/tmp/pr-body-<issue>-<slug>.md` и возвращает этот путь; вызвавшая сессия передаёт его в `gh pr create --body-file` и удаляет файл лишь после успешной публикации.
+- **Вход:** номер issue, точная integration-ветка эпика из тикета/родительского эпика (для задачи вне эпика — `base_branch` из `.harness/project.json`), путь `.claude/tmp/pr-body-<issue>-<slug>.md`, результат последнего `qa-gate` этой сессии, если он запускался — используется для секции «Проверка»; не запускался — честно пишет это в раздел рисков, а не выдумывает покрытие тестами.
 - Запускается вручную в программе из `/to-pull-requests`, если `git-workflow.md` требует структурированный шаблон, а не короткое summary.
 
 ### `/to-pull-requests` (skill)
@@ -672,7 +698,7 @@ python .harness/reporting/delivery_stats.py --repo . --epic 81 --html docs/repor
 | `block-pr-merge.sh` | `PreToolUse(Bash)` | `gh pr merge` — безусловно, мердж только вручную. |
 | `check-branch-name.sh` | `PreToolUse(Bash)` | `git checkout -b`/`git switch -c <имя>`, не соответствующее `branch_pattern` из `.harness/project.json`. |
 | `check-worktree-branch-name.sh` | `PreToolUse(EnterWorktree)` | То же правило имени для нативного worktree-инструмента (раздел 10). |
-| `block-scratch-outside-docs-tasks.sh` | `PreToolUse(Write\|Edit)` | Запись спек/скретчпадов в системные temp-директории вместо `docs/tasks/`. |
+| `block-scratch-outside-docs-tasks.sh` | `PreToolUse(Write\|Edit)` | Запись task-артефактов в системные temp-директории вместо `docs/tasks/`, а PR-тел/комментариев — вне `.claude/tmp/`. |
 | `require-qa-gate.sh` | `PreToolUse(Bash)` | `gh pr create`, если `qa-gate` ещё не запускался/провалился для текущего состояния рабочего дерева (маркер пишет сам скилл `qa-gate` через `record-qa-gate-pass.sh` после успеха последней команды из `qa_gate_commands` — `mark-qa-gate-passed.sh`, `PostToolUse(Bash)`, дублирует эту запись как fallback для прямого запуска команд в основной сессии, без гарантии сработать внутри форкнутой сессии скилла). |
 | `block-dangerous-git.sh` | `PreToolUse(Bash)` | `git reset --hard`, `git clean -f`/`-fd`, `git branch -D`, `git checkout .`, `git restore .` — адаптировано из апстримного скилла `git-guardrails-claude-code`, не входит в вендоренный `mattpocock-suite`. В отличие от апстрима **не** блокирует `git push` целиком — `git-workflow.md` требует пуш issue-веток; push в `base_branch` и `integration/*` отдельно закрыт `block-direct-master.sh`. |
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Ничего не блокирует — аналитика на будущее: считает частоту вызова каждого скилла в `.claude/.skill-usage.json`. |

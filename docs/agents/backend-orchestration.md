@@ -77,6 +77,10 @@ python3 harness/bin/harness health /path/to/repository
 проект принимает. Конфиг нужен, когда проекту нужны настоящие зоны, разные модели по ролям,
 Orca-транспорт или бюджет параллелизма больше единицы.
 
+Запускайте coordinator-сессию с `medium` effort по умолчанию. Для architect в assignment plan также
+выбирайте `medium`; более высокий effort требует явного решения разработчика для названного
+труднообратимого вопроса, а не является дефолтом каждого ticket.
+
 Начальный шаблон намеренно пуст. Заполните provider profile, одну или несколько backend-зон,
 назначение для **каждой** используемой роли и реальные project checks. `code-review` следует
 назначить всегда: validator требует его, когда в конфиге есть назначения, поскольку это
@@ -121,7 +125,7 @@ runtime-наборы (`codex`, `claude` и т.п.); в каждом обязат
     }
   },
   "assignment_plans": {
-    "architect": {"zone": "payments", "runtimes": {"codex": {"profiles": ["backend-primary"], "model": "project-architect-model", "effort": "high"}, "claude": {"profiles": ["backend-claude"], "model": "project-architect-claude-model", "effort": "high"}}},
+    "architect": {"zone": "payments", "runtimes": {"codex": {"profiles": ["backend-primary"], "model": "project-architect-model", "effort": "medium"}, "claude": {"profiles": ["backend-claude"], "model": "project-architect-claude-model", "effort": "medium"}}},
     "developer": {"zone": "payments", "write_paths": ["services/payments/**"], "transport": "orca", "runtimes": {"codex": {"profiles": ["backend-primary"], "model": "project-developer-model", "effort": "xhigh"}, "claude": {"profiles": ["backend-claude"], "model": "sonnet", "effort": "xhigh"}}},
     "database-migrations": {"zone": "payments", "runtimes": {"codex": {"profiles": ["backend-primary"], "model": "project-migration-model", "effort": "xhigh"}, "claude": {"profiles": ["backend-claude"], "model": "project-migration-claude-model", "effort": "xhigh"}}},
     "messaging-integration": {"zone": "payments", "runtimes": {"codex": {"profiles": ["backend-primary"], "model": "project-messaging-model", "effort": "high"}, "claude": {"profiles": ["backend-claude"], "model": "project-messaging-claude-model", "effort": "high"}}},
@@ -141,7 +145,10 @@ runtime-наборы (`codex`, `claude` и т.п.); в каждом обязат
 субагента текущей coordinator-сессии в worktree того же batch. Оба варианта получают один и тот же
 immutable brief, обязаны пройти model self-report и вернуть completion report по общим правилам,
 поэтому логика coordinator-а от транспорта не зависит. `harness health` проверяет допустимость
-значения.
+значения. Для `in-process` `dispatch send` только фиксирует handoff: следующим действием coordinator
+немедленно запускает субагента по уже immutable brief, до любого поиска старых report/template или
+конфигурации. Architect собирает лишь targeted evidence для решения; полный набор
+`verification_commands` выполняют developer и clean-room QA, а не read-only baseline.
 
 Зона — не подсказка, а граница: write-роль изменяет только разрешённые пути своей зоны. Если роли
 нужен более узкий scope, задайте ей `write_paths`: brief и completion report будут проверяться по
@@ -218,8 +225,10 @@ batch в `awaiting-approval` и оставляет dispatch в `reported` до �
    ```
 
    Для роли с `transport: "in-process"` adapter не передаётся вовсе: `dispatch send --dispatch <id>`
-   возвращает путь к brief, а роль исполняет субагент текущей сессии. Без `.harness/orchestration.json`
-   к `dispatch create` добавляются `--model` и `--effort` вызывающей сессии.
+   возвращает путь к brief, после чего coordinator **немедленно** запускает роль как субагента текущей
+   сессии — никаких чтений предыдущих dispatch/report/template между этими действиями. Без
+   `.harness/orchestration.json` к `dispatch create` добавляются `--model` и `--effort` вызывающей
+   сессии; для coordinator и architect выбирайте `medium`, если разработчик явно не одобрил иное.
 4. Принять один schema-validated completion report с evidence. Он сохраняется как canonical JSON
    и детерминированная Markdown-проекция, после чего dispatch остаётся `reported`, а batch ждёт
    следующего решения:
@@ -247,6 +256,35 @@ risks, blockers и следующее решение coordinator-а. Для read
 Новые факты не меняют отправленный brief. Coordinator добавляет отдельное решение с evidence; если
 изменились scope, zone, DoD, assignment или proof, текущий dispatch заканчивается и создаётся новый.
 Повтор после `blocked` или `failed` — тоже новый dispatch с новым ID и brief.
+
+### Инвентарь и закрытие тупикового batch
+
+Посмотреть, что вообще заведено и что не закрыто:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . batch list --open
+python .harness/orchestration/coordinator.py --repo . batch list --ticket '#123'
+```
+
+Обычный путь к терминальному состоянию — `batch decide`. Но он требует ровно один отчёт, ожидающий
+решения, а отчёт требует живой dispatch с подтверждённой моделью. Воркер, умерший до self-report, не
+отчитается никогда — и такой batch не закрыть ни `fail`, ни `block`. Для этого случая есть отдельная
+команда:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . batch abandon \
+  --batch <batch-id> --approved-by 'имя утверждающего' --approved-at 2026-09-11T06:00:00Z \
+  --reason 'воркер умер до model self-report, решение недостижимо'
+```
+
+Она требует явного approval и непустой причины, переводит batch в `failed`, помечает все незакрытые
+dispatch как `abandoned` и записывает решение рядом с остальными. **Она ничего не удаляет**: immutable
+brief, отчёты и QA-артефакты остаются на месте. Повторно применить её к уже терминальному batch
+нельзя.
+
+Править файлы в `.harness/orchestration/state/` руками не следует ни при каких обстоятельствах: эти
+записи и есть доказательство, ради которого существует весь маршрут. Если штатной команды для вашего
+случая нет — это дефект инструмента, а не повод открыть редактор.
 
 ### Model self-report и dispatch watchdog
 
