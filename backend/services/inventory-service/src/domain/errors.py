@@ -23,3 +23,24 @@ class InventoryErrors:
             "inventory_not_found",
             "Остаток товара не найден",
         )
+
+    @staticmethod
+    def insufficient_available_stock() -> Error:
+        """Инвариант `reserve()`/`release()` (issue #370): нарушение зависит
+        от текущего состояния агрегата (доступный остаток = quantity -
+        reserved), не от формы входа — тот же класс, что
+        `negative_stock_adjustment()`, поэтому `conflict` (409)."""
+        return Error.conflict(
+            "insufficient_available_stock",
+            "Недостаточно доступного остатка для резервирования",
+        )
+
+    @staticmethod
+    def reservation_not_active() -> Error:
+        """Идемпотентный guard `Reservation.release()` (issue #370, D3/находка
+        6): повторный release уже неактивного резерва — не исключение, а
+        ожидаемый `Result.fail`."""
+        return Error.conflict(
+            "reservation_not_active",
+            "Резерв не находится в активном состоянии",
+        )

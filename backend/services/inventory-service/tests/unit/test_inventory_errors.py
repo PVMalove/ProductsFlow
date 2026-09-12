@@ -20,3 +20,21 @@ def test_inventory_not_found_is_a_stable_not_found_error() -> None:
     assert error.code == "inventory_not_found"
     assert error.type is ErrorType.NOT_FOUND
     assert error.description
+
+
+def test_insufficient_available_stock_is_a_stable_conflict_error() -> None:
+    error = InventoryErrors.insufficient_available_stock()
+
+    assert error.code == "insufficient_available_stock"
+    assert error.type is ErrorType.CONFLICT
+    assert error.description
+    assert error.invalid_field is None
+
+
+def test_reservation_not_active_is_a_stable_conflict_error() -> None:
+    error = InventoryErrors.reservation_not_active()
+
+    assert error.code == "reservation_not_active"
+    assert error.type is ErrorType.CONFLICT
+    assert error.description
+    assert error.invalid_field is None
