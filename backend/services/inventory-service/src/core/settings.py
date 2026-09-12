@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # (`backend/docker-compose.yml`), не публичный хост.
     inventory_identity_base_url: str = "http://identity-api:8000"
     inventory_outbox_poll_interval_seconds: float = 5.0
+    # Issue #370, D6: TTL резерва и интервал polling-loop'а sweep'а — не
+    # хардкод, тот же приём, что `inventory_outbox_poll_interval_seconds`.
+    inventory_reservation_ttl_minutes: int = 15
+    inventory_reservation_sweep_interval_seconds: float = 30.0
 
     db_pool_size: int = 20
     db_max_overflow: int = 10

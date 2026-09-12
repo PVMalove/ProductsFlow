@@ -26,9 +26,11 @@ class Inventory(Entity[uuid.UUID]):
         id: uuid.UUID = cast("uuid.UUID", _MISSING),
         *,
         quantity: int,
+        reserved: int = 0,
     ) -> None:
         super().__init__(marker, id=id)
         self.quantity = quantity
+        self.reserved = reserved
 
     @classmethod
     def create_zero(cls, product_id: uuid.UUID) -> "Inventory":
@@ -39,15 +41,20 @@ class Inventory(Entity[uuid.UUID]):
         return cls(PRIVATE_MARKER, product_id, quantity=0)
 
     @classmethod
-    def reconstitute(cls, product_id: uuid.UUID, *, quantity: int) -> "Inventory":
-        return cls(PRIVATE_MARKER, product_id, quantity=quantity)
+    def reconstitute(
+        cls, product_id: uuid.UUID, *, quantity: int, reserved: int = 0
+    ) -> "Inventory":
+        return cls(PRIVATE_MARKER, product_id, quantity=quantity, reserved=reserved)
 
     def adjust(self, delta: int) -> Result[None]:
-        """Always-Valid Domain: неотрицательность доступного остатка — это
+        """Always-Valid Domain: неотрицательность ДОСТУПНОГО остатка — это
         инвариант самого агрегата, не только API/schema-границы (issue #367,
-        риск 3)."""
+        риск 3). Issue #370 (архитектурный бриф, находка 5) расширяет
+        инвариант: итоговый quantity не может опуститься ниже уже
+        зарезервированного — при `reserved=0` условие математически
+        эквивалентно прежнему `< 0`."""
         new_quantity = self.quantity + delta
-        if new_quantity < 0:
+        if new_quantity < self.reserved:
             return Result[None].fail(InventoryErrors.negative_stock_adjustment())
 
         self.quantity = new_quantity
@@ -58,4 +65,29 @@ class Inventory(Entity[uuid.UUID]):
                 quantity_after=self.quantity,
             )
         )
+        return Result[None].ok(None)
+
+    def reserve(self, quantity: int) -> Result[None]:
+        """Резервирует часть доступного остатка (issue #370, ADR 0016).
+        Always-Valid Domain: доступность (`quantity - reserved`) проверяется
+        здесь, не на границе репозитория/приложения. Без доменного события —
+        та же намеренная асимметрия, что `create_zero()` (issue #367
+        Trade-offs): интересный внешнему миру факт живёт на уровне
+        `Reservation` (что случилось с ЗАКАЗОМ), не отдельного товара."""
+        available = self.quantity - self.reserved
+        if quantity > available:
+            return Result[None].fail(InventoryErrors.insufficient_available_stock())
+
+        self.reserved += quantity
+        return Result[None].ok(None)
+
+    def release(self, quantity: int) -> Result[None]:
+        """Возвращает ранее зарезервированное количество в доступный остаток.
+        `quantity > reserved` не ожидается в нормальном потоке (releases
+        всегда releases то, что сам же reserve() до этого зарезервировал) —
+        защитный инвариант, не исключение."""
+        if quantity > self.reserved:
+            return Result[None].fail(InventoryErrors.insufficient_available_stock())
+
+        self.reserved -= quantity
         return Result[None].ok(None)
