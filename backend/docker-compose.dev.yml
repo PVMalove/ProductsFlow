@@ -51,6 +51,12 @@ services:
     ports:
       - "9017:8000"
 
+  order-api:
+    environment:
+      APP_ENV: dev
+    ports:
+      - "9018:8000"
+
   minio:
     ports:
       - "9002:9000"
@@ -75,6 +81,10 @@ services:
   payment-db:
     ports:
       - "5445:5432"
+
+  order-db:
+    ports:
+      - "5446:5432"
 
   gateway:
     ports:

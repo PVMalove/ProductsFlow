@@ -36,6 +36,11 @@ services:
       APP_ENV: prod
     restart: unless-stopped
 
+  order-api:
+    environment:
+      APP_ENV: prod
+    restart: unless-stopped
+
   minio:
     ports:
       - "9004:9000"
