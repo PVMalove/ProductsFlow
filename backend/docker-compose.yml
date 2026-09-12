@@ -550,6 +550,59 @@ services:
     networks:
       - backend-network
 
+  order-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: order
+    volumes:
+      - order_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d order"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  order-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #369): alembic upgrade head,
+    # then a DB connectivity check — no seed stage, no worker (REST+DB only
+    # per the architect brief D1; #370+ own Checkout/Order/Saga/RabbitMQ).
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+    depends_on:
+      order-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  order-api:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+      ORDER_IDENTITY_BASE_URL: ${ORDER_IDENTITY_BASE_URL}
+    depends_on:
+      order-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
   gateway:
     image: nginx:1.27-alpine
     volumes:
@@ -561,6 +614,7 @@ services:
       - support-api
       - inventory-api
       - payment-api
+      - order-api
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
       interval: 5s
@@ -580,4 +634,5 @@ volumes:
   support_db_data:
   inventory_db_data:
   payment_db_data:
+  order_db_data:
   opensearch_data:
