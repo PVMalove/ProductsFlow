@@ -7,8 +7,11 @@ partitioning confirmed/unavailable уже сделан вызывающим (D4/
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from domain.entities.reservation import ReservationLine, ReservationLineStatus
-from domain.entities.reservation import Reservation as ReservationAggregate
+from domain.entities.reservation import (
+    Reservation,
+    ReservationLine,
+    ReservationLineStatus,
+)
 from domain.events.reservation_domain_event import InventoryReleased, InventoryReserved
 from domain.reservation_status import ReservationStatus
 
@@ -26,7 +29,7 @@ def test_create_partitions_confirmed_and_unavailable_into_one_event() -> None:
     confirmed = _line(ReservationLineStatus.CONFIRMED, quantity=3)
     unavailable = _line(ReservationLineStatus.UNAVAILABLE, quantity=5)
 
-    reservation = ReservationAggregate.create(
+    reservation = Reservation.create(
         order_id, lines=[confirmed, unavailable], ttl_minutes=15, now=NOW
     )
 
@@ -43,10 +46,10 @@ def test_create_partitions_confirmed_and_unavailable_into_one_event() -> None:
     assert event.unavailable_lines == ((unavailable.product_id, 5),)
 
 
-def test_release_from_active_transitions_to_released_with_confirmed_lines_only() -> None:
+def test_release_from_active_transitions_to_released_keeping_confirmed_lines() -> None:
     confirmed = _line(ReservationLineStatus.CONFIRMED, quantity=4)
     unavailable = _line(ReservationLineStatus.UNAVAILABLE, quantity=1)
-    reservation = ReservationAggregate.create(
+    reservation = Reservation.create(
         uuid.uuid4(), lines=[confirmed, unavailable], ttl_minutes=15, now=NOW
     )
     reservation.pull_events()
@@ -65,7 +68,7 @@ def test_release_from_active_transitions_to_released_with_confirmed_lines_only()
 
 
 def test_release_twice_is_rejected_as_an_idempotent_guard() -> None:
-    reservation = ReservationAggregate.create(
+    reservation = Reservation.create(
         uuid.uuid4(),
         lines=[_line(ReservationLineStatus.CONFIRMED)],
         ttl_minutes=15,
