@@ -303,3 +303,80 @@ async def test_void_of_an_authorized_payment_then_duplicate_and_repeat_void(
     finally:
         await authorize_queue.cancel(authorize_tag)
         await void_queue.cancel(void_tag)
+
+
+async def test_duplicate_void_command_id_redelivery_is_deduplicated_by_the_inbox(
+    channel: AbstractChannel,
+    command_session_factory: async_sessionmaker[AsyncSession],
+    spy_psp: _SpyPspAdapter,
+) -> None:
+    """Mirrors `test_duplicate_authorize_command_id_redelivery_calls_the_psp_once`
+    but for the void queue: redelivering the exact same void `Command` object
+    (same `command_id`) must be caught by the inbox-layer gate itself, not
+    merely by the domain-level `void_idempotency_key` guard already exercised
+    above with a *different* `command_id`."""
+    authorize_queue = await declare_command_topology(channel, "payment.authorize.v1")
+    void_queue = await declare_command_topology(channel, "payment.void.v1")
+    await authorize_queue.purge()
+    await void_queue.purge()
+    exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
+    authorized_event = asyncio.Event()
+    voided_event = asyncio.Event()
+
+    async def authorize_handler(session: AsyncSession, received: Command) -> None:
+        await handle_authorize_command(session, received)
+        authorized_event.set()
+
+    async def void_handler(session: AsyncSession, received: Command) -> None:
+        await handle_void_command(session, received)
+        voided_event.set()
+
+    authorize_tag = await consume_command(
+        authorize_queue, command_session_factory, authorize_handler
+    )
+    void_tag = await consume_command(void_queue, command_session_factory, void_handler)
+    try:
+        authorize_command = _authorize_command()
+        await publish_command(exchange, authorize_command, timeout_seconds=5.0)
+        await asyncio.wait_for(authorized_event.wait(), timeout=5)
+
+        authorization_id = await _wait_for_authorization_id(
+            command_session_factory, str(authorize_command.command_id)
+        )
+
+        void_command = _void_command(authorization_id)
+        await publish_command(exchange, void_command, timeout_seconds=5.0)
+        await asyncio.wait_for(voided_event.wait(), timeout=5)
+
+        status = await _wait_for_status(
+            command_session_factory, authorization_id, "voided"
+        )
+        assert status == "voided"
+
+        # Redeliver the exact same command_id — the inbox gate must ACK it
+        # without re-invoking the handler at all (DoD п.3), just like the
+        # authorize case above.
+        await publish_command(exchange, void_command, timeout_seconds=5.0)
+        await asyncio.sleep(0.3)
+
+        async with command_session_factory() as session:
+            inbox_count = await session.scalar(
+                select(func.count())
+                .select_from(InboxMessage)
+                .where(InboxMessage.command_id == void_command.command_id)
+            )
+        assert inbox_count == 1
+        voided_outbox_count = await _outbox_row_count(
+            command_session_factory, "payment.voided.v1", authorization_id
+        )
+        assert voided_outbox_count == 1
+        async with command_session_factory() as session:
+            final_status = await session.scalar(
+                select(PaymentAuthorizationModel.status).where(
+                    PaymentAuthorizationModel.id == authorization_id
+                )
+            )
+        assert final_status == "voided"
+    finally:
+        await authorize_queue.cancel(authorize_tag)
+        await void_queue.cancel(void_tag)
