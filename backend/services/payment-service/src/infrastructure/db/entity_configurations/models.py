@@ -1,22 +1,21 @@
 import uuid
 from datetime import datetime
 
+from kernel_platform.outbox.models import Base
 from sqlalchemy import DateTime, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-# Собственный `Base`, НЕ общий `kernel_platform.outbox.models.Base` (issue #368,
-# архитектурный бриф D1): payment-service не публикует и не потребляет
-# сообщения в этом тикете, поэтому его схема не должна тянуть за собой
-# `outbox_messages`/`inbox_messages` — импорт общего `Base` регистрировал бы
-# их на этом же `Base.metadata` безусловно, что прямо противоречит брифу
-# («без processed_messages/outbox_messages/audit-таблиц»). RabbitMQ-обвязка
-# (#371/#374) при появлении сможет либо завести здесь собственный
-# outbox/inbox, либо повторно рассмотреть этот выбор.
-
-
-class Base(DeclarativeBase):
-    pass
+# Общий `kernel_platform.outbox.models.Base` (issue #371, архитектурный бриф
+# D1) — разворот issue #368's исходного решения (собственный, изолированный
+# `Base`, оставленного явно открытым для #371/#374): payment-service теперь
+# потребляет `payment.authorize.v1`/`payment.void.v1` и публикует
+# коррелированные факты результата, поэтому его схема разделяет `Base` с
+# `OutboxMessage`/`InboxMessage` — импорт `Base` из этого модуля исполняет
+# весь его код, регистрируя обе модели на одном `Base.metadata` независимо от
+# того, какие имена реально импортированы. Прямое зеркалирование
+# inventory-service (issue #367/#370) — единственного реального прецедента
+# в этой кодовой базе.
 
 
 class PaymentAuthorizationModel(Base):
