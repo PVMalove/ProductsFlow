@@ -28,11 +28,23 @@ _REVISION_FILE = "d74e30e2f89f_payment_authorizations.py"
 _REVISION = run_path(str(_VERSIONS_DIR / _REVISION_FILE))
 _TABLES = ("payment_authorizations",)
 
+# Issue #371, Seams for TDD #5 (D1): the new revision adding
+# outbox_messages/inbox_messages after the Base switch.
+_OUTBOX_INBOX_REVISION_FILE = "b611da1d508d_payment_outbox_inbox.py"
+_OUTBOX_INBOX_REVISION = run_path(str(_VERSIONS_DIR / _OUTBOX_INBOX_REVISION_FILE))
+_OUTBOX_INBOX_TABLES = ("outbox_messages", "inbox_messages")
+
 
 def _run_revision(connection: Connection, action: str) -> None:
     migration_context = MigrationContext.configure(connection)
     with Operations.context(migration_context):
         _REVISION[action]()
+
+
+def _run_outbox_inbox_revision(connection: Connection, action: str) -> None:
+    migration_context = MigrationContext.configure(connection)
+    with Operations.context(migration_context):
+        _OUTBOX_INBOX_REVISION[action]()
 
 
 def _diff_against_orm_metadata(connection: Connection) -> list[Any]:
@@ -74,6 +86,48 @@ async def test_alembic_upgrade_creates_payment_authorizations_and_downgrade_reve
                     "WHERE table_schema = 'public' AND table_name = ANY(:tables)"
                 ),
                 {"tables": list(_TABLES)},
+            )
+            assert remaining_tables == 0
+        finally:
+            await connection.rollback()
+
+
+async def test_alembic_upgrade_creates_outbox_and_inbox_tables_and_downgrade_reverts(
+    db_engine: AsyncEngine,
+) -> None:
+    # Same isolated-transaction trick as the revision above — this test must
+    # not disturb outbox_messages/inbox_messages for the rest of the
+    # session-scoped `_schema` fixture (issue #368/#371).
+    async with db_engine.connect() as connection:
+        await connection.begin()
+        try:
+            for table in _OUTBOX_INBOX_TABLES:
+                await connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+
+            await connection.run_sync(
+                lambda conn: _run_outbox_inbox_revision(conn, "upgrade")
+            )
+
+            inbox_pk_columns = await connection.run_sync(
+                lambda conn: inspect(conn).get_pk_constraint("inbox_messages")[
+                    "constrained_columns"
+                ]
+            )
+            assert inbox_pk_columns == ["command_id"]
+
+            diffs = await connection.run_sync(_diff_against_orm_metadata)
+            assert diffs == []
+
+            await connection.run_sync(
+                lambda conn: _run_outbox_inbox_revision(conn, "downgrade")
+            )
+
+            remaining_tables = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = ANY(:tables)"
+                ),
+                {"tables": list(_OUTBOX_INBOX_TABLES)},
             )
             assert remaining_tables == 0
         finally:
