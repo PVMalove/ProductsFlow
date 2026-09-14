@@ -514,9 +514,9 @@ services:
 
   payment-bootstrap:
     # One-off bootstrap step (ADR 0001, issue #368): alembic upgrade head,
-    # then a DB connectivity check — no seed stage, no worker/outbox-worker
-    # (RabbitMQ command/event wiring for payment operations is out of scope
-    # for #368, reserved for #371/#374).
+    # then a DB connectivity check — no seed stage. payment-worker/
+    # payment-outbox-worker (RabbitMQ command/event wiring, issue #371)
+    # depend on this completing first, same as inventory-bootstrap.
     build:
       context: .
       dockerfile: services/payment-service/Dockerfile
@@ -547,6 +547,41 @@ services:
     depends_on:
       payment-bootstrap:
         condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  payment-worker:
+    restart: unless-stopped
+    # payment.authorize.v1/payment.void.v1 command consumer (issue #371).
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_AMQP_URL: ${PAYMENT_AMQP_URL}
+    depends_on:
+      payment-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  payment-outbox-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command: ["python", "-m", "api.outbox_worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_AMQP_URL: ${PAYMENT_AMQP_URL}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - backend-network
 
