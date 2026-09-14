@@ -12,7 +12,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from kernel_platform.commands import Command
+from kernel_platform.commands import Command, CommandHandler
 from kernel_platform.outbox.models import OutboxMessage
 from kernel_platform.outbox.trace_context import serialize_trace_context
 from kernel_platform.security import Actor, ActorRole
@@ -127,3 +127,12 @@ async def handle_void_command(session: AsyncSession, command: Command) -> None:
             command=command,
         )
     )
+
+
+# Единый реестр command_type -> handler (issue #371, Seams for TDD #2) —
+# `api/worker.py::main()` регистрирует консьюмеры по нему, тест
+# `test_payment_worker_seams.py` ловит забытую регистрацию.
+COMMAND_HANDLERS: dict[str, CommandHandler] = {
+    "payment.authorize.v1": handle_authorize_command,
+    "payment.void.v1": handle_void_command,
+}
