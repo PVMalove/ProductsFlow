@@ -63,7 +63,9 @@ async def test_successful_authorize_adds_an_authorized_outbox_message(
 ) -> None:
     repo = FakePaymentAuthorizationRepository()
     _patch_uow(monkeypatch, repo)
-    _patch_psp(monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.SUCCESS))
+    _patch_psp(
+        monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.SUCCESS)
+    )
     session = _RecordingSession()
     command = _authorize_command(payment_method_token="success")
 
@@ -89,7 +91,9 @@ async def test_declined_authorize_adds_a_declined_outbox_message(
 ) -> None:
     repo = FakePaymentAuthorizationRepository()
     _patch_uow(monkeypatch, repo)
-    _patch_psp(monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.DECLINE))
+    _patch_psp(
+        monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.DECLINE)
+    )
     session = _RecordingSession()
     command = _authorize_command(payment_method_token="decline")
 
@@ -106,7 +110,9 @@ async def test_timed_out_authorize_adds_a_timed_out_outbox_message(
 ) -> None:
     repo = FakePaymentAuthorizationRepository()
     _patch_uow(monkeypatch, repo)
-    _patch_psp(monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.TIMEOUT))
+    _patch_psp(
+        monkeypatch, FakePspClient(authorize_outcome=PspAuthorizeOutcome.TIMEOUT)
+    )
     session = _RecordingSession()
     command = _authorize_command(payment_method_token="timeout")
 

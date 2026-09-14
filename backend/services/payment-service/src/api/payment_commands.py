@@ -28,6 +28,7 @@ from application.commands.void_payment import (
 )
 from core.psp import build_psp_client
 from core.settings import settings
+from domain.entities.payment_authorization import PaymentAuthorizationStatus
 from infrastructure.db.unit_of_work import PaymentCommandUnitOfWork
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,15 @@ logger = logging.getLogger(__name__)
 # используемый только для логирования (issue #368) — ни один из двух
 # хендлеров не проверяет роль. Nil-UUID узнаваем в логах как «не человек».
 _SYSTEM_ACTOR = Actor(id=uuid.UUID(int=0), role=ActorRole.USER)
+
+# Decline/timeout — `Result.ok`, не `Result.fail` (D2/находка 9):
+# `PaymentAuthorization.create()` персистит строку в обоих случаях, различие
+# идёт по `view.status`, не по `result.is_err`.
+_AUTHORIZE_EVENT_TYPE_BY_STATUS: dict[PaymentAuthorizationStatus, str] = {
+    PaymentAuthorizationStatus.AUTHORIZED: "payment.authorized.v1",
+    PaymentAuthorizationStatus.DECLINED: "payment.authorization_declined.v1",
+    PaymentAuthorizationStatus.AUTHORIZATION_UNKNOWN: "payment.authorization_timed_out.v1",
+}
 
 
 def _result_outbox_message(
@@ -60,7 +70,7 @@ async def handle_authorize_command(session: AsyncSession, command: Command) -> N
     payload = command.payload
     uow = PaymentCommandUnitOfWork(session)
     handler = AuthorizePaymentCommandHandler(uow, build_psp_client(settings))
-    await handler.execute(
+    result = await handler.execute(
         AuthorizePaymentCommand(
             actor=_SYSTEM_ACTOR,
             idempotency_key=str(command.command_id),
@@ -68,9 +78,23 @@ async def handle_authorize_command(session: AsyncSession, command: Command) -> N
             payment_method_token=str(payload["payment_method_token"]),
         )
     )
-    # Result -> outbox-факт маппинг (D2/D7) — Seams for TDD #4,
-    # tests/unit/test_handle_authorize_command.py.
-    raise NotImplementedError("authorize result-to-outbox mapping lands in seam 4")
+    if result.is_err:
+        # invalid_amount / unknown_test_scenario_token / idempotency_conflict
+        # — все три, при idempotency_key = str(command_id) (D6), означают
+        # испорченную команду от продюсера, не легитимный повтор (D7) — пусть
+        # consume()'s retry/DLQ-лестница обработает как транзиентную/
+        # permanent ошибку.
+        raise ValueError(f"payment.authorize.v1 rejected: {result.error.code}")
+
+    view = result.value
+    event_type = _AUTHORIZE_EVENT_TYPE_BY_STATUS[
+        PaymentAuthorizationStatus(view.status)
+    ]
+    session.add(
+        _result_outbox_message(
+            event_type=event_type, authorization_id=view.id, command=command
+        )
+    )
 
 
 async def handle_void_command(session: AsyncSession, command: Command) -> None:
