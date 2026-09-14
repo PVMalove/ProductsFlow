@@ -10,6 +10,8 @@ the integration-level seam #1
 only pins the mechanics precisely, with a spy in place of a real session
 (mirrors kernel-platform's own `test_outbox_drain.py::_RecordingSession`)."""
 
+import pytest
+
 from infrastructure.db.unit_of_work import PaymentCommandUnitOfWork
 
 
@@ -43,18 +45,17 @@ async def test_aexit_never_rolls_back_the_session_on_a_clean_exit() -> None:
     assert session.rollback_calls == 0
 
 
-async def test_aexit_never_rolls_back_the_session_when_an_exception_is_pending() -> (
-    None
-):
+async def test_an_exception_raised_inside_the_context_still_propagates() -> None:
+    """`__aexit__` must never suppress a pending exception — it has to
+    propagate untouched to `consume_command`'s `session.begin()`, the only
+    real rollback in this flow (D5)."""
     session = _SpySession()
     uow = PaymentCommandUnitOfWork(session)  # type: ignore[arg-type]
 
-    suppressed = await uow.__aexit__(RuntimeError, RuntimeError("boom"), None)
+    with pytest.raises(RuntimeError, match="boom"):
+        async with uow:
+            raise RuntimeError("boom")
 
-    # A falsy return means the pending exception is NOT suppressed — it must
-    # propagate untouched to consume_command's own `session.begin()`, the
-    # only real rollback in this flow (D5).
-    assert not suppressed
     assert session.rollback_calls == 0
 
 

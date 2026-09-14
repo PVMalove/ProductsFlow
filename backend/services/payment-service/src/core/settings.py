@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     # ADR 0005/0011) — имя сервиса compose-сети (`backend/docker-compose.yml`),
     # не публичный хост.
     payment_identity_base_url: str = "http://identity-api:8000"
+    # Issue #371: `payment-worker`/`payment-outbox-worker` — те же дефолты/
+    # имена, что `inventory_amqp_url`/`inventory_outbox_poll_interval_seconds`.
+    payment_amqp_url: str = "amqp://guest:guest@localhost:5672/"
+    payment_outbox_poll_interval_seconds: float = 5.0
 
     db_pool_size: int = 20
     db_max_overflow: int = 10

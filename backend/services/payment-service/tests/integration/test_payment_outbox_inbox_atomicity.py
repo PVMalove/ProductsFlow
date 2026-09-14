@@ -88,8 +88,7 @@ async def test_a_failure_after_inbox_claim_rolls_back_the_whole_command(
                 select(func.count())
                 .select_from(PaymentAuthorizationModel)
                 .where(
-                    PaymentAuthorizationModel.idempotency_key
-                    == str(command.command_id)
+                    PaymentAuthorizationModel.idempotency_key == str(command.command_id)
                 )
             )
             outbox_count = await session.scalar(
