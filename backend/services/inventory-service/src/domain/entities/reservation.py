@@ -10,8 +10,16 @@ from kernel_domain.entity import Entity
 from kernel_domain.result import Result
 
 from domain.errors import InventoryErrors
-from domain.events.reservation_domain_event import InventoryReleased, InventoryReserved
+from domain.events.reservation_domain_event import (
+    InventoryAllocated,
+    InventoryReleased,
+    InventoryReserved,
+)
 from domain.reservation_status import ReservationStatus
+
+_LIVE_RESERVATION_STATUSES = frozenset(
+    {ReservationStatus.ACTIVE, ReservationStatus.ALLOCATED}
+)
 
 _MISSING = object()
 
@@ -123,8 +131,12 @@ class Reservation(Entity[uuid.UUID]):
         """Идемпотентный guard — второй, business-result слой идемпотентности
         (D3/находка 6, независимый от `inbox_messages`-гейта #365): повторный
         release уже неактивного резерва — `Result.fail`, не исключение,
-        легитимный повтор не должен уехать в DLQ."""
-        if self.status is not ReservationStatus.ACTIVE:
+        легитимный повтор не должен уехать в DLQ.
+
+        Guard принимает оба живых статуса, ACTIVE и ALLOCATED (issue #373):
+        `release()` служит компенсацией и для аллоцированного резерва, не
+        только для активного — тот же метод, та же идемпотентность."""
+        if self.status not in _LIVE_RESERVATION_STATUSES:
             return Result[None].fail(InventoryErrors.reservation_not_active())
 
         self.status = (
@@ -141,5 +153,26 @@ class Reservation(Entity[uuid.UUID]):
             InventoryReleased(
                 order_id=self.id, reason=reason, released_lines=confirmed_lines
             )
+        )
+        return Result[None].ok(None)
+
+    def allocate(self) -> Result[None]:
+        """Переводит живой резерв ACTIVE -> ALLOCATED (issue #373, ADR 0016).
+        Идемпотентный guard в том же стиле, что `release()`: повторный
+        allocate уже аллоцированного (или неактивного) резерва — `Result.fail`,
+        не исключение, без повторной публикации события. Не трогает
+        `Inventory.reserved` — сумма уже учтена `reserve()`, ALLOCATED остаётся
+        «живым» статусом для инварианта остатка."""
+        if self.status is not ReservationStatus.ACTIVE:
+            return Result[None].fail(InventoryErrors.reservation_not_active())
+
+        self.status = ReservationStatus.ALLOCATED
+        confirmed_lines = tuple(
+            (line.product_id, line.quantity)
+            for line in self.lines
+            if line.status is ReservationLineStatus.CONFIRMED
+        )
+        self.add_domain_event(
+            InventoryAllocated(order_id=self.id, allocated_lines=confirmed_lines)
         )
         return Result[None].ok(None)

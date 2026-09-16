@@ -46,6 +46,32 @@ class InventoryReserved(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class InventoryAllocated(DomainEvent):
+    """Факт на `Reservation.allocate()` (issue #373, ADR 0016): подтверждённые
+    строки живого резерва переходят из ACTIVE в ALLOCATED — `Inventory.reserved`
+    не меняется (та же сумма уже учтена `reserve()`), поэтому событие несёт
+    только сами строки, без количественного эффекта на остаток."""
+
+    aggregate_type: str = "Reservation"
+    event_type: str = "inventory.allocated.v1"
+
+    order_id: uuid.UUID
+    allocated_lines: tuple[tuple[uuid.UUID, int], ...]
+
+    def aggregate_id(self) -> uuid.UUID:
+        return self.order_id
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "order_id": str(self.order_id),
+            "allocated_lines": [
+                {"product_id": str(product_id), "quantity": quantity}
+                for product_id, quantity in self.allocated_lines
+            ],
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
 class InventoryReleased(DomainEvent):
     """Один тип на оба сценария релиза — явный `inventory.release.v1` и
     автоматическое TTL-истечение (D1): структурный эффект для Order

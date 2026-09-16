@@ -19,7 +19,11 @@ from kernel_platform.topology import COMMANDS_EXCHANGE_NAME, declare_command_top
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.reservation_commands import handle_release_command, handle_reserve_command
+from api.reservation_commands import (
+    handle_allocate_command,
+    handle_release_command,
+    handle_reserve_command,
+)
 from infrastructure.db.entity_configurations.models import (
     InventoryModel,
     ReservationModel,
@@ -116,6 +120,35 @@ def _release_command(order_id: uuid.UUID) -> Command:
         correlation_id=str(order_id),
         payload={"order_id": str(order_id)},
     )
+
+
+def _allocate_command(order_id: uuid.UUID) -> Command:
+    return Command(
+        command_id=uuid.uuid4(),
+        command_type="inventory.allocate.v1",
+        causation_id=uuid.uuid4(),
+        correlation_id=str(order_id),
+        payload={"order_id": str(order_id)},
+    )
+
+
+async def _wait_for_reservation_status(
+    session_factory: async_sessionmaker[AsyncSession],
+    order_id: uuid.UUID,
+    expected: str,
+) -> str | None:
+    """Same commit-visibility race as `_wait_for_reservation_row` — a
+    handler's own `asyncio.Event` fires before `consume_command`'s
+    surrounding transaction actually commits."""
+    status = None
+    for _ in range(100):
+        async with session_factory() as session:
+            row = await session.get(ReservationModel, order_id)
+            status = row.status if row is not None else None
+        if status == expected:
+            return status
+        await asyncio.sleep(0.05)
+    return status
 
 
 async def test_duplicate_command_id_redelivery_does_not_double_reserve(
@@ -300,4 +333,106 @@ async def test_release_after_reserve_restores_reserved_and_is_idempotent(
         assert released_outbox_count_after == 1
     finally:
         await reserve_queue.cancel(reserve_tag)
+        await release_queue.cancel(release_tag)
+
+
+async def test_full_cycle_reserve_allocate_release_transitions_status_and_restores_reserved_once(
+    channel: AbstractChannel,
+    command_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Seams for TDD #8 (issue #373): полный цикл reserve -> allocate ->
+    release (компенсация) — статус резерва в БД проходит ACTIVE -> ALLOCATED
+    -> RELEASED, а `inventory.reserved` уменьшается РОВНО ОДИН раз, в самом
+    конце (allocate не трогает `Inventory` вовсе, D-решение архитектора)."""
+    reserve_queue = await declare_command_topology(channel, "inventory.reserve.v1")
+    allocate_queue = await declare_command_topology(channel, "inventory.allocate.v1")
+    release_queue = await declare_command_topology(channel, "inventory.release.v1")
+    await reserve_queue.purge()
+    await allocate_queue.purge()
+    await release_queue.purge()
+    exchange = await channel.get_exchange(COMMANDS_EXCHANGE_NAME)
+    product_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+    await _seed_inventory(command_session_factory, product_id, 10)
+    reserved_event = asyncio.Event()
+    allocated_event = asyncio.Event()
+    released_event = asyncio.Event()
+
+    async def reserve_handler(session: AsyncSession, received: Command) -> None:
+        await handle_reserve_command(session, received)
+        reserved_event.set()
+
+    async def allocate_handler(session: AsyncSession, received: Command) -> None:
+        await handle_allocate_command(session, received)
+        allocated_event.set()
+
+    async def release_handler(session: AsyncSession, received: Command) -> None:
+        await handle_release_command(session, received)
+        released_event.set()
+
+    reserve_tag = await consume_command(
+        reserve_queue, command_session_factory, reserve_handler
+    )
+    allocate_tag = await consume_command(
+        allocate_queue, command_session_factory, allocate_handler
+    )
+    release_tag = await consume_command(
+        release_queue, command_session_factory, release_handler
+    )
+    try:
+        await publish_command(
+            exchange, _reserve_command(order_id, [(product_id, 4)]), timeout_seconds=5.0
+        )
+        await asyncio.wait_for(reserved_event.wait(), timeout=5)
+        await _wait_for_reservation_row(command_session_factory, order_id)
+
+        async with command_session_factory() as session:
+            reserved_after_reserve = await session.scalar(
+                select(InventoryModel.reserved).where(
+                    InventoryModel.product_id == product_id
+                )
+            )
+        assert reserved_after_reserve == 4
+
+        await publish_command(
+            exchange, _allocate_command(order_id), timeout_seconds=5.0
+        )
+        await asyncio.wait_for(allocated_event.wait(), timeout=5)
+        status_after_allocate = await _wait_for_reservation_status(
+            command_session_factory, order_id, "allocated"
+        )
+        assert status_after_allocate == "allocated"
+
+        # Allocate must NOT touch `Inventory.reserved` at all.
+        async with command_session_factory() as session:
+            reserved_after_allocate = await session.scalar(
+                select(InventoryModel.reserved).where(
+                    InventoryModel.product_id == product_id
+                )
+            )
+            allocated_outbox_count = await session.scalar(
+                select(func.count())
+                .select_from(OutboxMessage)
+                .where(
+                    OutboxMessage.event_type == "inventory.allocated.v1",
+                    OutboxMessage.aggregate_id == order_id,
+                )
+            )
+        assert reserved_after_allocate == 4
+        assert allocated_outbox_count == 1
+
+        await publish_command(exchange, _release_command(order_id), timeout_seconds=5.0)
+        await asyncio.wait_for(released_event.wait(), timeout=5)
+        reserved_after_release = await _wait_for_reserved_quantity(
+            command_session_factory, product_id, 0
+        )
+        status_after_release = await _wait_for_reservation_status(
+            command_session_factory, order_id, "released"
+        )
+
+        assert reserved_after_release == 0
+        assert status_after_release == "released"
+    finally:
+        await reserve_queue.cancel(reserve_tag)
+        await allocate_queue.cancel(allocate_tag)
         await release_queue.cancel(release_tag)
