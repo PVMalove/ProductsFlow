@@ -16,9 +16,11 @@ from observability.tracing import (
 )
 
 from api.endpoints.cart import router as cart_router
+from api.endpoints.checkout import router as checkout_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
+from infrastructure.http.catalog_client import CatalogClient
 
 configure_logging(settings.app_env, "order-service")
 
@@ -28,6 +30,11 @@ configure_logging(settings.app_env, "order-service")
 # применяют.
 _identity_http_client = httpx.AsyncClient(base_url=settings.order_identity_base_url)
 _identity_client = IdentityClient(_identity_http_client)
+# issue #372, D9: отдельный httpx-клиент к catalog-service для авторитетного
+# checkout quote — не переиспользует `_identity_http_client` (разные базовые
+# URL/назначения, тот же приём, что identity vs opensearch клиенты catalog).
+_catalog_http_client = httpx.AsyncClient(base_url=settings.order_catalog_base_url)
+_catalog_client = CatalogClient(_catalog_http_client)
 
 
 @asynccontextmanager
@@ -38,11 +45,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     instrument_sqlalchemy(app, app.state.sessionmaker)
     app.state.identity_client = _identity_client
+    app.state.catalog_client = _catalog_client
     await _identity_client.preload()
     try:
         yield
     finally:
         await _identity_http_client.aclose()
+        await _catalog_http_client.aclose()
 
 
 app = FastAPI(title="order-service", lifespan=lifespan)
@@ -57,3 +66,4 @@ register_http_metrics(app, service_name="order-service")
 instrument_fastapi(app, service_name="order-service")
 instrument_httpx()
 app.include_router(cart_router)
+app.include_router(checkout_router)

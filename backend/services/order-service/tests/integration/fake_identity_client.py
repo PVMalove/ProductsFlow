@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+import httpx
 import jwt
 from kernel_platform.security.identity_client import CurrentUserInfo
 
@@ -9,10 +10,13 @@ class FakeIdentityClient:
     """Фейковый identity-клиент (ADR 0013, Seam A): не бьёт по сети, HTTP-слой
     order-service тестируется против настоящего Postgres, но против
     подставного identity. Любой зарегистрированный токен проходит
-    `RequiredAuth` — order-service не сверяет роль (архитектурный бриф D2)."""
+    `RequiredAuth` — order-service не сверяет роль (архитектурный бриф D2).
+    `fetch_current_user` (issue #372) — синхронная сверка активности для
+    `RequiredActiveUser`/checkout (ADR 0016:11)."""
 
     def __init__(self) -> None:
         self._users: dict[str, CurrentUserInfo] = {}
+        self.unavailable = False
 
     def register(
         self,
@@ -29,3 +33,18 @@ class FakeIdentityClient:
         if info is None:
             raise jwt.InvalidTokenError(f"Неизвестный токен: {token!r}")
         return {"sub": str(info.id)}
+
+    async def fetch_current_user(self, token: str) -> CurrentUserInfo:
+        if self.unavailable:
+            raise httpx.ConnectError(
+                "identity-service недоступен",
+                request=httpx.Request("GET", "http://identity"),
+            )
+        info = self._users.get(token)
+        if info is None:
+            raise httpx.HTTPStatusError(
+                "unknown token",
+                request=httpx.Request("GET", "http://identity"),
+                response=httpx.Response(401),
+            )
+        return info
