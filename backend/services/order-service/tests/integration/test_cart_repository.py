@@ -1,9 +1,9 @@
-"""Repository round-trip + Alembic-миграция (issue #369, Seams for TDD #5):
-`alembic upgrade head` создаёт `carts`/`cart_lines` с `UNIQUE(user_id)`/
-`UNIQUE(cart_id, product_id)`/`CHECK(quantity > 0)`, совпадающую с
-ORM-метаданными; репозиторий — CRUD round-trip; конкурентная первая вставка
-одним и тем же `user_id` разрешается через `ON CONFLICT DO NOTHING` и создаёт
-ровно одну строку `carts` (D3 TOCTOU-тест)."""
+"""Repository round-trip + Alembic-миграция (issue #369 base + issue #372
+orders/reservation_outbox/lock columns, Seams for TDD #5/#9): полная история
+миграций прогоняется целиком, не по одной ревизии — diff против
+`Base.metadata` имеет смысл только относительно ГОЛОВЫ истории (тот же приём,
+что inventory-service's `test_inventory_repository.py` уже установил при
+добавлении своей второй ревизии, issue #370)."""
 
 import asyncio
 import uuid
@@ -27,15 +27,24 @@ from infrastructure.db.entity_configurations.models import CartModel
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 _VERSIONS_DIR = Path(__file__).parents[2] / "src/infrastructure/db/alembic/versions"
-_REVISION_FILE = "58907723bd17_carts_and_cart_lines.py"
-_REVISION = run_path(str(_VERSIONS_DIR / _REVISION_FILE))
+_BASE_REVISION = run_path(str(_VERSIONS_DIR / "58907723bd17_carts_and_cart_lines.py"))
+_CHECKOUT_REVISION = run_path(
+    str(_VERSIONS_DIR / "301b0587179e_orders_reservation_outbox_and_cart_.py")
+)
 _TABLES = ("cart_lines", "carts")
+_CHECKOUT_TABLES = (
+    "orders",
+    "order_lines",
+    "idempotency_keys",
+    "reservation_outbox",
+    "processed_messages",
+)
 
 
-def _run_revision(connection: Connection, action: str) -> None:
+def _run(revision: dict[str, Any], connection: Connection, action: str) -> None:
     migration_context = MigrationContext.configure(connection)
     with Operations.context(migration_context):
-        _REVISION[action]()
+        revision[action]()
 
 
 def _diff_against_orm_metadata(connection: Connection) -> list[Any]:
@@ -47,7 +56,17 @@ def _carts_pk_columns(connection: Connection) -> list[str]:
     return inspect(connection).get_pk_constraint("carts")["constrained_columns"]
 
 
-async def test_alembic_upgrade_creates_carts_and_cart_lines_and_downgrade_reverts(
+def _idempotency_keys_pk_columns(connection: Connection) -> list[str]:
+    return inspect(connection).get_pk_constraint("idempotency_keys")[
+        "constrained_columns"
+    ]
+
+
+def _order_lines_foreign_keys(connection: Connection) -> list[Any]:
+    return inspect(connection).get_foreign_keys("order_lines")
+
+
+async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_reverts(
     db_engine: AsyncEngine,
 ) -> None:
     # upgrade/diff/downgrade внутри ОДНОЙ транзакции, откатываемой в конце —
@@ -56,25 +75,43 @@ async def test_alembic_upgrade_creates_carts_and_cart_lines_and_downgrade_revert
     async with db_engine.connect() as connection:
         await connection.begin()
         try:
-            for table in _TABLES:
+            for table in (*_CHECKOUT_TABLES, *_TABLES):
                 await connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
 
-            await connection.run_sync(lambda conn: _run_revision(conn, "upgrade"))
+            await connection.run_sync(lambda conn: _run(_BASE_REVISION, conn, "upgrade"))
+            await connection.run_sync(
+                lambda conn: _run(_CHECKOUT_REVISION, conn, "upgrade")
+            )
 
             pk_columns = await connection.run_sync(_carts_pk_columns)
             assert pk_columns == ["id"]
+            idempotency_keys_pk = await connection.run_sync(
+                _idempotency_keys_pk_columns
+            )
+            assert set(idempotency_keys_pk) == {"user_id", "key"}
+            order_lines_fks = await connection.run_sync(_order_lines_foreign_keys)
+            assert any(
+                fk["referred_table"] == "orders"
+                and fk["constrained_columns"] == ["order_id"]
+                for fk in order_lines_fks
+            )
 
             diffs = await connection.run_sync(_diff_against_orm_metadata)
             assert diffs == []
 
-            await connection.run_sync(lambda conn: _run_revision(conn, "downgrade"))
+            await connection.run_sync(
+                lambda conn: _run(_CHECKOUT_REVISION, conn, "downgrade")
+            )
+            await connection.run_sync(
+                lambda conn: _run(_BASE_REVISION, conn, "downgrade")
+            )
 
             remaining_tables = await connection.scalar(
                 text(
                     "SELECT count(*) FROM information_schema.tables "
                     "WHERE table_schema = 'public' AND table_name = ANY(:tables)"
                 ),
-                {"tables": list(_TABLES)},
+                {"tables": [*_TABLES, *_CHECKOUT_TABLES]},
             )
             assert remaining_tables == 0
         finally:
@@ -232,3 +269,53 @@ async def test_get_or_create_concurrent_calls_create_exactly_one_cart_row(
             await connection.execute(
                 text("DELETE FROM carts WHERE user_id = :user_id"), {"user_id": user_id}
             )
+
+
+async def test_lock_for_checkout_round_trips_locked_by_order_id(
+    db_session: AsyncSession,
+) -> None:
+    repo = CartRepository(db_session)
+    user_id = uuid.uuid4()
+    cart = await repo.get_or_create_for_user(user_id)
+    cart.add_line(
+        line_id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, now=datetime.now(UTC)
+    )
+    order_id = uuid.uuid4()
+    cart.lock_for_checkout(order_id=order_id)
+    await repo.save(cart)
+    await db_session.flush()
+
+    fetched = await repo.get_locked_for_user(user_id)
+
+    assert fetched is not None
+    assert fetched.lines[0].locked_by_order_id == order_id
+
+
+async def test_get_locked_by_order_finds_the_owning_cart(
+    db_session: AsyncSession,
+) -> None:
+    repo = CartRepository(db_session)
+    user_id = uuid.uuid4()
+    cart = await repo.get_or_create_for_user(user_id)
+    cart.add_line(
+        line_id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, now=datetime.now(UTC)
+    )
+    order_id = uuid.uuid4()
+    cart.lock_for_checkout(order_id=order_id)
+    await repo.save(cart)
+    await db_session.flush()
+
+    owner = await repo.get_locked_by_order(order_id)
+
+    assert owner is not None
+    assert owner.user_id == user_id
+
+
+async def test_get_locked_by_order_returns_none_for_unknown_order(
+    db_session: AsyncSession,
+) -> None:
+    repo = CartRepository(db_session)
+
+    owner = await repo.get_locked_by_order(uuid.uuid4())
+
+    assert owner is None

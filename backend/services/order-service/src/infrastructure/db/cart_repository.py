@@ -42,6 +42,29 @@ class CartRepository:
         )
         return await self._to_domain(row) if row is not None else None
 
+    async def get_locked_for_user(self, user_id: uuid.UUID) -> Cart | None:
+        # issue #372, D5/Risk 4: `FOR UPDATE` держит блокировку строки
+        # `carts` на время checkout-транзакции — закрывает TOCTOU-гонку
+        # двух параллельных checkout одного пользователя.
+        row = await self.session.scalar(
+            select(CartModel).where(CartModel.user_id == user_id).with_for_update()
+        )
+        return await self._to_domain(row) if row is not None else None
+
+    async def get_locked_by_order(self, order_id: uuid.UUID) -> Cart | None:
+        line_row = await self.session.scalar(
+            select(CartLineModel).where(
+                CartLineModel.locked_by_order_id == order_id
+            )
+        )
+        if line_row is None:
+            return None
+        cart_row = await self.session.scalar(
+            select(CartModel).where(CartModel.id == line_row.cart_id).with_for_update()
+        )
+        assert cart_row is not None, "cart_lines.cart_id is a NOT NULL foreign key"
+        return await self._to_domain(cart_row)
+
     async def get_line_owner(self, line_id: uuid.UUID) -> Cart | None:
         line_row = await self.session.scalar(
             select(CartLineModel).where(CartLineModel.id == line_id)
@@ -74,6 +97,8 @@ class CartRepository:
                 self.session.add(_to_line_model(cart.id.value, line))
             else:
                 existing_row.quantity = line.quantity
+                existing_row.locked_by_order_id = line.locked_by_order_id
+                existing_row.unavailable_reason = line.unavailable_reason
 
     async def _to_domain(self, row: CartModel) -> Cart:
         line_rows = list(
@@ -94,6 +119,8 @@ class CartRepository:
                     product_id=line_row.product_id,
                     quantity=line_row.quantity,
                     added_at=line_row.added_at,
+                    locked_by_order_id=line_row.locked_by_order_id,
+                    unavailable_reason=line_row.unavailable_reason,
                 )
                 for line_row in line_rows
             ],
@@ -108,6 +135,8 @@ def _to_line_model(cart_id: uuid.UUID, line: CartLine) -> CartLineModel:
         product_id=line.product_id,
         quantity=line.quantity,
         added_at=line.added_at,
+        locked_by_order_id=line.locked_by_order_id,
+        unavailable_reason=line.unavailable_reason,
     )
 
 
