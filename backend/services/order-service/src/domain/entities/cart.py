@@ -12,6 +12,11 @@ from domain.value_objects.cart_id import CartId
 
 _MISSING = object()
 
+# issue #372, D7: единственная причина, по которой строка остаётся в Cart
+# после частичного резерва, — `InventoryReserved.unavailable_lines` не несёт
+# текстовый reason, только (product_id, requested_quantity).
+UNAVAILABLE_REASON_INSUFFICIENT_STOCK = "insufficient_stock"
+
 
 class Cart(Entity[CartId]):
     """Агрегат серверной корзины (issue #369). Один `Cart` на пользователя
@@ -64,6 +69,10 @@ class Cart(Entity[CartId]):
 
         existing = self._line_by_product_id(product_id)
         if existing is not None:
+            # issue #372, D3: строка, вошедшая в Checkout Selection, не
+            # может мутироваться до терминального результата Saga.
+            if existing.locked_by_order_id is not None:
+                return Result[CartLine].fail(CartErrors.line_locked())
             # D4: повторное добавление того же товара увеличивает quantity
             # уже существующей строки, а не создаёт отдельную запись.
             existing.quantity += quantity
@@ -84,6 +93,8 @@ class Cart(Entity[CartId]):
         line = self._line_by_id(line_id)
         if line is None:
             return Result[CartLine].fail(CartErrors.line_not_found())
+        if line.locked_by_order_id is not None:
+            return Result[CartLine].fail(CartErrors.line_locked())
 
         line.quantity = quantity
         return Result[CartLine].ok(line)
@@ -92,9 +103,43 @@ class Cart(Entity[CartId]):
         line = self._line_by_id(line_id)
         if line is None:
             return Result[None].fail(CartErrors.line_not_found())
+        if line.locked_by_order_id is not None:
+            return Result[None].fail(CartErrors.line_locked())
 
         self.lines.remove(line)
         return Result[None].ok(None)
+
+    def lock_for_checkout(self, *, order_id: uuid.UUID) -> None:
+        """issue #372, D3/D5: фиксирует Checkout Selection — блокирует все
+        текущие строки корзины на выбранный заказ, атомарно в одной
+        транзакции с созданием `Order` (вызывающий отвечает за commit)."""
+        for line in self.lines:
+            line.locked_by_order_id = order_id
+
+    def unlock_all(self, *, order_id: uuid.UUID) -> None:
+        """issue #372, D7 п.1: нулевой результат резерва — просто снимает
+        блокировку, не трогая состав корзины/`unavailable_reason` (AC4)."""
+        for line in self.lines:
+            if line.locked_by_order_id == order_id:
+                line.locked_by_order_id = None
+
+    def resolve_partial_reservation(
+        self, *, order_id: uuid.UUID, confirmed_product_ids: frozenset[uuid.UUID]
+    ) -> None:
+        """issue #372, D7 п.2: подтверждённые строки становятся Order lines
+        и физически удаляются из корзины; недоступные — разблокируются и
+        помечаются причиной (AC5)."""
+        remaining: list[CartLine] = []
+        for line in self.lines:
+            if line.locked_by_order_id != order_id:
+                remaining.append(line)
+                continue
+            if line.product_id in confirmed_product_ids:
+                continue
+            line.locked_by_order_id = None
+            line.unavailable_reason = UNAVAILABLE_REASON_INSUFFICIENT_STOCK
+            remaining.append(line)
+        self.lines = remaining
 
     def _line_by_id(self, line_id: uuid.UUID) -> CartLine | None:
         for line in self.lines:
