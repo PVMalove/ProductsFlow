@@ -30,7 +30,18 @@ class ReservationRepository:
         self.session = session
 
     async def get_by_order_id(self, order_id: uuid.UUID) -> Reservation | None:
-        row = await self.session.get(ReservationModel, order_id)
+        # `FOR UPDATE` — тот же дисциплина блокировок, что `claim_expired()`
+        # (D6) и `InventoryRepository.reserve()`/`release()` (issue #367):
+        # без неё allocate()'s read-then-save гонялся бы с TTL-sweep'ом
+        # (code-review finding, retry dispatch #373) — plain `session.get()`
+        # не блокировался бы на строке, уже захваченной sweep'ом `FOR UPDATE`,
+        # и sweep'а EXPIRED-запись могла быть молча потеряна под allocate's
+        # ALLOCATED-перезаписью (lost update).
+        row = await self.session.scalar(
+            select(ReservationModel)
+            .where(ReservationModel.order_id == order_id)
+            .with_for_update()
+        )
         if row is None:
             return None
         return await self._to_domain(row)

@@ -128,3 +128,21 @@ def test_adjust_rejects_a_delta_that_would_leave_quantity_below_reserved() -> No
     assert result.is_err
     assert result.error.code == "negative_stock_adjustment"
     assert inventory.quantity == 10
+
+
+def test_adjust_rejects_a_delta_below_reserved_covers_allocated_too() -> None:
+    """Тот же guard, что выше, покрывает и случай ALLOCATED-резерва (issue
+    #373): `Inventory` не знает про суб-статус ALLOCATED резерва — `reserved`
+    уже включает сумму живых резервов (ACTIVE + ALLOCATED) независимо от него,
+    поэтому инвариант «остаток не может опуститься ниже суммы живых
+    reservation/allocation» выполняется без изменений в самом `Inventory`."""
+    inventory = Inventory.create_zero(uuid.uuid4())
+    inventory.adjust(10)
+    inventory.pull_events()
+    inventory.reserve(8)  # эквивалент резерва, который затем аллоцирован
+
+    result = inventory.adjust(-5)
+
+    assert result.is_err
+    assert result.error.code == "negative_stock_adjustment"
+    assert inventory.quantity == 10

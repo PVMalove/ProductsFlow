@@ -1,6 +1,7 @@
 # ruff: noqa: E501
-"""Message-driven адаптеры `inventory.reserve.v1`/`inventory.release.v1` —
-`CommandHandler`-форма (`kernel_platform.commands.CommandHandler`), мирруют
+"""Message-driven адаптеры `inventory.reserve.v1`/`inventory.release.v1`/
+`inventory.allocate.v1` (issue #373) — `CommandHandler`-форма
+(`kernel_platform.commands.CommandHandler`), мирруют
 `api/worker.py::handle_product_event` (issue #367, находка 3): чистая функция
 `(session, command) -> None`, инстанцирует репозитории напрямую поверх
 переданной сессии — никакого UoW/`.commit()`, транзакцией управляет
@@ -14,6 +15,10 @@ from typing import Any
 from kernel_platform.commands import Command, CommandHandler
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.commands.allocate_inventory_reservation import (
+    AllocateInventoryReservationCommand,
+    AllocateInventoryReservationCommandHandler,
+)
 from application.commands.release_inventory_reservation import (
     ReleaseInventoryReservationCommand,
     ReleaseInventoryReservationCommandHandler,
@@ -49,6 +54,13 @@ def _parse_release_payload(
     return ReleaseInventoryReservationCommand(order_id=order_id, reason="manual")
 
 
+def _parse_allocate_payload(
+    payload: dict[str, Any],
+) -> AllocateInventoryReservationCommand:
+    order_id = uuid.UUID(str(payload["order_id"]))
+    return AllocateInventoryReservationCommand(order_id=order_id)
+
+
 async def handle_reserve_command(session: AsyncSession, command: Command) -> None:
     reserve_command = _parse_reserve_payload(command.payload)
     handler = ReserveInventoryLinesCommandHandler(
@@ -75,10 +87,21 @@ async def handle_release_command(session: AsyncSession, command: Command) -> Non
     )
 
 
-# Единый реестр command_type -> handler (issue #370, Seams for TDD #6) —
-# `api/worker.py::main()` регистрирует консьюмеры по нему, тест
-# `test_reservation_worker_seams.py` ловит забытую регистрацию.
+async def handle_allocate_command(session: AsyncSession, command: Command) -> None:
+    allocate_command = _parse_allocate_payload(command.payload)
+    handler = AllocateInventoryReservationCommandHandler(ReservationRepository(session))
+    await handler.execute(allocate_command)
+    logger.info(
+        "inventory-worker: processed inventory.allocate.v1 for order_id=%s",
+        allocate_command.order_id,
+    )
+
+
+# Единый реестр command_type -> handler (issue #370, Seams for TDD #6; issue
+# #373 добавляет allocate) — `api/worker.py::main()` регистрирует консьюмеры
+# по нему, тест `test_reservation_worker_seams.py` ловит забытую регистрацию.
 COMMAND_HANDLERS: dict[str, CommandHandler] = {
     "inventory.reserve.v1": handle_reserve_command,
     "inventory.release.v1": handle_release_command,
+    "inventory.allocate.v1": handle_allocate_command,
 }
