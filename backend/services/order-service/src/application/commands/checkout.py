@@ -68,7 +68,9 @@ class CheckoutCommandHandler:
                         command.idempotency_key,
                         command.actor.id,
                     )
-                    return Result[OrderView].fail(OrderErrors.idempotency_key_conflict())
+                    return Result[OrderView].fail(
+                        OrderErrors.idempotency_key_conflict()
+                    )
 
                 order = await self._uow.orders.get_by_id(existing.order_id)
                 assert order is not None, (

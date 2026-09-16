@@ -25,13 +25,18 @@ def _locked_cart_and_order(
     cart = Cart.create(CartId.new_id(), user_id=USER_ID)
     for product_id in product_ids:
         cart.add_line(
-            line_id=uuid.uuid4(), product_id=product_id, quantity=1, now=datetime.now(UTC)
+            line_id=uuid.uuid4(),
+            product_id=product_id,
+            quantity=1,
+            now=datetime.now(UTC),
         )
     order = Order.create(
         uuid.uuid4(),
         user_id=USER_ID,
         lines=[
-            OrderLine(id=uuid.uuid4(), product_id=pid, quantity=1, unit_price_kopecks=100)
+            OrderLine(
+                id=uuid.uuid4(), product_id=pid, quantity=1, unit_price_kopecks=100
+            )
             for pid in product_ids
         ],
     )
@@ -62,15 +67,19 @@ async def test_zero_confirmed_marks_order_failed_and_unlocks_cart_untouched() ->
     handler = ApplyReservationResultCommandHandler(order_repo, cart_repo)
 
     await handler.execute(
-        ApplyReservationResultCommand(order_id=order_id, confirmed_product_ids=frozenset())
+        ApplyReservationResultCommand(
+            order_id=order_id, confirmed_product_ids=frozenset()
+        )
     )
 
     saved_order = await order_repo.get_by_id(order_id)
+    assert saved_order is not None
     assert saved_order.status is OrderStatus.FAILED
     assert saved_order.failure_reason == "NO_ITEMS_AVAILABLE"
     assert len(saved_order.lines) == 1  # история сохранена, не тронута
 
     saved_cart = await cart_repo.get_for_user(USER_ID)
+    assert saved_cart is not None
     assert len(saved_cart.lines) == 1  # ни одна строка не удалена
     assert saved_cart.lines[0].locked_by_order_id is None
     assert saved_cart.lines[0].unavailable_reason is None
@@ -91,10 +100,12 @@ async def test_partial_confirmed_trims_order_and_splits_cart() -> None:
     )
 
     saved_order = await order_repo.get_by_id(order_id)
+    assert saved_order is not None
     assert saved_order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
     assert [line.product_id for line in saved_order.lines] == [confirmed_id]
 
     saved_cart = await cart_repo.get_for_user(USER_ID)
+    assert saved_cart is not None
     assert len(saved_cart.lines) == 1
     assert saved_cart.lines[0].product_id == unavailable_id
     assert saved_cart.lines[0].locked_by_order_id is None
@@ -117,10 +128,13 @@ async def test_redelivery_of_the_same_fact_is_a_no_op() -> None:
     # Redelivery с ДРУГИМ содержимым факта (было бы неправильно применить
     # его повторно) — saga_step guard в Order делает execute no-op.
     await handler.execute(
-        ApplyReservationResultCommand(order_id=order_id, confirmed_product_ids=frozenset())
+        ApplyReservationResultCommand(
+            order_id=order_id, confirmed_product_ids=frozenset()
+        )
     )
 
     assert len(cart_repo.save_calls) == cart_saves_after_first
     saved_order = await order_repo.get_by_id(order_id)
+    assert saved_order is not None
     assert saved_order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
     assert [line.product_id for line in saved_order.lines] == [confirmed_id]

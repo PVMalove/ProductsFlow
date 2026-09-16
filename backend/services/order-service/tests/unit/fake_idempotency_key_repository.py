@@ -10,9 +10,7 @@ class FakeIdempotencyKeyRepository:
         self._by_key: dict[tuple[uuid.UUID, str], IdempotencyKeyRecord] = {}
         self.save_calls: list[IdempotencyKeyRecord] = []
 
-    async def get(
-        self, user_id: uuid.UUID, key: str
-    ) -> IdempotencyKeyRecord | None:
+    async def get(self, user_id: uuid.UUID, key: str) -> IdempotencyKeyRecord | None:
         return self._by_key.get((user_id, key))
 
     async def save(self, record: IdempotencyKeyRecord) -> None:

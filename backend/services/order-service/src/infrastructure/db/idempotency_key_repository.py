@@ -16,9 +16,7 @@ class IdempotencyKeyRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get(
-        self, user_id: uuid.UUID, key: str
-    ) -> IdempotencyKeyRecord | None:
+    async def get(self, user_id: uuid.UUID, key: str) -> IdempotencyKeyRecord | None:
         row = await self.session.scalar(
             select(IdempotencyKeyModel).where(
                 IdempotencyKeyModel.user_id == user_id,

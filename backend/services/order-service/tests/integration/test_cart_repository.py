@@ -78,7 +78,9 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
             for table in (*_CHECKOUT_TABLES, *_TABLES):
                 await connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
 
-            await connection.run_sync(lambda conn: _run(_BASE_REVISION, conn, "upgrade"))
+            await connection.run_sync(
+                lambda conn: _run(_BASE_REVISION, conn, "upgrade")
+            )
             await connection.run_sync(
                 lambda conn: _run(_CHECKOUT_REVISION, conn, "upgrade")
             )

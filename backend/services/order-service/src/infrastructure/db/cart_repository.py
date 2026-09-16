@@ -53,9 +53,7 @@ class CartRepository:
 
     async def get_locked_by_order(self, order_id: uuid.UUID) -> Cart | None:
         line_row = await self.session.scalar(
-            select(CartLineModel).where(
-                CartLineModel.locked_by_order_id == order_id
-            )
+            select(CartLineModel).where(CartLineModel.locked_by_order_id == order_id)
         )
         if line_row is None:
             return None

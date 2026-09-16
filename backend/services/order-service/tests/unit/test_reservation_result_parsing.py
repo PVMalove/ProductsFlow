@@ -18,7 +18,9 @@ def test_parse_reservation_result_extracts_order_id_and_confirmed_product_ids() 
         {
             "order_id": str(order_id),
             "expires_at": "2026-01-01T00:00:00+00:00",
-            "confirmed_lines": [{"product_id": str(confirmed_product_id), "quantity": 1}],
+            "confirmed_lines": [
+                {"product_id": str(confirmed_product_id), "quantity": 1}
+            ],
             "unavailable_lines": [
                 {"product_id": str(uuid.uuid4()), "requested_quantity": 2}
             ],
@@ -38,7 +40,9 @@ def test_parse_reservation_result_zero_confirmed_lines_is_an_empty_set() -> None
             "order_id": str(order_id),
             "expires_at": "2026-01-01T00:00:00+00:00",
             "confirmed_lines": [],
-            "unavailable_lines": [{"product_id": str(uuid.uuid4()), "requested_quantity": 1}],
+            "unavailable_lines": [
+                {"product_id": str(uuid.uuid4()), "requested_quantity": 1}
+            ],
         }
     ).encode()
 

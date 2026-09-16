@@ -14,7 +14,9 @@ from infrastructure.security.auth import RequiredActiveUser
 router = APIRouter(prefix="/api/v1/checkout", tags=["checkout"])
 
 
-@router.post("", response_model=ApiResponse[OrderView], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ApiResponse[OrderView], status_code=status.HTTP_201_CREATED
+)
 async def checkout(
     auth: RequiredActiveUser,
     handler: CheckoutDI,

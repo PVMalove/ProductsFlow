@@ -37,7 +37,8 @@ class FakeIdentityClient:
     async def fetch_current_user(self, token: str) -> CurrentUserInfo:
         if self.unavailable:
             raise httpx.ConnectError(
-                "identity-service недоступен", request=httpx.Request("GET", "http://identity")
+                "identity-service недоступен",
+                request=httpx.Request("GET", "http://identity"),
             )
         info = self._users.get(token)
         if info is None:
