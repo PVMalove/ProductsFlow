@@ -17,7 +17,7 @@ from contracts.order import OrderView
 from domain.checkout_fingerprint import compute_fingerprint
 from domain.entities.idempotency_key import IdempotencyKeyRecord
 from domain.entities.order import Order, OrderLine
-from domain.errors import OrderErrors
+from domain.errors import CartErrors, OrderErrors
 from domain.unit_of_work import CheckoutUnitOfWork
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,20 @@ class CheckoutCommandHandler:
                     order.id,
                 )
                 return Result[OrderView].ok(OrderView.from_domain(order))
+
+            if cart.has_locked_lines():
+                # issue #372 (code-review fix): другой, ещё не терминальный
+                # заказ уже держит Checkout Selection этой корзины —
+                # `lock_for_checkout` ниже иначе молча переназначил бы
+                # блокировку на новый заказ (см. code-review report,
+                # blocker "re-locking cart lines already owned by a
+                # still-pending order").
+                logger.warning(
+                    "Checkout отклонён: корзина user_id=%s уже заблокирована "
+                    "другим незавершённым заказом",
+                    command.actor.id,
+                )
+                return Result[OrderView].fail(CartErrors.line_locked())
 
             quoted_lines: list[OrderLine] = []
             for line in cart.lines:

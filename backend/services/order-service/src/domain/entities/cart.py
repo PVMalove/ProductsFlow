@@ -116,6 +116,17 @@ class Cart(Entity[CartId]):
         for line in self.lines:
             line.locked_by_order_id = order_id
 
+    def has_locked_lines(self) -> bool:
+        """issue #372 (code-review fix): true, если хотя бы одна строка уже
+        заблокирована активным (нетерминальным) Checkout Selection'ом —
+        терминальное разрешение Saga всегда снимает блокировку (`unlock_all`/
+        `resolve_partial_reservation`), поэтому непустой
+        `locked_by_order_id` однозначно означает ещё не завершённый заказ.
+        `CheckoutCommandHandler` использует это, чтобы отклонить второй,
+        последовательный checkout той же корзины вместо того, чтобы
+        `lock_for_checkout` молча переназначил блокировку на новый заказ."""
+        return any(line.locked_by_order_id is not None for line in self.lines)
+
     def unlock_all(self, *, order_id: uuid.UUID) -> None:
         """issue #372, D7 п.1: нулевой результат резерва — просто снимает
         блокировку, не трогая состав корзины/`unavailable_reason` (AC4)."""
