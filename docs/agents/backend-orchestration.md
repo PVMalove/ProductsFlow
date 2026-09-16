@@ -12,6 +12,22 @@
 Используйте её, когда у задачи есть независимые backend-границы или обязательная независимая
 проверка. Для обычной одной задачи достаточно стандартного pipeline `pvmalove-suite`.
 
+## Владение правилами
+
+`/implement` — короткий контракт coordinator-а: он сохраняет порядок handoff
+`architect → developer → code-review → qa → publish`, явный approval перед каждым dispatch,
+model self-report и watchdog. Он не является второй копией процедуры.
+
+Полные правила принадлежат устанавливаемым модулям: `playbook.md` — lifecycle, authority,
+immutable brief, evidence, параллелизм и метрики; `roles/` — границы и доказательство каждой роли;
+`coordinator.py` — проверяемые переходы и audit; `orca_adapter.py` — только transport. При
+противоречии приоритет у этих module-owned guidance и immutable records, а не у runtime adapter-а
+или краткого skill.
+
+Токены — только наблюдаемая provider- или runtime-telemetry с источником и missing-data note.
+Role self-report, completion report и оценка coordinator-а не являются token telemetry и не могут
+заполнять отсутствующее значение.
+
 ## Что устанавливается
 
 При выборе capability в проект копируются:
@@ -59,8 +75,9 @@ python3 harness/bin/harness diff /path/to/repository
 python3 harness/bin/harness update /path/to/repository --capability backend-orchestration
 ```
 
-`update` не перезаписывает изменённые managed files без `--force`. Seed-документы тоже сохраняются;
-`--force-seed-files` перезаписывает их только после проверки локальных изменений. После любого
+`update` не перезаписывает изменённые managed files без явного флага. `--force-managed-files`
+обновляет только managed snapshot и сохраняет seed-документы; `--force-seed-files` перезаписывает
+только seed, а `--force` объединяет оба действия. После любого
 включения или изменения конфигурации выполните:
 
 ```bash
@@ -136,19 +153,25 @@ runtime-наборы (`codex`, `claude` и т.п.); в каждом обязат
     "payments": {"paths": ["services/payments/**"]}
   },
   "concurrency_budget": 1,
+  "developer_verification_commands": ["python -m pytest tests/unit"],
   "verification_commands": ["python -m pytest"]
 }
 ```
 
-`transport` — необязательное поле assignment plan и выбирается для каждой роли отдельно: `orca`
-(по умолчанию) запускает isolated worker через `orca_adapter.py`, `in-process` исполняет роль как
+`transport` — необязательное поле assignment plan и выбирается для каждой роли отдельно: `in-process`
+(по умолчанию) исполняет роль как
 субагента текущей coordinator-сессии в worktree того же batch. Оба варианта получают один и тот же
 immutable brief, обязаны пройти model self-report и вернуть completion report по общим правилам,
 поэтому логика coordinator-а от транспорта не зависит. `harness health` проверяет допустимость
-значения. Для `in-process` `dispatch send` только фиксирует handoff: следующим действием coordinator
+значения. Для изолированного worker укажите `"transport": "orca"` явно. Для `in-process` `dispatch send` только фиксирует handoff: следующим действием coordinator
 немедленно запускает субагента по уже immutable brief, до любого поиска старых report/template или
 конфигурации. Architect собирает лишь targeted evidence для решения; полный набор
-`verification_commands` выполняют developer и clean-room QA, а не read-only baseline.
+`verification_commands` выполняет clean-room QA, а developer получает
+`developer_verification_commands`. Это необязательное поле: без него сохраняется совместимый
+режим, в котором developer получает полный список. Задавайте в нём быстрые task-scoped проверки,
+а в `verification_commands` — независимый полный gate. Code-review получает полный список, но
+запускает каждую команду через `test_summary.py`: в report остаются исходная команда и bounded
+summary, а санитизированный полный лог доступен только для упавшей проверки.
 
 Зона — не подсказка, а граница: write-роль изменяет только разрешённые пути своей зоны. Если роли
 нужен более узкий scope, задайте ей `write_paths`: brief и completion report будут проверяться по
@@ -158,6 +181,37 @@ immutable brief, обязаны пройти model self-report и вернуть
 `concurrency_budget` только после явного решения coordinator-а. Сначала прогоните `harness health`:
 он проверит JSON, существование profile/zone, совместимость capability, fallback и режим
 `code-review`.
+
+### Discovery Context и Context Package
+
+Discovery Pipeline переносит проверенный контекст от проектирования к dispatch. `/grilling` ведёт
+`Live Artifact` с кандидатными путями, но добавляет путь только после явного согласия пользователя.
+`/to-spec` сохраняет утверждённый список в эпике под `## Relevant Files (Discovery Context)`, а
+`/to-tickets` назначает каждый путь подходящему tracer-bullet тикету и строит path-only filtered Repo
+Map. Один cheap advisory-вызов может добавить только точные зависимости из этого Repo Map; его
+вывод не является evidence или authority.
+
+Перед первым dispatch coordinator может зарегистрировать детерминированный Context Package в
+ledger:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . context-package register \
+  --batch <batch-id> --candidate-commit <candidate-sha> \
+  --symbol-graph-depth 1 --min-starting-files 5 --max-starting-files 10 \
+  --max-package-size-bytes 200000
+```
+
+`context_builder.py` не вызывает LLM и работает по pinned base/candidate commits. Package содержит
+точный diff, 5–10 стартовых файлов с причинами, bounded symbol/dependency graph, связанные тесты,
+краткие карточки ADR/precedent, SHA-256 каждого включённого файла и размер. Для Python AST извлекает
+сигнатуры прямых локальных зависимостей; текущий Discovery-контракт ограничивает разворачивание
+одним уровнем. Неподдержанный формат получает первые 30 строк как deterministic fallback. При
+превышении лимита сборка завершается ошибкой, а не молча обрезает пакет.
+
+Запись package immutable, versioned и hash-проверяема. Перед каждым новым dispatch coordinator
+сверяет её base/hash с текущим состоянием и сохраняет результат `fresh` или `stale`; в текущей
+shadow-фазе stale только surfaced coordinator-у и ещё не блокирует создание dispatch. Package не
+заменяет immutable brief и не отменяет обязательные self-report, heartbeat, review или QA.
 
 ## 3. Выбрать роли и спланировать batch
 
@@ -207,6 +261,14 @@ batch в `awaiting-approval` и оставляет dispatch в `reported` до �
      --batch <batch-id> --approved-by 'имя утверждающего' \
      --approved-at 2026-09-09T12:00:00Z
    ```
+
+   `batch create` сначала выполняет `git fetch origin <ref>` — `--integration-ref`, если он передан,
+   иначе `base_branch` проекта (для epic-less задач) — и фиксирует полученную вершину как
+   `base_commit`/`integration_base_commit`; необновлённый локальный HEAD никогда не используется как
+   замена. Перед созданием `code-review`- или `publish`-dispatch coordinator обязательно повторяет
+   эту сверку: если `origin/<ref>` с тех пор сдвинулся, dispatch отклоняется, next_action переходит в
+   `developer`, а снять блокировку может только новый developer dispatch (rebase) — его commit
+   автоматически становится новым `candidate_commit` и заново проходит risk assessment.
 2. Сверить активные batch, пересечения зон, writer и quality-gate lane. При конфликте оставить
    batch `blocked`, а не запускать параллельную запись.
 3. Создать и отдельно утвердить architect dispatch, принять его отчёт, и только потом — developer
@@ -282,6 +344,16 @@ dispatch как `abandoned` и записывает решение рядом с
 brief, отчёты и QA-артефакты остаются на месте. Повторно применить её к уже терминальному batch
 нельзя.
 
+Если ошибка найдена **до** передачи brief runtime-у, не abandon batch. Отмените только этот
+неотправленный dispatch: immutable brief останется в audit trail, а batch вернётся в
+`awaiting-approval` и сможет получить исправленный dispatch.
+
+```bash
+python .harness/orchestration/coordinator.py --repo . dispatch cancel \
+  --dispatch <dispatch-id> --approved-by 'имя утверждающего' \
+  --approved-at 2026-09-11T06:00:00Z --reason 'исправить назначение до запуска worker'
+```
+
 Править файлы в `.harness/orchestration/state/` руками не следует ни при каких обстоятельствах: эти
 записи и есть доказательство, ради которого существует весь маршрут. Если штатной команды для вашего
 случая нет — это дефект инструмента, а не повод открыть редактор.
@@ -314,6 +386,71 @@ python .harness/orchestration/coordinator.py --repo . dispatch status \
 self-report, время последнего heartbeat, `silent_seconds` и признак `stale`. Это обобщение
 QA-lease-expiry на любой dispatch, а не только на clean-room QA lane. Stale — блокер, который
 coordinator выносит человеку: сам он состояние по таймауту не меняет.
+
+### Checkpoint и новая worker session
+
+Write-роль (developer, database-migrations, messaging-integration) может растянуть один dispatch на
+несколько worker session, если весь TDD-цикл в одну сессию раздувает её контекст. Read-only роль
+(architect, qa, code-review) — не может: попытка checkpoint для неё отклоняется сразу.
+
+Вместо completion report текущая worker session фиксирует неитоговый checkpoint — отдельную,
+hashed ledger-запись, которую нельзя перепутать с отчётом:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . dispatch checkpoint \
+  --file checkpoint.json
+```
+
+`checkpoint.json` обязан содержать ровно: `dispatch_id`, `commit_sha`, `changed_files`,
+`remaining_definition_of_done` (подмножество DoD approved dispatch), `passing_checks` (в формате
+`checks_run` completion report, команды — из approved `verification_commands`), `risks`, `blockers`
+и `context_package_id` — ссылку на последний зарегистрированный для batch Context Package, либо
+литеральный `not applicable — no context package registered`, если для batch его пока нет. Никаких
+чужих полей: ни сырой истории чата, ни логов прежних неудачных попыток. `checkpoint` требует уже
+подтверждённого self-report, переводит dispatch-status в `checkpointed` и не трогает outcome enum
+(`completed`/`blocked`/`failed`) — этот enum остаётся только у completion report.
+
+Новая worker session для того же dispatch ID стартует командой `dispatch resume`. Авторизация
+зависит от того, почему закончилась прежняя сессия:
+
+```bash
+# runtime adapter сообщил rate-limit termination — авторизация автоматическая
+python .harness/orchestration/coordinator.py --repo . dispatch resume --dispatch <dispatch-id> \
+  --termination-reason rate_limit
+
+# планируемый trigger (context limit / N TDD-циклов / большой failure log / законченный vertical
+# slice) — требуется явное coordinator decision
+python .harness/orchestration/coordinator.py --repo . dispatch resume --dispatch <dispatch-id> \
+  --trigger context-limit --measured-value 162000 --file continuation-facts.json \
+  --approved-by "project coordinator" --approved-at 2026-09-14T18:00:00Z
+```
+
+`--termination-reason`, распознанный как rate limit (`rate_limit`/`rate-limit`/`429`), авторизует
+новую сессию автоматически — новое решение человека/coordinator-а не требуется. Любая другая
+причина, включая отсутствующую или нераспознанную, трактуется как planned trigger — safe default
+в сторону approval, а не от него:
+
+- `--trigger` обязателен и должен быть одним из `context-limit`, `tdd-cycles`, `failure-log`,
+  `vertical-slice`.
+- для `context-limit`/`tdd-cycles`/`failure-log` `--measured-value` обязан быть не меньше
+  соответствующего порога `adaptive_continuation_policy` (`context_limit`/
+  `tdd_cycle_count`/`failure_log_bytes`) из `.harness/orchestration.json` — без явной конфигурации
+  используются задокументированные значения по умолчанию (150000 / 3 / 20000), а не зашитые
+  внутри порознь для каждого места.
+- `--file` обязан содержать JSON с `dispatch_id`, `remaining_definition_of_done`, `risks` и
+  `dependencies`, буквально совпадающими с последним checkpoint (первые два поля) и с dispatch
+  (`dependencies`); `blockers` в сравнение не входит — их формулировка может измениться между
+  сессиями без реального дрейфа scope/DoD/risks/dependencies. Расхождение — сигнал, что они реально
+  изменились: coordinator обязан закрыть текущий dispatch и открыть новый через обычный approval,
+  а не резюмировать этот.
+- авторизация записывается тем же `coordinator_decisions`, что accept/retry/block/fail/abandon/
+  cancel — новый тип записи не вводится.
+
+`resume` принимает только `checkpointed` dispatch, возвращает его в `dispatched` и отбрасывает
+предыдущий model self-report. Это значит, что новая сессия обязана заново пройти `dispatch
+self-report` и `dispatch heartbeat` — ровно так же, как при первом contact, — прежде чем следующий
+checkpoint или completion report будет принят. Круг замыкается тем же dispatch ID: checkpoint →
+`dispatch resume` → новая self-report/heartbeat → в итоге один completion report.
 
 ### Clean-room QA lane
 
@@ -371,6 +508,25 @@ batch до старта следующего. Ручной запуск по э�
 не меняй protected или integration branch.
 ```
 
+### Advisory tool call
+
+`.harness/orchestration/advisory.py` — дешёвый non-role CLI для чисто утилитарных подзадач:
+ранжирование файлов по keyword, сводка лога и грубая риск-подсказка. Он выполняется вне
+brief/report/self-report/heartbeat контракта: не является dispatch, не пишет ledger-запись и не
+импортирует `ledger.py`/`contract.py`/`coordinator.py`. Вывод эфемерен — печатается в stdout и
+пересчитывается заново при каждом вызове, нигде не сохраняется как ground truth для другого
+dispatch:
+
+```bash
+python .harness/orchestration/advisory.py rank-files --keyword payments -- services/payments/handler.py README.md
+python .harness/orchestration/advisory.py summarize-log --file qa-output.log
+python .harness/orchestration/advisory.py classify-risk --text "data migration for payments" --known-trigger data-migration
+```
+
+Его вывод — не авторизация. Coordinator/contract validation path не принимает advisory-вывод как
+основание создать dispatch, понизить риск, принять QA или изменить scope: единственный авторитетный
+источник риска остаётся `coordinator.py risk assess`.
+
 ## 5. Необязательный запуск через Orca
 
 `orca_adapter.py` — transport-only граница: он переводит **уже одобренный** JSON brief в Orca task и
@@ -381,8 +537,10 @@ isolated worker. Он не выбирает scope, не запускает check
 а branch соответствует `branch_pattern` из `.harness/project.json` и не является base или
 `integration/*`.
 
-Пример brief для write-роли. `verification_commands` должен буквально совпадать с массивом в
-`.harness/orchestration.json`; `write_paths` — буквально с путями выбранной зоны. Не добавляйте
+Пример brief для write-роли. Для developer work-dispatch `verification_commands` должен буквально
+совпадать с `developer_verification_commands` (либо с `verification_commands`, если focused-список
+не задан); для остальных ролей — с `verification_commands`. `write_paths` — буквально с путями
+выбранной зоны. Не добавляйте
 поля или значения, похожие на секреты.
 
 ```json
