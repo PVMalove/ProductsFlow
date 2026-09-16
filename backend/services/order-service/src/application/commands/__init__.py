@@ -4,6 +4,10 @@ from application.commands.add_cart_line import (
     AddCartLineCommand,
     AddCartLineCommandHandler,
 )
+from application.commands.apply_reservation_result import (
+    ApplyReservationResultCommand,
+    ApplyReservationResultCommandHandler,
+)
 from application.commands.checkout import CheckoutCommand, CheckoutCommandHandler
 from application.commands.remove_cart_line import (
     RemoveCartLineCommand,
@@ -17,6 +21,8 @@ from application.commands.update_cart_line_quantity import (
 __all__ = [
     "AddCartLineCommand",
     "AddCartLineCommandHandler",
+    "ApplyReservationResultCommand",
+    "ApplyReservationResultCommandHandler",
     "CheckoutCommand",
     "CheckoutCommandHandler",
     "RemoveCartLineCommand",
