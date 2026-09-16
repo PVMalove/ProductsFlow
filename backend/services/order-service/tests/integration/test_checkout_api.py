@@ -186,3 +186,48 @@ async def test_checkout_same_key_different_cart_conflicts(
 
     assert second.status_code == 409
     assert second.json()["error"]["code"] == "idempotency_key_conflict"
+
+
+async def test_checkout_rejects_a_second_fresh_key_while_cart_is_still_locked(
+    cart_client: httpx.AsyncClient,
+    identity_client: FakeIdentityClient,
+    catalog_client: FakeCatalogClient,
+) -> None:
+    identity_client.register("user-token", user_id=uuid.uuid4())
+    auth_headers = {"Authorization": "Bearer user-token"}
+    await _add_line(cart_client, auth_headers, uuid.uuid4())
+
+    first = await cart_client.post(
+        "/api/v1/checkout", headers={**auth_headers, "Idempotency-Key": "key-1"}
+    )
+    assert first.status_code == 201
+
+    # Пользователь добавляет ещё один, ранее отсутствовавший товар — это
+    # разрешено (`Cart.add_line` блокирует только слияние в уже
+    # заблокированную строку того же product_id) — и повторяет checkout со
+    # свежим Idempotency-Key, пока первый заказ ещё AWAITING_RESERVATION
+    # (issue #372, code-review fix: второй checkout не должен молча
+    # переназначить блокировку первого заказа на второй).
+    await _add_line(cart_client, auth_headers, uuid.uuid4())
+
+    second = await cart_client.post(
+        "/api/v1/checkout", headers={**auth_headers, "Idempotency-Key": "key-2"}
+    )
+
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "line_locked"
+
+    # Первый заказ не потерял свою блокировку: заблокированная строка
+    # по-прежнему отклоняет прямую CRUD-мутацию, обе строки по-прежнему
+    # присутствуют в Cart (ничего не мутировано отклонённым checkout).
+    cart = await cart_client.get("/api/v1/cart", headers=auth_headers)
+    lines = cart.json()["data"]["lines"]
+    assert len(lines) == 2
+    locked_line_id = lines[0]["id"]
+    update = await cart_client.patch(
+        f"/api/v1/cart/lines/{locked_line_id}",
+        json={"quantity": 9},
+        headers=auth_headers,
+    )
+    assert update.status_code == 409
+    assert update.json()["error"]["code"] == "line_locked"

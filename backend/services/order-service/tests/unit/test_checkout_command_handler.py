@@ -154,6 +154,32 @@ async def test_same_key_different_cart_conflicts() -> None:
     assert result.error.code == "idempotency_key_conflict"
 
 
+async def test_second_checkout_of_a_still_locked_cart_is_rejected() -> None:
+    cart = _cart_with_one_line()
+    product_id = cart.lines[0].product_id
+    catalog = FakeCatalogClient(prices_by_product_id={product_id: 4_500})
+    handler, uow = _handler(cart=cart, catalog=catalog)
+
+    first = await handler.execute(
+        CheckoutCommand(actor=ACTOR, idempotency_key="key-1", bearer_token="t")
+    )
+    assert first.is_ok
+    locked_order_id = cart.lines[0].locked_by_order_id
+
+    # Тот же Cart всё ещё заблокирован первым (нетерминальным) заказом;
+    # второй checkout со свежим Idempotency-Key не должен молча
+    # переназначить блокировку на новый заказ (issue #372, code-review fix).
+    result = await handler.execute(
+        CheckoutCommand(actor=ACTOR, idempotency_key="key-2", bearer_token="t")
+    )
+
+    assert result.is_err
+    assert result.error.code == "line_locked"
+    assert cart.lines[0].locked_by_order_id == locked_order_id
+    assert len(uow.orders.save_calls) == 1
+    assert len(uow.reservation_outbox.enqueue_calls) == 1
+
+
 async def test_different_key_is_independent_even_with_identical_cart() -> None:
     order_id = uuid.uuid4()
     product_id = uuid.uuid4()
