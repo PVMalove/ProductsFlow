@@ -35,3 +35,14 @@ class CartAccessDeniedError(ApplicationError):
     code = "CART_ACCESS_DENIED"
     message = "Нет прав на эту строку корзины"
     status_code = HTTPStatus.FORBIDDEN
+
+
+class CatalogUnavailableError(ApplicationError):
+    """catalog-service недоступен (сеть/timeout/5xx) либо отказал по
+    бизнес-причине конкретной строке (404/409 — товар удалён/скрыт/
+    деактивирован) во время checkout quote (issue #372, D1/D9, Scope
+    clarification #2 — оба случая блокируют весь checkout одинаково)."""
+
+    code = "CATALOG_UNAVAILABLE"
+    message = "catalog-service недоступен"
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
