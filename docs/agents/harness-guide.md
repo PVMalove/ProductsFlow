@@ -45,7 +45,7 @@ cd claude-agent-harness
 |---|---|---|
 | Пишет на диск | Нет — только отчёт | Да |
 | Код выхода | `0` чисто, `1` — есть дрейф | `0` при успехе, иначе падает |
-| Локальные правки managed-файлов | Показывает как `local_changed`/`conflict`, не трогает | Без `--force` отказывается и показывает то же самое; с `--force` — перезаписывает |
+| Локальные правки managed-файлов | Показывает как `local_changed`/`conflict`, не трогает | Без флага отказывается; `--force-managed-files` перезаписывает snapshot, `--force` — snapshot и seed |
 | Когда | Быстрая проверка перед чем угодно | Когда решили реально подтянуть новую версию capability |
 
 | | `project-foundation` | `pvmalove-suite` |
@@ -125,10 +125,10 @@ python3 harness/bin/harness diff /path/to/repository [--json]
 **`update` — подтянуть новую версию харнесса поверх существующей установки** (апстрим сдвинулся, или изменились первопартийные скиллы):
 
 ```bash
-python3 harness/bin/harness update /path/to/repository --capability pvmalove-suite [--force] [--force-seed-files]
+python3 harness/bin/harness update /path/to/repository --capability pvmalove-suite [--force-managed-files] [--force-seed-files] [--force]
 ```
 
-Без `--force` отказывается перезаписывать локально изменённые managed skills — сначала покажет их (как `diff`) и остановится. `--force` перезаписывает managed snapshot, включая удаление файлов, которых больше нет в текущей версии выбранной capability. Seed-файлы (`docs/agents/`, hooks, rules, agents и `.harness/project.json`) по умолчанию сохраняются; `--force-seed-files` явно разрешает их перезапись и возможную потерю локальных изменений. `.harness/overlays/project-local.lock` и `.harness/integrations.json` `update` не проверяет и не трогает — это отдельная от capability-снимка подсистема.
+Без флага `update` отказывается перезаписывать локально изменённые managed files — сначала покажет их (как `diff`) и остановится. `--force-managed-files` перезаписывает только managed snapshot, включая удаление файлов, которых больше нет в текущей версии выбранной capability. Seed-файлы (`docs/agents/`, hooks, rules, agents, `.harness/project.json` и `.harness/orchestration.json`) сохраняются; `--force-seed-files` перезаписывает только их, а `--force` объединяет оба действия и может потерять project-owned настройки. `.harness/overlays/project-local.lock` и `.harness/integrations.json` `update` не проверяет и не трогает — это отдельная от capability-снимка подсистема.
 
 **`registry` — перегенерировать `.harness/skills/REGISTRY.md` вручную** (без пересборки самого снимка скиллов):
 
@@ -208,7 +208,7 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 | `project harness already exists; use 'harness update <repo>'` | `init` на репозитории, где `.harness/harness.lock` уже есть | Запустить показанную команду `harness update` вместо `init`. |
 | `project harness is missing; use 'harness init <repo>'` | `update` на репозитории без `.harness/harness.lock` | Запустить показанную команду `harness init` вместо `update`. |
 | `selected skill names already exist; inspect them or use --replace-conflicts` | `adopt` — под именами выбранной capability уже лежат свои скиллы | Проверить перечисленные конфликты; если замена ожидаема — повторить с `--replace-conflicts` (конфликтующие каталоги заменяются без backup). |
-| `local skill changes would be overwritten; review them or use --force` | `update` — на диске есть локальные правки managed-файлов | Изучить напечатанный diff; если перезапись осознанная — повторить с `--force`. |
+| `local skill changes would be overwritten; review them or use --force` | `update` — на диске есть локальные правки managed-файлов | Изучить напечатанный diff; для snapshot повторить с `--force-managed-files`, для snapshot и seed — с `--force`. |
 | `discovery path already exists and is not managed: <path> (...)` | `.agents/skills`/`.claude/skills` — что-то постороннее на месте discovery-symlink'а | Подсказка в скобках зависит от команды: `init` — убрать вручную или использовать `adopt`; `adopt` — `--replace-conflicts`; `update` — `--force`. |
 | `.harness/project.json has unknown field(s): <name>` | В конфиг добавлено поле, которого нет в строгом контракте | Удалить поле либо реализовать его одновременно в `project.schema.json`, шаблоне, валидаторе и потребителе; для существующего контракта допустимы только `language`, `base_branch`, `branch_pattern`, `qa_gate_commands` и `$schema`. |
 | `install-global`: `[CONFLICT] ... (re-run with --replace-conflicts ...)` | На месте профиля/симлинка глобального слоя уже что-то другое | Повторить с `--replace-conflicts` — сначала бэкапит в `~/.agent-harness-backups/<timestamp>/...`. |
@@ -326,6 +326,12 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 6. **Факты — работа агента, не пользователя.** Если вопрос требует данных из окружения (файлы, API) — агент сам диспетчит суб-агента или пользуется своими тулами, никогда не спрашивает пользователя то, что можно посмотреть. Незавершённый поиск не блокирует остальной фронтир того же раунда — блокируются только вопросы, зависящие именно от его результата.
 7. **Условие завершения.** Фронтир пуст — все ветки дерева пройдены, ничего не осталось «по умолчанию» в уме агента. Агент показывает краткое summary принятых решений и через `AskUserQuestion` спрашивает: **«Подтверждаешь итоговый план?»** — варианты **«Да, перейти к `/to-spec`»** и **«Нет, нужны правки»**. Если тула нет, те же варианты задаются обычным текстом. При правках пользователь указывает номера решений; при подтверждении агент сообщает, что следующим шагом пользователь должен вручную вызвать `/to-spec`, но сам его не запускает.
 
+**Discovery Context (Live Artifact):** во время раундов агент может собирать кандидатные пути файлов,
+но добавляет их в видимый `Live Artifact` только после явного согласия пользователя. Новые кандидаты
+показываются одной группой с выбором «добавить все / выбрать по одному / пропустить»; default-yes
+запрещён. Если публикация артефактов недоступна, список ведётся в Trunk summary. Это отдельный
+bookkeeping и не расходует лимит из четырёх вопросов фронтира.
+
 `/domain-modeling` (только в `-with-docs`) добавляет поверх того же цикла: сверку терминов с `CONTEXT.md` при конфликте, уточнение размытых понятий («вы говорите "аккаунт" — это Customer или User?»), стресс-тест конкретными сценариями на границах концепций, сверку утверждений с кодом, немедленную (не пакетную) запись в `CONTEXT.md` по мере разрешения термина — и скупое предложение ADR, только когда решение одновременно (а) труднообратимо, (б) неочевидно без контекста и (в) было реальным выбором между альтернативами. `CONTEXT.md` — чистый глоссарий, никаких деталей реализации.
 
 **В этом репозитории:** `/grilling`, `/grill-me` и `/grill-with-docs` переопределены first-party-слоем (раздел 7), чтобы все точки входа завершались одинаковым явным выбором: `/to-spec` или доработка плана.
@@ -381,6 +387,10 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 
 **В этом репозитории** (локальная кастомизация, раздел 7): публикуемый issue — это **эпик**. Получает `bug`/`enhancement` + `workflow::specs` (не `workflow::ready` — декомпозиции ещё не было) + `task-report::required` по умолчанию и содержит `## Integration Branch`. `/to-spec` выбирает указанную ветку и создаёт её от project `base_branch`, если она отсутствует; `/to-tickets` переносит её в дочерние тикеты. Никакого ad hoc лейбла-слага для эпика больше не создаётся (раздел 8) — `/to-tickets` линкует дочерние тикеты к этому issue как native GitHub sub-issue.
 
+В конец спеки `/to-spec` всегда переносит утверждённый список из `Live Artifact` в секцию
+`## Relevant Files (Discovery Context)` с исходными пояснениями. Если artifact publishing недоступен,
+источником служит финальная Trunk summary; список нельзя заменять новым blind discovery.
+
 ---
 
 ## 3. Декомпозиция и нарезка задач (Ticketing)
@@ -393,7 +403,9 @@ python3 bin/install-global --target-home "$HOME" --runtime codex --runtime claud
 
 1. **Черновик и ревью.** Собрать контекст (разговор либо явная ссылка — путь к спеке, номер/URL issue). Опционально исследовать код — искать возможности для префакторинга («Make the change easy, then make the easy change»). Нарезать **вертикальные слайсы**: узкий, но полный путь через все слои (схема, API, UI, тесты) — не горизонтальный слой; каждый демонстрируем/проверяем сам по себе и помещается в одно свежее контекстное окно. Для каждого тикета — оценка времени человека на его выполнение (**для всех**, включая `afk`, не только `hitl`) как сигнал качества декомпозиции, а не обязательство: оценка в неделях значит, что слайс не tracer-bullet-размера — дробить дальше. **Стоп и спросить** — показать разбивку нумерованным списком (title / blocked by / оценка времени / что доставляет), спросить про гранулярность, корректность блокирующих рёбер, нужно ли что-то объединить/раздробить. Итерировать до одобрения.
    - **Исключение — широкие рефакторы.** Если blast radius одной механической правки (переименовать общую колонку, ретайпнуть общий символ) разносится по всей кодовой базе так, что ни один вертикальный слайс не может остаться зелёным сам по себе — не форсировать tracer bullet, а секвенировать **expand → contract**: сначала добавить новую форму рядом со старой (ничего не ломается) → смигрировать call site'ы батчами по blast radius (каждый батч — свой тикет, блокирован expand'ом, CI остаётся зелёным батч за батчем) → снести старую форму тикетом, блокированным всеми батчами миграции. Если даже батчи не могут быть зелёными по одному — держать последовательность, но через общую интеграционную ветку, которая блокирует финальный integrate-and-verify тикет (зелёный цвет обещан только там).
-2. **Публикация и сводка** (после одобрения). Механика зависит от трекера:
+2. **Подготовьте Discovery Context.** Если у эпика есть `## Relevant Files (Discovery Context)`, назначьте каждый путь всем поддерживающим его тикетам, сохраните исходное пояснение и добавьте короткую ticket-specific причину. Не относящиеся к тикетам пути покажите как `unassigned` и запросите решение пользователя. Постройте path-only filtered Repo Map из этих путей, содержащих директорий, `tests/` и `shared/`, исключив секреты, зависимости, build/dist, cache, generated/minified, большие логи, базы, временные данные и несвязанные media.
+   Выполните ровно один cheap-model advisory call на batch. Он может добавить только точные пути из Repo Map с причиной; он не удаляет назначенные пути, не изобретает пути и не меняет scope. Без дешёвого маршрута остановитесь с blocker.
+3. **Публикация и сводка** (после одобрения). Механика зависит от трекера:
    - **Локальные файлы:** один файл на тикет в `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, в порядке зависимостей, `<local-ticket-template>`. `/implement` находит следующий тикет по полю `**Workflow:**` каждого файла — линейная цепочка сверху вниз.
    - **GitHub / реальный трекер:** публикация по `gh issue create --body-file <path>` в порядке зависимостей — **никогда** инлайн `--body`/heredoc, ломает bash-квотирование. Лейблы: `bug`/`enhancement`, `workflow::ready` (или `workflow::blocked`, если гейтится другим тикетом того же пакета), `hitl`/`afk`, `task-report::required` по умолчанию.
    - Родительский/эпик issue никогда не закрывается и не переписывается — единственное исключение: дописать короткий список номеров подзадач.
@@ -451,9 +463,21 @@ opt-in, а отправить пользователя на `/fast-implement`.
   разработчику, а не повод молча ждать.
 - **Транспорт — выбор проекта.** `assignment_plans.<role>.transport` = `orca` (isolated worker через
   `orca_adapter.py`) или `in-process` (субагент текущей сессии в worktree того же batch). Оба
-  варианта работают с одним и тем же immutable brief и обязаны пройти model self-report. Без конфига
-  транспорт всегда `in-process`. Для него `dispatch send` лишь фиксирует handoff: следующим действием
+  варианта работают с одним и тем же immutable brief и обязаны пройти model self-report. Без поля
+  transport — включая configured project — выбирается `in-process`; `orca` указывают явно. Для него `dispatch send` лишь фиксирует handoff: следующим действием
   coordinator немедленно запускает субагента по этому brief, не читая старые dispatch/report/template.
+- **Discovery Context.** `/implement` использует переданный тикетом контекст, а coordinator может
+  зарегистрировать Context Package через `context-package register`. Package строится без LLM из
+  pinned commits, содержит diff, стартовые файлы, bounded graph, тесты, ADR cards и hashes; прямые
+  импорты разворачиваются на один уровень, неизвестные форматы получают первые 30 строк. Freshness
+  проверяется перед каждым dispatch в shadow-режиме.
+- **Checkpoint/continuation.** Только write-роли могут сохранить краткий checkpoint и продолжить тот
+  же dispatch в новой worker session. Checkpoint не заменяет completion report и не переносит chat
+  history или traceback. После rate limit resume автоматичен; плановая compaction/TDD/failure-log/
+  vertical-slice причина требует coordinator decision. Read-only роли не продолжаются таким образом.
+- **Base-commit gate.** `batch create` и каждый review/publish dispatch сверяют base с актуальным
+  `origin/<integration_ref>` после fetch. Drift требует нового developer/rebase dispatch; новый
+  candidate SHA повторно проходит risk assessment.
 - **Один тикет за раз.** Batch доводится до терминального состояния до старта следующего — это
   свойство процедуры `/implement`, а не новый lock в `coordinator.py`.
 - **Незакрытое состояние тикета предъявляется человеку.** Перед тем как предлагать batch, сессия
@@ -466,6 +490,8 @@ opt-in, а отправить пользователя на `/fast-implement`.
   причины, переводит batch в `failed`, закрывает все открытые dispatch и **ничего не удаляет**.
   Инвентарь — `batch list --open` (и `--ticket <id>` для одного тикета). Править
   `.harness/orchestration/state/` руками нельзя: это и есть аудиторский след.
+- **Неверный brief до запуска отменяется локально.** `dispatch cancel` требует approval и причины,
+  оставляет immutable brief в audit trail и возвращает batch в `awaiting-approval`; это не `batch abandon`.
 - **Последовательность фиксированная.** Длинный путь всегда проходит architect, developer,
   code-review и qa целиком. Risk assessment решает, когда review *обязателен*, но не когда он
   *разрешён*: low-risk кандидат тоже проходит review. Меньше шагов — это `/fast-implement`, а не
@@ -529,6 +555,11 @@ opt-in, а отправить пользователя на `/fast-implement`.
 **Standards** (`code-review-standards`) — соответствие задокументированным стандартам репозитория + фиксированный baseline из 12 code smells Фаулера (Mysterious Name, Duplicated Code, Feature Envy, Data Clumps, Primitive Obsession, Repeated Switches, Shotgun Surgery, Divergent Change, Speculative Generality, Message Chains, Middle Man, Refused Bequest) — каждый смел является суждением, а не жёстким нарушением; то, что уже проверяет линтер/тайпчекер, эта ось пропускает; задокументированный стандарт репозитория побеждает smell-baseline там, где он его одобряет.
 
 **Spec** (`code-review-spec`) — аудит соответствия исходному issue/спеке: что упущено, что лишнее (scope creep), что реализовано неверно. Спека не найдена — эта ось явно пропускается, а не молчит.
+
+После `Warning` coordinator может создать delta-review только для нового candidate, изменившего
+исключительно тестовые файлы и не задевшего risk triggers. Такой review независим и повторно проверяет
+только Warning-ось; Standards=Clean наследуется как evidence предыдущего review. Любое изменение
+production-кода требует полного review.
 
 **В этом репозитории** (локальная кастомизация, раздел 7): язык отчёта берётся из `language` в `.harness/project.json`.
 
@@ -601,6 +632,16 @@ Claude Code, сессии Codex, историю git и трекер, — пиш�
 ```bash
 python .harness/reporting/delivery_stats.py --repo . --epic 81 --html docs/reports/epic-81.html
 ```
+
+Для сопоставимых завершённых эпиков можно сохранить versioned baseline через
+`--save-baseline docs/reports/epic-81.baseline.json`, а в следующем отчёте передать его с
+`--baseline <файл>`. Dashboard и JSON тогда показывают provider totals обеих сторон вместе с
+`exact`/`estimated` attribution; разница не вычисляется, если telemetry хотя бы одной стороны нет.
+
+Для backend-orchestration отчёт также выводит cache read/write tokens, worker sessions на dispatch,
+coordinator-recorded причину compaction/restart, долю review diff вне task scope и QA failure rate.
+Все эти значения принимаются только из provider/runtime telemetry или ledger/decision records; роль
+не может заполнить отсутствующее значение self-report-ом, оценкой или нулём.
 
 - **Область** берётся от эпика: `gh` отдаёт sub-issues, из их номеров выводятся ветки
   `feature/issue-<ID>-*`. Матчинг идёт по номеру тикета в имени ветки, а не по существующим ref'ам,
@@ -735,12 +776,13 @@ Hook строго разбирает JSON payload и рассматривает 
 | `/compact` | Встроена в Claude Code | Сжимает историю диалога, оставляя ключевые факты. Используется при затягивании тикета. |
 | `/clear` | Встроена в Claude Code | Полностью очищает сессию перед стартом нового тикета. |
 | `/handoff` | mattpocock/skills | Генерирует документ передачи контекста во временный каталог ОС, с разделом «какие скиллы вызвать дальше» — перед сменой сессии/модели. |
+| `Context Package` | `context_builder.py` + coordinator ledger | Детерминированный пакет diff/файлов/графа/тестов/ADR/hashes, переиспользуемый ролями одного batch. |
 
 ---
 
 ## 12. Полный каталог скиллов проекта
 
-Все 25 скиллов апстрима (`.harness/skills/`, capability `mattpocock-suite`) + 4 проектных (`qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, раздел 6). «Только вручную» = `disable-model-invocation: true` (не вызывается моделью автоматически, только `/имя`).
+Все 25 скиллов апстрима (`.harness/skills/`, capability `mattpocock-suite`) + 10 `pvmalove`-переопределений и 6 дополнительных first-party скиллов (`qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`); `pr-composer` поставляется отдельно как subagent. «Только вручную» = `disable-model-invocation: true` (не вызывается моделью автоматически, только `/имя`).
 
 ### Инженерные
 
