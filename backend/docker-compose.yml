@@ -632,6 +632,26 @@ services:
       APP_ENV: ${APP_ENV}
       ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
       ORDER_IDENTITY_BASE_URL: ${ORDER_IDENTITY_BASE_URL}
+      ORDER_CATALOG_BASE_URL: ${ORDER_CATALOG_BASE_URL}
+    depends_on:
+      order-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  order-worker:
+    restart: unless-stopped
+    # inventory.reserved.v1 event-consumer + reservation_outbox drain/publish
+    # loop for inventory.reserve.v1 (issue #372, D6/D7/D8) — order-service's
+    # first AMQP-connected process (mirrors inventory-worker's wiring).
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    command: ["python", "-m", "api.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+      ORDER_AMQP_URL: ${ORDER_AMQP_URL}
     depends_on:
       order-bootstrap:
         condition: service_completed_successfully

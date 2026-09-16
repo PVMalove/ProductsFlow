@@ -12,9 +12,16 @@ class CartLine:
     этом тикете (ADR 0016:5 — цена фиксируется только на checkout quote).
 
     Валидация (`quantity <= 0`) и merge-на-дубликате-товара (D4) — забота
-    `Cart`, не этой сущности: `Cart` — единственная точка входа для мутаций."""
+    `Cart`, не этой сущности: `Cart` — единственная точка входа для мутаций.
+
+    `locked_by_order_id`/`unavailable_reason` — issue #372, D3/D7: строка,
+    вошедшая в Checkout Selection, несёт id заказа, который её заблокировал
+    (`None` — строка свободна); `unavailable_reason` заполняется только на
+    терминале частичного резерва для строк, не подтверждённых inventory."""
 
     id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
     added_at: datetime
+    locked_by_order_id: uuid.UUID | None = None
+    unavailable_reason: str | None = None

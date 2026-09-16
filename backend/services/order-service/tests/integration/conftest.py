@@ -5,10 +5,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from api.dependencies import get_catalog_client
 from infrastructure.db.entity_configurations.models import Base
 from infrastructure.db.session import get_db_session
 from infrastructure.security.auth import get_identity_client
 from tests.integration.fake_identity_client import FakeIdentityClient
+from tests.unit.fake_catalog_client import FakeCatalogClient
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
@@ -30,14 +32,21 @@ def identity_client() -> FakeIdentityClient:
     return FakeIdentityClient()
 
 
+@pytest.fixture
+def catalog_client() -> FakeCatalogClient:
+    return FakeCatalogClient()
+
+
 @pytest_asyncio.fixture
 async def cart_client(
     db_session: AsyncSession,
     identity_client: FakeIdentityClient,
+    catalog_client: FakeCatalogClient,
 ) -> AsyncIterator[httpx.AsyncClient]:
     """ASGI-тестклиент (ADR 0013, Seam A) поверх настоящего Postgres
-    (`db_session`, savepoint на тест) и фейкового identity-клиента — HTTP-слой
-    прогоняется целиком, identity-service — нет (DoD п.10)."""
+    (`db_session`, savepoint на тест) и фейковых identity/catalog клиентов —
+    HTTP-слой прогоняется целиком, identity-service/catalog-service — нет
+    (DoD п.10, issue #372 seam #10)."""
     from api.main import app
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
@@ -45,6 +54,7 @@ async def cart_client(
 
     app.dependency_overrides[get_db_session] = _override_session
     app.dependency_overrides[get_identity_client] = lambda: identity_client
+    app.dependency_overrides[get_catalog_client] = lambda: catalog_client
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
