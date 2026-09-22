@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from api.dependencies import get_catalog_client
+from api.http.dependencies import get_catalog_client
 from infrastructure.db.entity_configurations.models import Base
 from infrastructure.db.session import get_db_session
 from infrastructure.security.auth import get_identity_client
@@ -47,7 +47,7 @@ async def cart_client(
     (`db_session`, savepoint на тест) и фейковых identity/catalog клиентов —
     HTTP-слой прогоняется целиком, identity-service/catalog-service — нет
     (DoD п.10, issue #372 seam #10)."""
-    from api.main import app
+    from api.http.main import app
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         yield db_session

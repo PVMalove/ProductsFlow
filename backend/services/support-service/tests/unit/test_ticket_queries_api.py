@@ -5,7 +5,7 @@ from kernel_domain.errors import Error, ErrorType
 from kernel_domain.result import Result
 from kernel_platform.security import Actor, ActorRole
 
-from api.dependencies import (
+from api.http.dependencies import (
     get_add_ticket_message_handler,
     get_change_ticket_status_handler,
     get_delete_ticket_message_handler,
@@ -14,7 +14,7 @@ from api.dependencies import (
     get_list_tickets_handler,
     get_ticket_detail_handler,
 )
-from api.main import app
+from api.http.main import app
 from application.commands import (
     AddTicketMessageCommand,
     ChangeTicketStatusCommand,

@@ -20,7 +20,7 @@ from kernel_platform.topology import declare_topology
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.worker import QUEUE_NAME, build_product_event_handler
+from api.workers.worker import QUEUE_NAME, build_product_event_handler
 from infrastructure.db.entity_configurations.models import InventoryModel
 from infrastructure.db.processed_messages import ProcessedMessage
 

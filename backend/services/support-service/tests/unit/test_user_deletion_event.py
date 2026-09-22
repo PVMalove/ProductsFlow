@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fake_support_unit_of_work import FakeSupportUnitOfWork
 
-from api.worker import (
+from api.workers.worker import (
     _message_id,
     _parse_deleted_user_event,
     _parse_user_event_snapshot,

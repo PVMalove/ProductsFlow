@@ -145,7 +145,7 @@ services:
       [
         "sh",
         "-c",
-        "until python -m api.worker; do echo 'support-worker: topology unavailable, retrying in 1s'; sleep 1; done",
+        "until python -m api.workers.worker; do echo 'support-worker: topology unavailable, retrying in 1s'; sleep 1; done",
       ]
     environment:
       APP_ENV: e2e

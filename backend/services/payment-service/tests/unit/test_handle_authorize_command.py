@@ -17,7 +17,7 @@ import pytest
 from kernel_platform.commands import Command
 from kernel_platform.outbox.models import OutboxMessage
 
-import api.payment_commands as payment_commands
+import api.workers.commands.payment_commands as payment_commands
 from domain.psp_client import PspAuthorizeOutcome
 from tests.unit.fake_payment_repository import FakePaymentAuthorizationRepository
 from tests.unit.fake_payment_unit_of_work import FakePaymentUnitOfWork

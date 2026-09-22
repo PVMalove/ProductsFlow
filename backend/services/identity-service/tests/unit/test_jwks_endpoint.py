@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
+from api.http.main import app
 from core.secrets import compute_kid, load_private_key
 from core.settings import settings
 

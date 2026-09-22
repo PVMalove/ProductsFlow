@@ -165,23 +165,6 @@ class ProductRepository:
     async def deactivate(self, product_id: ProductId) -> Result[Product] | None:
         return await self._toggle_active(product_id, activate=False)
 
-    async def _toggle_active(
-        self, product_id: ProductId, *, activate: bool
-    ) -> Result[Product] | None:
-        loaded = await self._load_for_update(product_id)
-        if loaded is None:
-            return None
-        row, product = loaded
-
-        result = product.activate() if activate else product.deactivate()
-        if result.is_err:
-            return Result[Product].fail(result.error)
-
-        row.is_active = product.is_active
-        row.search_revision = product.search_revision
-        await drain_events_to_outbox(self.session, product)
-        return Result[Product].ok(product)
-
     async def delete(self, product_id: ProductId) -> Product | None:
         loaded = await self._load_for_update(product_id)
         if loaded is None:
@@ -373,6 +356,23 @@ class ProductRepository:
                 has_prev=has_prev,
             ),
         )
+
+    async def _toggle_active(
+        self, product_id: ProductId, *, activate: bool
+    ) -> Result[Product] | None:
+        loaded = await self._load_for_update(product_id)
+        if loaded is None:
+            return None
+        row, product = loaded
+
+        result = product.activate() if activate else product.deactivate()
+        if result.is_err:
+            return Result[Product].fail(result.error)
+
+        row.is_active = product.is_active
+        row.search_revision = product.search_revision
+        await drain_events_to_outbox(self.session, product)
+        return Result[Product].ok(product)
 
     async def _load_for_update(
         self, product_id: ProductId

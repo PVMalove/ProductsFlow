@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from api.worker import parse_product_created_snapshot
+from api.workers.worker import parse_product_created_snapshot
 
 
 def test_parse_product_created_snapshot_extracts_product_id() -> None:

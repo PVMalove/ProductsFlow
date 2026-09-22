@@ -16,7 +16,7 @@ from kernel_platform.topology import declare_topology
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.worker import build_user_event_handler
+from api.workers.worker import build_user_event_handler
 from domain.entities.ticket import Ticket
 from domain.ticket_status import TicketStatus
 from infrastructure.db.entity_configurations.models import (

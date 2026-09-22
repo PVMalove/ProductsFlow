@@ -1,6 +1,6 @@
 import uuid
 
-from api.schemas import ProductQuoteRequest
+from api.http.schemas import ProductQuoteRequest
 from application.ports import Actor
 from application.queries import GetCheckoutQuoteQuery
 

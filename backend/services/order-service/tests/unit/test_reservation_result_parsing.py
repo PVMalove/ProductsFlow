@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from api.reservation_result_handler import parse_reservation_result
+from api.workers.commands.reservation_result_handler import parse_reservation_result
 
 
 def test_parse_reservation_result_extracts_order_id_and_confirmed_product_ids() -> None:

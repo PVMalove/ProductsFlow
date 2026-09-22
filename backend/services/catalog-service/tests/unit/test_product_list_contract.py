@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from api.schemas import ProductListRequest
+from api.http.schemas import ProductListRequest
 from application.catalog_list_cursor import encode_catalog_cursor
 from application.errors import (
     ProductListCursorConflictError,

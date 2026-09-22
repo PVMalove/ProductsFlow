@@ -21,8 +21,11 @@ from kernel_platform.topology import COMMANDS_EXCHANGE_NAME, declare_command_top
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-import api.payment_commands as payment_commands
-from api.payment_commands import handle_authorize_command, handle_void_command
+import api.workers.commands.payment_commands as payment_commands
+from api.workers.commands.payment_commands import (
+    handle_authorize_command,
+    handle_void_command,
+)
 from infrastructure.db.entity_configurations.models import PaymentAuthorizationModel
 from infrastructure.psp.mock_psp_adapter import MockPspAdapter
 

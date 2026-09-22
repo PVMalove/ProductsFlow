@@ -8,7 +8,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kernel_platform.security.identity_client import IdentityClient
 
-from api.main import app as identity_app
+from api.http.main import app as identity_app
 from core.security.tokens import create_access_token
 from tests.unit.counting_transport import CountingTransport, FlakyOnceTransport
 

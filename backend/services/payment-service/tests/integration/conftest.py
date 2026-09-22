@@ -64,8 +64,8 @@ async def payment_client(
     (`db_session`, savepoint на тест), фейкового identity-клиента и реального
     (детерминированного, без I/O) `MockPspAdapter` — HTTP-слой прогоняется
     целиком, identity-service — нет, реального PSP не существует (DoD п.7)."""
-    from api.dependencies import get_psp_client
-    from api.main import app
+    from api.http.dependencies import get_psp_client
+    from api.http.main import app
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         yield db_session

@@ -1,6 +1,6 @@
 import uuid
 
-from api.schemas import ProductGetRequest
+from api.http.schemas import ProductGetRequest
 from application.ports import Actor
 from application.queries import GetProductQuery
 

@@ -3,7 +3,7 @@
 `test_reservation_worker_seams.py`) — ловит забытую регистрацию
 `payment.authorize.v1`/`payment.void.v1` в `api/worker.py::main()`."""
 
-from api.payment_commands import (
+from api.workers.commands.payment_commands import (
     COMMAND_HANDLERS,
     handle_authorize_command,
     handle_void_command,

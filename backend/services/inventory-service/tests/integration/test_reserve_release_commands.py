@@ -19,7 +19,7 @@ from kernel_platform.topology import COMMANDS_EXCHANGE_NAME, declare_command_top
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.reservation_commands import (
+from api.workers.commands.reservation_commands import (
     handle_allocate_command,
     handle_release_command,
     handle_reserve_command,

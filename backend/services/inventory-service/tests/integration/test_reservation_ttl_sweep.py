@@ -14,7 +14,7 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.reservation_sweep import run_once
+from api.workers.cron.reservation_sweep import run_once
 from domain.entities.reservation import (
     Reservation,
     ReservationLine,
