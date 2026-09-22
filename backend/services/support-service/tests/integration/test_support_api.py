@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from kernel_platform.outbox.models import Base
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from api.main import app
+from api.http.main import app
 from core.settings import settings
 from infrastructure.db.session import get_db_session
 from infrastructure.db.user_projection import UserProjectionRow

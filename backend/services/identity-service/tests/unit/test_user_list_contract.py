@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from kernel_platform.pagination import encode_cursor
 
-from api.schemas import UserListRequest
+from api.http.schemas import UserListRequest
 from application.errors import UserListCursorConflictError, UserListInvalidCursorError
 from application.queries import ListUsersQuery
 

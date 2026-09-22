@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
+from api.http.main import app
 from core.settings import settings
 from infrastructure import storage as storage_module
 

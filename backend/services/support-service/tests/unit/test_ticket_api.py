@@ -1,6 +1,6 @@
 from pydantic import ValidationError
 
-from api.schemas import (
+from api.http.schemas import (
     TicketCreateRequest,
     TicketMessageCreateRequest,
     TicketStatusChangeRequest,

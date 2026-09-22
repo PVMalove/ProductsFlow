@@ -1,6 +1,6 @@
 import httpx
 
-from api.main import app
+from api.http.main import app
 
 
 async def test_metrics_endpoint_is_internal_and_not_self_instrumented() -> None:

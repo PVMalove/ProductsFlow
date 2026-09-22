@@ -6,7 +6,7 @@ handlers, D8) — ловит забытую регистрацию `inventory.re
 `inventory.release.v1`/`inventory.allocate.v1` (issue #373) в
 `api/worker.py::main()`."""
 
-from api.reservation_commands import (
+from api.workers.commands.reservation_commands import (
     COMMAND_HANDLERS,
     handle_allocate_command,
     handle_release_command,

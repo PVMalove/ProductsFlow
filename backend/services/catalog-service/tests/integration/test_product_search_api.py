@@ -89,8 +89,8 @@ class _UnusedImageStorage:
 
 @contextmanager
 def _overridden_search(search: FakeProductSearch) -> Iterator[None]:
-    from api.dependencies import get_search_products_handler
-    from api.main import app
+    from api.http.dependencies import get_search_products_handler
+    from api.http.main import app
 
     app.dependency_overrides[get_search_products_handler] = lambda: (
         SearchProductsQueryHandler(

@@ -1,6 +1,6 @@
 import uuid
 
-from api.schemas import ProductUpdateRequest
+from api.http.schemas import ProductUpdateRequest
 from application.commands import UpdateProductCommand
 from application.ports import Actor
 

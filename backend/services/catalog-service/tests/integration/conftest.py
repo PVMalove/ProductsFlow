@@ -73,7 +73,7 @@ async def catalog_client(
     """ASGI-тестклиент (ADR 0013, Seam A) поверх настоящего Postgres
     (`db_session`, savepoint на тест) и фейкового `IdentityGateway` —
     HTTP-слой прогоняется целиком, identity-service — нет."""
-    from api.main import app
+    from api.http.main import app
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         yield db_session

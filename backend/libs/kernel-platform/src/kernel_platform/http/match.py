@@ -30,6 +30,14 @@ def match_result[T](result: Result[T]) -> ApiResponse[T]:
     return ApiResponse(data=result.value)
 
 
+def unwrap_result[T](result: Result[T]) -> T:
+    """Извлекает значение из `Result`, поднимая `ApiError` при неудаче.
+    Используется, когда нужно получить значение до конструирования финального
+    HTTP-ответа, и обычные `match_result`/`match_created` не подходят."""
+    _raise_for_error(result)
+    return result.value
+
+
 def match_created[T](result: Result[T]) -> ApiResponse[T]:
     """Семантический алиас `match_result` для create-эндпоинтов — HTTP 201
     по-прежнему задаёт только декоратор роута, не эта функция."""
