@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from kernel_domain.result import Result
 from kernel_platform.pagination import Cursor
 
 from application.ports import UserListQueryPort, UserPage
@@ -22,7 +23,8 @@ class ListUsersQueryHandler:
     def __init__(self, users: UserListQueryPort) -> None:
         self._users = users
 
-    async def execute(self, query: ListUsersQuery) -> UserPage:
-        return await self._users.list(
+    async def execute(self, query: ListUsersQuery) -> Result[UserPage]:
+        page = await self._users.list(
             limit=query.limit, after=query.after, before=query.before
         )
+        return Result[UserPage].ok(page)

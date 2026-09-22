@@ -9,9 +9,10 @@ from kernel_platform.http.match import match_created
 from api.errors import raise_command_error
 from api.http.dependencies import LoginDI, RegisterUserDI
 from api.http.schemas import TokenResponse, UserCreate
-from application.commands import LoginCommand
+from application.commands import LoginCommand, RegisterUserCommand
 from contracts.user import UserView
 from core.security.tokens import create_access_token
+from domain.entities.user import User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 async def register_user(
     request: UserCreate, handler: RegisterUserDI
 ) -> ApiResponse[UserView]:
-    command = request.to_command()
+    command: RegisterUserCommand = request.to_command()
     result: Result[UserView] = await handler.execute(command)
     return match_created(result)
 
@@ -36,9 +37,10 @@ async def login_for_access_token(
     """Логин через OAuth2 password-grant остаётся плоским протокольным
     эндпоинтом для `OAuth2PasswordBearer`/Swagger UI (ADR 0002) — не
     мигрирован на BFF-конверт."""
-    result = await handler.execute(
-        LoginCommand(email=form_data.username, password=form_data.password)
+    command: LoginCommand = LoginCommand(
+        email=form_data.username, password=form_data.password
     )
+    result: Result[User] = await handler.execute(command)
     if result.is_err:
         raise_command_error(result)
     return TokenResponse(access_token=create_access_token(result.value.id.value))

@@ -3,7 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from kernel_domain.result import Result
 from kernel_platform.http.envelope import ApiResponse
-from kernel_platform.http.match import match_result, unwrap_result
+from kernel_platform.http.match import (
+    match_offset_page,
+    match_page,
+    match_result,
+    unwrap_result,
+)
+from kernel_platform.pagination import Page
 
 from api.http.dependencies import (
     ActivateUserDI,
@@ -11,8 +17,9 @@ from api.http.dependencies import (
     DeactivateUserDI,
     DeleteAccountDI,
     GetCurrentUserDI,
+    GlobalAuditDI,
     ListUsersDI,
-    UserAuditDI,
+    PersonalAuditDI,
 )
 from api.http.schemas import (
     PasswordChange,
@@ -23,9 +30,19 @@ from api.http.schemas import (
     UserTargetAuditRequest,
 )
 from api.http.security import AdminActor, RequiredActor
-from application.commands.delete_account import DeleteAccountCommand
-from application.ports import UserAuditEntry, UserAuditPage
-from application.queries import GetCurrentUserQuery, GetUserAuditQuery
+from application.commands import (
+    ActivateUserCommand,
+    ChangePasswordCommand,
+    DeactivateUserCommand,
+    DeleteAccountCommand,
+)
+from application.ports import UserAuditEntry
+from application.queries import (
+    GetCurrentUserQuery,
+    GetGlobalAuditQuery,
+    GetPersonalAuditQuery,
+    ListUsersQuery,
+)
 from contracts.user import UserView
 from domain.value_objects.user_id import UserId
 
@@ -36,7 +53,8 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 async def read_current_user(
     actor: RequiredActor, handler: GetCurrentUserDI
 ) -> ApiResponse[UserView]:
-    result = await handler.execute(GetCurrentUserQuery(user_id=UserId.create(actor.id)))
+    query: GetCurrentUserQuery = GetCurrentUserQuery(user_id=UserId.create(actor.id))
+    result: Result[UserView] = await handler.execute(query)
     return match_result(result)
 
 
@@ -44,9 +62,10 @@ async def read_current_user(
 async def delete_own_account(
     actor: RequiredActor, handler: DeleteAccountDI
 ) -> ApiResponse[None]:
-    result: Result[None] = await handler.execute(
-        DeleteAccountCommand(user_id=UserId.create(actor.id))
+    command: DeleteAccountCommand = DeleteAccountCommand(
+        user_id=UserId.create(actor.id)
     )
+    result: Result[None] = await handler.execute(command)
     return match_result(result)
 
 
@@ -54,39 +73,31 @@ async def delete_own_account(
 async def change_own_password(
     request: PasswordChange, actor: RequiredActor, handler: ChangePasswordDI
 ) -> ApiResponse[UserView]:
-    command = request.to_command(actor=actor)
+    command: ChangePasswordCommand = request.to_command(actor=actor)
     result: Result[UserView] = await handler.execute(command)
     return match_result(result)
 
 
 @router.get("/me/audit", response_model=ApiResponse[list[UserAuditEntry]])
 async def read_own_audit_logs(
-    actor: RequiredActor, handler: UserAuditDI
+    actor: RequiredActor, handler: PersonalAuditDI
 ) -> ApiResponse[list[UserAuditEntry]]:
-    entries = unwrap_result(
-        await handler.execute(GetUserAuditQuery(user_id=UserId.create(actor.id)))
+    query: GetPersonalAuditQuery = GetPersonalAuditQuery(
+        user_id=UserId.create(actor.id)
     )
-    assert isinstance(entries, list)
-    return ApiResponse(data=entries)
+    result = await handler.execute(query)
+    return match_result(result)
 
 
 @router.get("/audit", response_model=ApiResponse[list[UserAuditEntry]])
 async def list_all_audit_logs(
     request: Annotated[UserGlobalAuditRequest, Depends()],
     _admin: AdminActor,
-    handler: UserAuditDI,
+    handler: GlobalAuditDI,
 ) -> ApiResponse[list[UserAuditEntry]]:
-    page = unwrap_result(await handler.execute(request.to_query()))
-    assert isinstance(page, UserAuditPage)
-    return ApiResponse(
-        data=page.items,
-        meta={
-            "page_index": page.page_index,
-            "page_size": page.page_size,
-            "total": page.total,
-            "total_pages": page.total_pages,
-        },
-    )
+    query: GetGlobalAuditQuery = request.to_query()
+    result = await handler.execute(query)
+    return match_offset_page(result)
 
 
 @router.get("/", response_model=ApiResponse[list[UserView]])
@@ -95,16 +106,13 @@ async def list_users(
     _admin: AdminActor,
     handler: ListUsersDI,
 ) -> ApiResponse[list[UserView]]:
-    page = await handler.execute(request.to_query())
-    return ApiResponse(
-        data=[UserView.from_user(item) for item in page.items],
-        meta={
-            "next_cursor": page.page_info.next_cursor,
-            "prev_cursor": page.page_info.prev_cursor,
-            "has_more": page.page_info.has_more,
-            "has_prev": page.page_info.has_prev,
-        },
+    query: ListUsersQuery = request.to_query()
+    page = unwrap_result(await handler.execute(query))
+    view_page = Page[UserView](
+        items=[UserView.from_user(item) for item in page.items],
+        page_info=page.page_info,
     )
+    return match_page(Result.ok(view_page))
 
 
 @router.patch("/{user_id}/activate", response_model=ApiResponse[UserView])
@@ -113,7 +121,7 @@ async def activate_user(
     _admin: AdminActor,
     handler: ActivateUserDI,
 ) -> ApiResponse[UserView]:
-    command = request.to_command()
+    command: ActivateUserCommand = request.to_command()
     result: Result[UserView] = await handler.execute(command)
     return match_result(result)
 
@@ -124,7 +132,7 @@ async def deactivate_user(
     admin: AdminActor,
     handler: DeactivateUserDI,
 ) -> ApiResponse[UserView]:
-    command = request.to_command(actor=admin)
+    command: DeactivateUserCommand = request.to_command(actor=admin)
     result: Result[UserView] = await handler.execute(command)
     return match_result(result)
 
@@ -133,8 +141,8 @@ async def deactivate_user(
 async def read_user_audit_logs(
     request: Annotated[UserTargetAuditRequest, Depends()],
     _admin: AdminActor,
-    handler: UserAuditDI,
+    handler: PersonalAuditDI,
 ) -> ApiResponse[list[UserAuditEntry]]:
-    entries = unwrap_result(await handler.execute(request.to_query()))
-    assert isinstance(entries, list)
-    return ApiResponse(data=entries)
+    query: GetPersonalAuditQuery = request.to_query()
+    result = await handler.execute(query)
+    return match_result(result)

@@ -172,12 +172,16 @@ class SqlUserAuditReader:
             .offset((page_index - 1) * page_size)
             .limit(page_size)
         )
+        from kernel_platform.pagination import OffsetPageInfo
+
         return UserAuditPage(
             items=[_to_entry(row) for row in rows.all()],
-            page_index=page_index,
-            page_size=page_size,
-            total=total,
-            total_pages=ceil(total / page_size) if total else 0,
+            page_info=OffsetPageInfo(
+                page_index=page_index,
+                page_size=page_size,
+                total=total,
+                total_pages=ceil(total / page_size) if total else 0,
+            ),
         )
 
 
