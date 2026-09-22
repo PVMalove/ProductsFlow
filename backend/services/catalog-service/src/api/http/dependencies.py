@@ -262,7 +262,7 @@ DeleteProductImageDI = Annotated[
 ]
 
 
-__all__ = [
+__all__: list[str] = [
     "ActivateProductDI",
     "CreateProductDI",
     "DeactivateProductDI",

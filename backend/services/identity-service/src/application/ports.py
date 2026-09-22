@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from kernel_platform.pagination import Cursor, PageInfo
+from kernel_platform.pagination import Cursor, OffsetPage, Page
 
 from domain.role import Role
 from domain.value_objects.email import Email
@@ -22,12 +22,7 @@ class UserReadModel:
     is_active: bool
 
 
-@dataclass(frozen=True)
-class UserPage:
-    """Курсорно-пагинированная страница пользователей."""
-
-    items: list[UserReadModel]
-    page_info: PageInfo
+UserPage = Page[UserReadModel]
 
 
 class UserQueryPort(Protocol):
@@ -71,15 +66,7 @@ class UserAuditEntry:
     created_at: datetime
 
 
-@dataclass(frozen=True)
-class UserAuditPage:
-    """Offset-пагинированная страница глобального audit-фида User."""
-
-    items: list[UserAuditEntry]
-    page_index: int
-    page_size: int
-    total: int
-    total_pages: int
+UserAuditPage = OffsetPage[UserAuditEntry]
 
 
 class UserAuditQueryPort(Protocol):

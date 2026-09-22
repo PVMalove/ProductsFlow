@@ -18,7 +18,8 @@ from application.ports import (
 )
 from application.queries import (
     GetCurrentUserHandler,
-    GetUserAuditQueryHandler,
+    GetGlobalAuditQueryHandler,
+    GetPersonalAuditQueryHandler,
     ListUsersQueryHandler,
 )
 from domain.repositories import UserRepository
@@ -140,14 +141,25 @@ def get_list_users_handler(
 ListUsersDI = Annotated[ListUsersQueryHandler, Depends(get_list_users_handler)]
 
 
-def get_user_audit_handler(
+def get_global_audit_handler(
+    reader: UserAuditReaderDI,
+) -> GetGlobalAuditQueryHandler:
+    return GetGlobalAuditQueryHandler(reader)
+
+
+GlobalAuditDI = Annotated[GetGlobalAuditQueryHandler, Depends(get_global_audit_handler)]
+
+
+def get_personal_audit_handler(
     reader: UserAuditReaderDI,
     users: UserQueryRepositoryDI,
-) -> GetUserAuditQueryHandler:
-    return GetUserAuditQueryHandler(reader, users)
+) -> GetPersonalAuditQueryHandler:
+    return GetPersonalAuditQueryHandler(reader, users)
 
 
-UserAuditDI = Annotated[GetUserAuditQueryHandler, Depends(get_user_audit_handler)]
+PersonalAuditDI = Annotated[
+    GetPersonalAuditQueryHandler, Depends(get_personal_audit_handler)
+]
 
 
 def get_current_user_handler(
@@ -171,7 +183,8 @@ __all__ = [
     "LoginDI",
     "PasswordHasherDI",
     "RegisterUserDI",
-    "UserAuditDI",
+    "GlobalAuditDI",
+    "PersonalAuditDI",
     "UserAuditReaderDI",
     "UserQueryRepositoryDI",
     "UserRepositoryDI",

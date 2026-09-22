@@ -12,6 +12,7 @@ generic drain-в-outbox).
 import base64
 import binascii
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -49,6 +50,32 @@ class Page[T]:
 
     items: list[T]
     page_info: PageInfo
+
+    def map[U](self, func: Callable[[T], U]) -> "Page[U]":
+        return Page(items=[func(item) for item in self.items], page_info=self.page_info)
+
+
+@dataclass(frozen=True)
+class OffsetPageInfo:
+    """Форма страницы offset-листинга."""
+
+    page_index: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
+@dataclass(frozen=True)
+class OffsetPage[T]:
+    """Транспортно-независимая страница: элементы плюс их `OffsetPageInfo`."""
+
+    items: list[T]
+    page_info: OffsetPageInfo
+
+    def map[U](self, func: Callable[[T], U]) -> "OffsetPage[U]":
+        return OffsetPage(
+            items=[func(item) for item in self.items], page_info=self.page_info
+        )
 
 
 def encode_cursor(created_at: datetime, entity_id: uuid.UUID) -> str:

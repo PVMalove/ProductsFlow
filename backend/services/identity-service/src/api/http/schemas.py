@@ -17,7 +17,11 @@ from application.commands import (
     RegisterUserCommand,
 )
 from application.errors import UserListCursorConflictError, UserListInvalidCursorError
-from application.queries import GetUserAuditQuery, ListUsersQuery
+from application.queries import (
+    GetGlobalAuditQuery,
+    GetPersonalAuditQuery,
+    ListUsersQuery,
+)
 from domain.value_objects.user_id import UserId
 
 
@@ -72,8 +76,8 @@ class UserTargetAuditRequest(BaseModel):
 
     user_id: UUID
 
-    def to_query(self) -> GetUserAuditQuery:
-        return GetUserAuditQuery(user_id=UserId.create(self.user_id))
+    def to_query(self) -> GetPersonalAuditQuery:
+        return GetPersonalAuditQuery(user_id=UserId.create(self.user_id))
 
 
 class UserGlobalAuditRequest(BaseModel):
@@ -82,8 +86,8 @@ class UserGlobalAuditRequest(BaseModel):
     page_index: int = Query(default=1, ge=1)
     page_size: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
 
-    def to_query(self) -> GetUserAuditQuery:
-        return GetUserAuditQuery(page_index=self.page_index, page_size=self.page_size)
+    def to_query(self) -> GetGlobalAuditQuery:
+        return GetGlobalAuditQuery(page_index=self.page_index, page_size=self.page_size)
 
 
 class UserListRequest(BaseModel):
