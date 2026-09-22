@@ -12,14 +12,14 @@ COPY services/support-service/pyproject.toml services/support-service/
 COPY services/inventory-service/pyproject.toml services/inventory-service/
 COPY services/payment-service/pyproject.toml services/payment-service/
 
-RUN uv sync --package catalog-service --locked --no-dev --no-install-project
+RUN uv sync --package catalog-service  --no-dev --no-install-project
 
 COPY libs/kernel-domain/src libs/kernel-domain/src
 COPY libs/kernel-platform/src libs/kernel-platform/src
 COPY libs/observability/src libs/observability/src
 COPY services/catalog-service/src services/catalog-service/src
 COPY services/catalog-service/assets services/catalog-service/assets
-RUN uv sync --package catalog-service --locked --no-dev
+RUN uv sync --package catalog-service  --no-dev
 
 FROM python:3.14-slim AS runtime
 WORKDIR /srv
@@ -37,4 +37,5 @@ ENV PYTHONPATH="/srv/services/catalog-service/src"
 # HTTP entrypoint is provided by the service API package.
 EXPOSE 8000
 CMD ["uvicorn", "api.http.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+
 

@@ -13,13 +13,13 @@ COPY services/inventory-service/pyproject.toml services/inventory-service/
 COPY services/payment-service/pyproject.toml services/payment-service/
 COPY services/order-service/pyproject.toml services/order-service/
 
-RUN uv sync --package order-service --locked --no-dev --no-install-project
+RUN uv sync --package order-service  --no-dev --no-install-project
 
 COPY libs/kernel-domain/src libs/kernel-domain/src
 COPY libs/kernel-platform/src libs/kernel-platform/src
 COPY libs/observability/src libs/observability/src
 COPY services/order-service/src services/order-service/src
-RUN uv sync --package order-service --locked --no-dev
+RUN uv sync --package order-service  --no-dev
 
 FROM python:3.14-slim AS runtime
 WORKDIR /srv
@@ -33,4 +33,5 @@ ENV PYTHONPATH="/srv/services/order-service/src"
 
 EXPOSE 8000
 CMD ["uvicorn", "api.http.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+
 
