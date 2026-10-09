@@ -31,6 +31,9 @@ _BASE_REVISION = run_path(str(_VERSIONS_DIR / "58907723bd17_carts_and_cart_lines
 _CHECKOUT_REVISION = run_path(
     str(_VERSIONS_DIR / "301b0587179e_orders_reservation_outbox_and_cart_.py")
 )
+_AUTHORIZATION_REVISION = run_path(
+    str(_VERSIONS_DIR / "3230339cab9b_order_authorization_and_compensation.py")
+)
 _TABLES = ("cart_lines", "carts")
 _CHECKOUT_TABLES = (
     "orders",
@@ -66,6 +69,12 @@ def _order_lines_foreign_keys(connection: Connection) -> list[Any]:
     return inspect(connection).get_foreign_keys("order_lines")
 
 
+def _processed_messages_pk_columns(connection: Connection) -> list[str]:
+    return inspect(connection).get_pk_constraint("processed_messages")[
+        "constrained_columns"
+    ]
+
+
 async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_reverts(
     db_engine: AsyncEngine,
 ) -> None:
@@ -84,6 +93,9 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
             await connection.run_sync(
                 lambda conn: _run(_CHECKOUT_REVISION, conn, "upgrade")
             )
+            await connection.run_sync(
+                lambda conn: _run(_AUTHORIZATION_REVISION, conn, "upgrade")
+            )
 
             pk_columns = await connection.run_sync(_carts_pk_columns)
             assert pk_columns == ["id"]
@@ -97,10 +109,21 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
                 and fk["constrained_columns"] == ["order_id"]
                 for fk in order_lines_fks
             )
+            # issue #375, D4: ключ inbox — по producer'у.
+            processed_messages_pk = await connection.run_sync(
+                _processed_messages_pk_columns
+            )
+            assert set(processed_messages_pk) == {"source", "message_id"}
 
             diffs = await connection.run_sync(_diff_against_orm_metadata)
             assert diffs == []
 
+            await connection.run_sync(
+                lambda conn: _run(_AUTHORIZATION_REVISION, conn, "downgrade")
+            )
+            assert await connection.run_sync(_processed_messages_pk_columns) == [
+                "message_id"
+            ]
             await connection.run_sync(
                 lambda conn: _run(_CHECKOUT_REVISION, conn, "downgrade")
             )

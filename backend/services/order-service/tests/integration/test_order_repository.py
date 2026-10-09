@@ -70,7 +70,7 @@ async def test_order_save_trims_lines_on_partial_reservation(
     assert fetched is not None
     assert len(fetched.lines) == 1
     assert fetched.lines[0].product_id == confirmed_product_id
-    assert fetched.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert fetched.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
 
 
 async def test_order_get_by_id_returns_none_for_unknown_order(
@@ -135,7 +135,30 @@ async def test_reservation_outbox_enqueue_persists_an_unpublished_row(
     )
     assert row is not None
     assert row.published_at is None
+    assert row.command_type == "inventory.reserve.v1"
     assert row.payload["order_id"] == str(order_id)
     assert row.payload["lines"] == [
         {"product_id": str(lines[0].product_id), "quantity": 3}
     ]
+
+
+async def test_reservation_outbox_enqueue_authorization_persists_payment_command(
+    db_session: AsyncSession,
+) -> None:
+    repo = ReservationOutboxRepository(db_session)
+    order_id = uuid.uuid4()
+
+    await repo.enqueue_authorization(
+        order_id=order_id, amount_kopecks=4_200, payment_method_token="success"
+    )
+    await db_session.flush()
+
+    row = await db_session.scalar(
+        select(ReservationOutboxModel).where(
+            ReservationOutboxModel.order_id == order_id
+        )
+    )
+    assert row is not None
+    assert row.published_at is None
+    assert row.command_type == "payment.authorize.v1"
+    assert row.payload == {"amount": 4_200, "payment_method_token": "success"}

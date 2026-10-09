@@ -26,10 +26,8 @@ from api.workers.commands.reservation_result_handler import (
     build_reservation_result_handler,
 )
 from core.settings import settings
-from infrastructure.amqp.reservation_outbox_publisher import (
-    COMMAND_TYPE,
-    ReservationOutboxPublisher,
-)
+from infrastructure.amqp.reservation_outbox_publisher import ReservationOutboxPublisher
+from infrastructure.db.reservation_outbox_repository import COMMAND_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +65,18 @@ async def main() -> None:
             )
             await consume(
                 queue,
-                build_reservation_result_handler(session_factory),
+                build_reservation_result_handler(
+                    session_factory, settings.order_payment_method_token
+                ),
                 prefetch_count=1,
             )
             logger.info("order-worker: reservation-result consumer started")
 
-            # finding 9: order-worker сам объявляет топологию команды перед
-            # публикацией — не полагается на то, что inventory-worker
-            # гарантированно стартовал первым.
-            await declare_command_topology(channel, COMMAND_TYPE)
+            # finding 9: order-worker сам объявляет топологию каждой команды
+            # перед публикацией — не полагается на то, что inventory-worker/
+            # payment-worker гарантированно стартовали первыми.
+            for command_type in COMMAND_TYPES:
+                await declare_command_topology(channel, command_type)
             commands_exchange = await channel.declare_exchange(
                 COMMANDS_EXCHANGE_NAME, ExchangeType.TOPIC, durable=True
             )

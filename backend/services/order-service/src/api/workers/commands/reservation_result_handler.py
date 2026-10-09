@@ -1,9 +1,9 @@
 # ruff: noqa: E501
 """Message-driven адаптер `inventory.reserved.v1` (issue #372, D7/D8) —
 мирует `api/worker.py`-style consumer'ов #367/#369's `handle_product_event`:
-собственный `processed_messages`-гейт по `message_id` + делегирование
-бизнес-применения `ApplyReservationResultCommandHandler` (чистая функция,
-без AMQP-деталей)."""
+собственный `processed_messages`-гейт по `(source, message_id)` (issue #375,
+D4) + делегирование бизнес-применения `ApplyReservationResultCommandHandler`
+(чистая функция, без AMQP-деталей)."""
 
 import json
 import logging
@@ -11,16 +11,22 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 from aio_pika.abc import AbstractIncomingMessage
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from api.workers.commands.inbox import (
+    INVENTORY_SOURCE,
+    claim_message,
+    parse_outbox_message_id,
+)
 from application.commands.apply_reservation_result import (
     ApplyReservationResultCommand,
     ApplyReservationResultCommandHandler,
 )
 from infrastructure.db.cart_repository import CartRepository
-from infrastructure.db.entity_configurations.models import ProcessedMessageModel
 from infrastructure.db.order_repository import OrderRepository
+from infrastructure.db.reservation_outbox_repository import (
+    ReservationOutboxRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +39,6 @@ def _event_type(message: AbstractIncomingMessage) -> str:
     if event_type != RESERVED_EVENT_TYPE:
         raise ValueError(f"Unsupported reservation event type: {event_type!r}")
     return event_type
-
-
-def _message_id(message: AbstractIncomingMessage) -> int:
-    # `inventory.reserved.v1` едет через generic `kernel_platform` outbox
-    # (inventory-service — уже существующий producer, issue #370) — тот же
-    # BigInt `message_id`, что inventory-worker's `ProcessedMessage`-гейт
-    # (issue #367, находка 3) ожидает от чужого доменного события.
-    raw_message_id = message.message_id
-    try:
-        message_id = int(raw_message_id) if raw_message_id is not None else 0
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid outbox message id: {raw_message_id!r}") from exc
-    if message_id <= 0:
-        raise ValueError(f"Invalid outbox message id: {raw_message_id!r}")
-    return message_id
 
 
 def parse_reservation_result(body: bytes) -> ApplyReservationResultCommand:
@@ -77,28 +68,30 @@ def parse_reservation_result(body: bytes) -> ApplyReservationResultCommand:
 async def handle_reservation_result(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
+    *,
+    payment_method_token: str,
 ) -> None:
     event_type = _event_type(message)
-    message_id = _message_id(message)
+    message_id = parse_outbox_message_id(message)
     command = parse_reservation_result(message.body)
 
     async with session_factory() as session:
         async with session.begin():
-            claimed_message_id = await session.scalar(
-                insert(ProcessedMessageModel)
-                .values(message_id=message_id)
-                .on_conflict_do_nothing()
-                .returning(ProcessedMessageModel.message_id)
-            )
-            if claimed_message_id is None:
+            if not await claim_message(
+                session, source=INVENTORY_SOURCE, message_id=message_id
+            ):
                 logger.info(
-                    "order-worker: message %s already processed; skipping",
+                    "order-worker: %s message %s already processed; skipping",
+                    INVENTORY_SOURCE,
                     message_id,
                 )
                 return
 
             handler = ApplyReservationResultCommandHandler(
-                OrderRepository(session), CartRepository(session)
+                OrderRepository(session),
+                CartRepository(session),
+                ReservationOutboxRepository(session),
+                payment_method_token=payment_method_token,
             )
             await handler.execute(command)
 
@@ -112,8 +105,11 @@ async def handle_reservation_result(
 
 def build_reservation_result_handler(
     session_factory: async_sessionmaker[AsyncSession],
+    payment_method_token: str,
 ) -> Callable[[AbstractIncomingMessage], Awaitable[None]]:
     async def _handler(message: AbstractIncomingMessage) -> None:
-        await handle_reservation_result(message, session_factory)
+        await handle_reservation_result(
+            message, session_factory, payment_method_token=payment_method_token
+        )
 
     return _handler

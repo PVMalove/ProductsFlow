@@ -64,7 +64,7 @@ def test_apply_reservation_result_partial_confirmed_trims_lines() -> None:
 
     assert applied is True
     assert order.status is OrderStatus.PENDING
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert order.failure_reason is None
     assert [line.product_id for line in order.lines] == [confirmed_product_id]
 
@@ -75,8 +75,30 @@ def test_apply_reservation_result_full_confirmed_keeps_all_lines() -> None:
 
     order.apply_reservation_result(confirmed_product_ids=all_product_ids)
 
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert len(order.lines) == 2
+
+
+def test_authorization_amount_is_the_sum_of_confirmed_lines_only() -> None:
+    confirmed = OrderLine(
+        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=3, unit_price_kopecks=1_500
+    )
+    unavailable = OrderLine(
+        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=2, unit_price_kopecks=7_000
+    )
+    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=[confirmed, unavailable])
+
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({confirmed.product_id})
+    )
+
+    assert order.authorization_amount_kopecks() == 3 * 1_500
+
+
+def test_create_has_no_payment_authorization_id() -> None:
+    order, _lines = _order_with_lines()
+
+    assert order.payment_authorization_id is None
 
 
 def test_apply_reservation_result_is_a_no_op_once_already_resolved() -> None:
@@ -90,7 +112,7 @@ def test_apply_reservation_result_is_a_no_op_once_already_resolved() -> None:
     applied_again = order.apply_reservation_result(confirmed_product_ids=frozenset())
 
     assert applied_again is False
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert [line.product_id for line in order.lines] == [confirmed_product_id]
 
 
