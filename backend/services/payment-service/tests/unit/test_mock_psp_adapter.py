@@ -95,3 +95,20 @@ async def test_lookup_capture_of_a_token_without_a_capture_scenario_raises(
 
     with pytest.raises(UnknownPspScenarioTokenError):
         await adapter.lookup_capture(token, "capture-key-1")
+
+
+async def test_lookup_capture_never_confirms_absence_for_any_scenario_token() -> None:
+    """Known limitation (issue #374, architect risk R1): no token of the ADR 0016
+    Test PSP dictionary makes `lookup_capture` report `NOT_FOUND`, so the
+    confirmed-absence path is proven only through a fake/spy PSP. Adding such a
+    token changes ADR 0016 and must be a deliberate decision that updates this test."""
+    adapter = MockPspAdapter()
+    outcomes: set[PspCaptureLookupOutcome] = set()
+
+    for token in ("success", "decline", "timeout", "unknown_capture"):
+        try:
+            outcomes.add(await adapter.lookup_capture(token, "capture-key-1"))
+        except UnknownPspScenarioTokenError:
+            continue
+
+    assert outcomes == {PspCaptureLookupOutcome.CAPTURED}
