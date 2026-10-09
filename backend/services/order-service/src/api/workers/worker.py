@@ -29,8 +29,8 @@ from api.workers.commands.authorization_result_handler import (
     QUEUE_NAME as PAYMENT_EVENTS_QUEUE_NAME,
 )
 from api.workers.commands.reservation_result_handler import (
+    INVENTORY_EVENT_TYPES,
     QUEUE_NAME,
-    RESERVED_EVENT_TYPE,
     build_reservation_result_handler,
 )
 from core.settings import settings
@@ -69,7 +69,7 @@ async def main() -> None:
                 channel,
                 service_name="order",
                 queue_name=QUEUE_NAME,
-                routing_keys=(RESERVED_EVENT_TYPE,),
+                routing_keys=INVENTORY_EVENT_TYPES,
             )
             await consume(
                 queue,
@@ -78,7 +78,7 @@ async def main() -> None:
                 ),
                 prefetch_count=1,
             )
-            logger.info("order-worker: reservation-result consumer started")
+            logger.info("order-worker: inventory-event consumer started")
 
             # issue #375, D7: собственная очередь результатов авторизации —
             # отдельные retry/DLQ-очереди от inventory-событий.

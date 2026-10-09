@@ -8,7 +8,10 @@ import uuid
 
 import pytest
 
-from api.workers.commands.reservation_result_handler import parse_reservation_result
+from api.workers.commands.reservation_result_handler import (
+    parse_reservation_release,
+    parse_reservation_result,
+)
 
 
 def test_parse_reservation_result_extracts_order_id_and_confirmed_product_ids() -> None:
@@ -64,3 +67,28 @@ def test_parse_reservation_result_rejects_invalid_json() -> None:
 def test_parse_reservation_result_rejects_non_object_payload() -> None:
     with pytest.raises(ValueError):
         parse_reservation_result(json.dumps([1, 2, 3]).encode())
+
+
+def test_parse_reservation_release_extracts_order_id() -> None:
+    order_id = uuid.uuid4()
+    body = json.dumps(
+        {
+            "order_id": str(order_id),
+            "reason": "manual",
+            "released_lines": [{"product_id": str(uuid.uuid4()), "quantity": 1}],
+        }
+    ).encode()
+
+    command = parse_reservation_release(body)
+
+    assert command.order_id == order_id
+
+
+def test_parse_reservation_release_rejects_missing_order_id() -> None:
+    with pytest.raises(ValueError):
+        parse_reservation_release(json.dumps({"reason": "expired"}).encode())
+
+
+def test_parse_reservation_release_rejects_invalid_json() -> None:
+    with pytest.raises(ValueError):
+        parse_reservation_release(b"not-json")

@@ -40,6 +40,8 @@ class OrderSagaStep(Enum):
     AWAITING_ALLOCATION = "awaiting_allocation"
     # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
     COMPENSATING = "compensating"
+    # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории.
+    COMPENSATED = "compensated"
 
 
 class AuthorizationOutcome(Enum):
@@ -190,4 +192,14 @@ class Order(Entity[uuid.UUID]):
             else FAILURE_REASON_PAYMENT_TIMED_OUT
         )
         self.saga_step = OrderSagaStep.COMPENSATING
+        return True
+
+    def complete_compensation(self) -> bool:
+        """Фиксирует освобождение резерва (`inventory.released.v1`, issue
+        #375, D1). `False` без мутации вне `COMPENSATING` (повторная доставка
+        или release в другом шаге). `lines` не усекаются: Order остаётся в
+        истории со своими строками и статусом `FAILED`."""
+        if self.saga_step is not OrderSagaStep.COMPENSATING:
+            return False
+        self.saga_step = OrderSagaStep.COMPENSATED
         return True

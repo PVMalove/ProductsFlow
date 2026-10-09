@@ -226,3 +226,42 @@ def test_authorization_result_before_reservation_is_a_no_op() -> None:
     assert applied is False
     assert order.status is OrderStatus.PENDING
     assert order.saga_step is OrderSagaStep.AWAITING_RESERVATION
+
+
+def _order_compensating() -> Order:
+    order = _order_awaiting_authorization()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+    return order
+
+
+def test_complete_compensation_keeps_failed_order_with_its_lines() -> None:
+    order = _order_compensating()
+    lines_before = list(order.lines)
+
+    completed = order.complete_compensation()
+
+    assert completed is True
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.status is OrderStatus.FAILED
+    assert order.failure_reason == "PAYMENT_DECLINED"
+    assert order.lines == lines_before
+
+
+def test_repeated_compensation_is_a_no_op() -> None:
+    order = _order_compensating()
+    order.complete_compensation()
+
+    assert order.complete_compensation() is False
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+
+
+def test_compensation_outside_compensating_step_is_a_no_op() -> None:
+    order = _order_awaiting_authorization()
+
+    completed = order.complete_compensation()
+
+    assert completed is False
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION

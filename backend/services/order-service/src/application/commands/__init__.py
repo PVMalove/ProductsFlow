@@ -8,6 +8,10 @@ from application.commands.apply_authorization_result import (
     ApplyAuthorizationResultCommand,
     ApplyAuthorizationResultCommandHandler,
 )
+from application.commands.apply_reservation_release import (
+    ApplyReservationReleaseCommand,
+    ApplyReservationReleaseCommandHandler,
+)
 from application.commands.apply_reservation_result import (
     ApplyReservationResultCommand,
     ApplyReservationResultCommandHandler,
@@ -27,6 +31,8 @@ __all__ = [
     "AddCartLineCommandHandler",
     "ApplyAuthorizationResultCommand",
     "ApplyAuthorizationResultCommandHandler",
+    "ApplyReservationReleaseCommand",
+    "ApplyReservationReleaseCommandHandler",
     "ApplyReservationResultCommand",
     "ApplyReservationResultCommandHandler",
     "CheckoutCommand",

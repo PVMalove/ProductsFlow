@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime
 
 from domain.entities.cart import Cart
+from domain.entities.order import OrderLine
 from domain.value_objects.cart_id import CartId
 
 USER_ID = uuid.uuid4()
@@ -256,3 +257,67 @@ def test_resolve_partial_reservation_removes_confirmed_and_flags_unavailable() -
     assert remaining.product_id == unavailable_product_id
     assert remaining.locked_by_order_id is None
     assert remaining.unavailable_reason == "insufficient_stock"
+
+
+def _order_line(product_id: uuid.UUID, quantity: int) -> OrderLine:
+    return OrderLine(
+        id=uuid.uuid4(), product_id=product_id, quantity=quantity, unit_price_kopecks=1
+    )
+
+
+def test_return_order_lines_adds_absent_products_as_free_lines_with_reason() -> None:
+    cart = _new_cart()
+    order_line = _order_line(uuid.uuid4(), 3)
+    now = datetime.now(UTC)
+
+    cart.return_order_lines(lines=[order_line], reason="PAYMENT_DECLINED", now=now)
+
+    assert len(cart.lines) == 1
+    returned = cart.lines[0]
+    assert returned.id == order_line.id
+    assert returned.product_id == order_line.product_id
+    assert returned.quantity == 3
+    assert returned.added_at == now
+    assert returned.locked_by_order_id is None
+    assert returned.unavailable_reason == "PAYMENT_DECLINED"
+
+
+def test_return_order_lines_merges_into_an_unlocked_line_of_the_same_product() -> None:
+    cart = _new_cart()
+    product_id = uuid.uuid4()
+    cart.add_line(
+        line_id=uuid.uuid4(), product_id=product_id, quantity=2, now=datetime.now(UTC)
+    )
+
+    cart.return_order_lines(
+        lines=[_order_line(product_id, 3)],
+        reason="PAYMENT_TIMED_OUT",
+        now=datetime.now(UTC),
+    )
+
+    assert len(cart.lines) == 1
+    assert cart.lines[0].quantity == 5
+    assert cart.lines[0].unavailable_reason == "PAYMENT_TIMED_OUT"
+
+
+def test_return_order_lines_leaves_a_line_locked_by_another_checkout_unchanged() -> (
+    None
+):
+    cart = _new_cart()
+    product_id = uuid.uuid4()
+    cart.add_line(
+        line_id=uuid.uuid4(), product_id=product_id, quantity=2, now=datetime.now(UTC)
+    )
+    other_order_id = uuid.uuid4()
+    cart.lock_for_checkout(order_id=other_order_id)
+
+    cart.return_order_lines(
+        lines=[_order_line(product_id, 3)],
+        reason="PAYMENT_DECLINED",
+        now=datetime.now(UTC),
+    )
+
+    assert len(cart.lines) == 1
+    assert cart.lines[0].quantity == 2
+    assert cart.lines[0].locked_by_order_id == other_order_id
+    assert cart.lines[0].unavailable_reason is None
