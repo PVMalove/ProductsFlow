@@ -67,7 +67,9 @@ class CapturePaymentCommandHandler:
                     PaymentErrors.invalid_authorization_state()
                 )
 
-            outcome = await self._psp_client.capture(payment.payment_method_token)
+            outcome = await self._psp_client.capture(
+                payment.payment_method_token, command.idempotency_key
+            )
             result = payment.capture(command.idempotency_key, outcome)
             if result.is_err:
                 return Result[PaymentAuthorizationView].fail(result.error)

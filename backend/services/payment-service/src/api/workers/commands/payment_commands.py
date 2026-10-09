@@ -6,7 +6,10 @@ the inbox row (уже даёт `consume_command` бесплатно), вызыв
 внутри `PaymentCommandUnitOfWork` (архитектурный бриф D5), и вставляет
 коррелированный факт результата напрямую в `outbox_messages` (D3) — без
 доменных событий, `PaymentAuthorization` остаётся нетронутым, так что
-существующий HTTP-путь продолжает вести себя ровно как раньше."""
+существующий HTTP-путь продолжает вести себя ровно как раньше.
+
+Issue #374 добавляет по тому же образцу `payment.capture.v1` и
+`payment.lookup_capture.v1` (сверка неизвестного capture по ключу)."""
 
 import logging
 import uuid
@@ -25,6 +28,10 @@ from application.commands.authorize_payment import (
 from application.commands.capture_payment import (
     CapturePaymentCommand,
     CapturePaymentCommandHandler,
+)
+from application.commands.reconcile_capture import (
+    ReconcileCaptureCommand,
+    ReconcileCaptureCommandHandler,
 )
 from application.commands.void_payment import (
     VoidPaymentCommand,
@@ -57,6 +64,12 @@ _AUTHORIZE_EVENT_TYPE_BY_STATUS: dict[PaymentAuthorizationStatus, str] = {
 _CAPTURE_EVENT_TYPE_BY_STATUS: dict[PaymentAuthorizationStatus, str] = {
     PaymentAuthorizationStatus.CAPTURED: "payment.captured.v1",
     PaymentAuthorizationStatus.CAPTURE_UNKNOWN: "payment.capture_unknown.v1",
+}
+
+# AUTHORIZED после сверки = отсутствие capture у PSP подтверждено (бриф D4).
+_LOOKUP_CAPTURE_EVENT_TYPE_BY_STATUS: dict[PaymentAuthorizationStatus, str] = {
+    PaymentAuthorizationStatus.CAPTURED: "payment.captured.v1",
+    PaymentAuthorizationStatus.AUTHORIZED: "payment.capture_not_found.v1",
 }
 
 
@@ -167,6 +180,35 @@ async def handle_capture_command(session: AsyncSession, command: Command) -> Non
     )
 
 
+async def handle_lookup_capture_command(
+    session: AsyncSession, command: Command
+) -> None:
+    uow = PaymentCommandUnitOfWork(session)
+    handler = ReconcileCaptureCommandHandler(uow, build_psp_client(settings))
+    result = await handler.execute(
+        ReconcileCaptureCommand(
+            actor=_SYSTEM_ACTOR,
+            idempotency_key=str(command.payload["idempotency_key"]),
+        )
+    )
+    if result.is_err:
+        # authorization_not_found — ключ ещё не стал capture-ключом (capture-
+        # команда может быть ещё в retry-лестнице). «Не найдено локально» —
+        # не подтверждение отсутствия у PSP, поэтому никакого
+        # payment.capture_not_found.v1 здесь (бриф #374 D7) — retry/DLQ.
+        raise ValueError(f"payment.lookup_capture.v1 rejected: {result.error.code}")
+
+    view = result.value
+    event_type = _LOOKUP_CAPTURE_EVENT_TYPE_BY_STATUS[
+        PaymentAuthorizationStatus(view.status)
+    ]
+    session.add(
+        _result_outbox_message(
+            event_type=event_type, authorization_id=view.id, command=command
+        )
+    )
+
+
 # Единый реестр command_type -> handler (issue #371, Seams for TDD #2) —
 # `api/worker.py::main()` регистрирует консьюмеры по нему, тест
 # `test_payment_worker_seams.py` ловит забытую регистрацию.
@@ -174,4 +216,5 @@ COMMAND_HANDLERS: dict[str, CommandHandler] = {
     "payment.authorize.v1": handle_authorize_command,
     "payment.void.v1": handle_void_command,
     "payment.capture.v1": handle_capture_command,
+    "payment.lookup_capture.v1": handle_lookup_capture_command,
 }

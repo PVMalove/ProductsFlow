@@ -49,10 +49,14 @@ class PaymentAuthorizationRepository:
         return _to_domain(row) if row is not None else None
 
     async def get_by_id(self, id: uuid.UUID) -> PaymentAuthorization | None:
+        # populate_existing (issue #374, бриф D6): строка, уже живущая в
+        # identity map, иначе вернулась бы со старыми атрибутами даже после
+        # того, как FOR UPDATE дождался чужого коммита.
         row = await self.session.scalar(
             select(PaymentAuthorizationModel)
             .where(PaymentAuthorizationModel.id == id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return _to_domain(row) if row is not None else None
 
