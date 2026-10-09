@@ -227,7 +227,7 @@ __marimo__/
 .vscode
 .claude
 .agents
-.harness
+/.harness/
 
 skills-lock.json
 /SPEC.md
