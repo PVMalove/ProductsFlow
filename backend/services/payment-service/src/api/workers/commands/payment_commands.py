@@ -199,9 +199,17 @@ async def handle_lookup_capture_command(
         raise ValueError(f"payment.lookup_capture.v1 rejected: {result.error.code}")
 
     view = result.value
-    event_type = _LOOKUP_CAPTURE_EVENT_TYPE_BY_STATUS[
+    event_type = _LOOKUP_CAPTURE_EVENT_TYPE_BY_STATUS.get(
         PaymentAuthorizationStatus(view.status)
-    ]
+    )
+    if event_type is None:
+        # Ключ — capture-ключ, но авторизация уже ушла дальше (напр. VOIDED
+        # после подтверждённого отсутствия): D7 задаёт факты только для
+        # CAPTURED/AUTHORIZED — явный отказ вместо KeyError, та же
+        # retry/DLQ-лестница с читаемой причиной.
+        raise ValueError(
+            f"payment.lookup_capture.v1 rejected: unexpected status {view.status}"
+        )
     session.add(
         _result_outbox_message(
             event_type=event_type, authorization_id=view.id, command=command

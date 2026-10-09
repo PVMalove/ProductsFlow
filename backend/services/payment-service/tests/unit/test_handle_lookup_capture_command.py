@@ -159,6 +159,32 @@ async def test_repeat_lookup_after_confirmed_absence_adds_not_found_without_a_ps
     assert _single_outbox_message(session).event_type == "payment.capture_not_found.v1"
 
 
+async def test_lookup_of_a_voided_capture_key_raises_an_explicit_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Confirmed absence -> AUTHORIZED keeps the capture key -> void() -> VOIDED:
+    # D7 maps only CAPTURED/AUTHORIZED, so the adapter must reject explicitly
+    # (retry/DLQ with a readable reason), not fail on a KeyError.
+    payment = _payment_with_capture(PspCaptureOutcome.UNKNOWN)
+    payment.reconcile_capture("capture-key-1", PspCaptureLookupOutcome.NOT_FOUND)
+    payment.void("void-key-1")
+    repo = FakePaymentAuthorizationRepository([payment])
+    psp = FakePspClient()
+    _patch(monkeypatch, repo, psp)
+    session = _RecordingSession()
+
+    with pytest.raises(
+        ValueError, match="payment.lookup_capture.v1 rejected: unexpected status voided"
+    ):
+        await payment_commands.handle_lookup_capture_command(
+            session,  # type: ignore[arg-type]
+            _lookup_capture_command("capture-key-1"),
+        )
+
+    assert psp.lookup_capture_calls == []
+    assert session.added == []
+
+
 async def test_lookup_of_an_unknown_key_raises_without_a_psp_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
