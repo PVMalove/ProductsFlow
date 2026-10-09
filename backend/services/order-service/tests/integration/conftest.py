@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from api.http.dependencies import get_catalog_client
 from infrastructure.db.entity_configurations.models import Base
@@ -25,6 +25,27 @@ async def _schema(db_engine: AsyncEngine) -> AsyncIterator[None]:
     finally:
         async with db_engine.begin() as connection:
             await connection.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def saga_session_factory(
+    db_engine: AsyncEngine,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """issue #375: фабрика сессий для worker-адаптеров, которые сами
+    открывают `session_factory()` + `session.begin()`. Все сессии делят одно
+    соединение во внешней транзакции (`create_savepoint`) — `begin()`
+    адаптера становится savepoint'ом, а откат в конце теста оставляет базу
+    чистой, тот же приём, что `db_session`."""
+    async with db_engine.connect() as connection:
+        await connection.begin()
+        try:
+            yield async_sessionmaker(
+                bind=connection,
+                expire_on_commit=False,
+                join_transaction_mode="create_savepoint",
+            )
+        finally:
+            await connection.rollback()
 
 
 @pytest.fixture
