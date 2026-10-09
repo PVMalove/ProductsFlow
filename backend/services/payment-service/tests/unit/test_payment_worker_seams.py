@@ -6,12 +6,14 @@
 from api.workers.commands.payment_commands import (
     COMMAND_HANDLERS,
     handle_authorize_command,
+    handle_capture_command,
     handle_void_command,
 )
 
 
-def test_payment_command_handlers_cover_authorize_and_void() -> None:
+def test_payment_command_handlers_cover_authorize_void_and_capture() -> None:
     assert COMMAND_HANDLERS == {
         "payment.authorize.v1": handle_authorize_command,
         "payment.void.v1": handle_void_command,
+        "payment.capture.v1": handle_capture_command,
     }
