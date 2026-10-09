@@ -37,6 +37,23 @@ class OrderSagaStep(Enum):
     # issue #375, D1: заменяет `reservation_confirmed` (#372) — после резерва
     # Saga ждёт результата `payment.authorize.v1`.
     AWAITING_AUTHORIZATION = "awaiting_authorization"
+    AWAITING_ALLOCATION = "awaiting_allocation"
+    # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
+    COMPENSATING = "compensating"
+
+
+class AuthorizationOutcome(Enum):
+    """issue #375, D1: результат `payment.authorize.v1` — по одному на каждый
+    факт payment-service (`payment.authorized.v1`,
+    `payment.authorization_declined.v1`, `payment.authorization_timed_out.v1`)."""
+
+    AUTHORIZED = "authorized"
+    DECLINED = "declined"
+    TIMED_OUT = "timed_out"
+
+
+FAILURE_REASON_PAYMENT_DECLINED = "PAYMENT_DECLINED"
+FAILURE_REASON_PAYMENT_TIMED_OUT = "PAYMENT_TIMED_OUT"
 
 
 @dataclass
@@ -145,4 +162,32 @@ class Order(Entity[uuid.UUID]):
             line for line in self.lines if line.product_id in confirmed_product_ids
         ]
         self.saga_step = OrderSagaStep.AWAITING_AUTHORIZATION
+        return True
+
+    def apply_authorization_result(
+        self, *, outcome: AuthorizationOutcome, authorization_id: uuid.UUID
+    ) -> bool:
+        """Применяет результат `payment.authorize.v1` (issue #375, D1).
+        Возвращает `False` без мутации вне `AWAITING_AUTHORIZATION` — та же
+        двухслойная идемпотентность, что `apply_reservation_result`.
+
+        Успех сохраняет `authorization_id` и переводит Saga к allocation
+        (статус остаётся `PENDING`). Отказ/таймаут — компенсируемый
+        терминальный результат: внешний статус сразу `FAILED`, Saga переходит
+        в `COMPENSATING` (резерв освобождается отдельным шагом)."""
+        if self.saga_step is not OrderSagaStep.AWAITING_AUTHORIZATION:
+            return False
+
+        if outcome is AuthorizationOutcome.AUTHORIZED:
+            self.payment_authorization_id = authorization_id
+            self.saga_step = OrderSagaStep.AWAITING_ALLOCATION
+            return True
+
+        self.status = OrderStatus.FAILED
+        self.failure_reason = (
+            FAILURE_REASON_PAYMENT_DECLINED
+            if outcome is AuthorizationOutcome.DECLINED
+            else FAILURE_REASON_PAYMENT_TIMED_OUT
+        )
+        self.saga_step = OrderSagaStep.COMPENSATING
         return True

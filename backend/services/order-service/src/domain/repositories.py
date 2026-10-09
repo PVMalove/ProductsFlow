@@ -84,3 +84,7 @@ class ReservationOutboxRepository(Protocol):
     ) -> None:
         """`payment.authorize.v1` — авторизация суммы подтверждённых строк."""
         ...
+
+    async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
+        """`inventory.release.v1` — компенсация резерва заказа."""
+        ...

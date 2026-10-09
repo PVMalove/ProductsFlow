@@ -1,5 +1,5 @@
 """Фейковый ReservationOutboxRepository для юнит-тестов (issue #372;
-issue #375 — authorization intent)."""
+issue #375 — authorization/release intents)."""
 
 import uuid
 from dataclasses import dataclass
@@ -18,6 +18,7 @@ class FakeReservationOutboxRepository:
     def __init__(self) -> None:
         self.enqueue_calls: list[tuple[uuid.UUID, list[OrderLine]]] = []
         self.authorization_intents: list[AuthorizationIntent] = []
+        self.release_intents: list[uuid.UUID] = []
 
     async def enqueue(self, *, order_id: uuid.UUID, lines: list[OrderLine]) -> None:
         self.enqueue_calls.append((order_id, lines))
@@ -32,3 +33,6 @@ class FakeReservationOutboxRepository:
                 payment_method_token=payment_method_token,
             )
         )
+
+    async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
+        self.release_intents.append(order_id)

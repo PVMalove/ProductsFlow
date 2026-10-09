@@ -4,7 +4,8 @@
 Risk 2 архитектурного брифа): (1) event-consumer `inventory.reserved.v1`
 (D7); (2) периодический дренаж `reservation_outbox` -> `inventory.reserve.v1`
 (D6). Отдельный от `api/main.py`'s HTTP-процесса — HTTP не должен блокироваться
-на AMQP-consume loop (находка 1)."""
+на AMQP-consume loop (находка 1). issue #375, D7: второй consumer — результаты
+`payment.authorize.v1` из очереди `order.payment-events`."""
 
 import asyncio
 import logging
@@ -20,6 +21,13 @@ from kernel_platform.topology import (
 from observability.tracing import configure_tracing
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from api.workers.commands.authorization_result_handler import (
+    AUTHORIZATION_OUTCOME_BY_EVENT_TYPE,
+    build_authorization_result_handler,
+)
+from api.workers.commands.authorization_result_handler import (
+    QUEUE_NAME as PAYMENT_EVENTS_QUEUE_NAME,
+)
 from api.workers.commands.reservation_result_handler import (
     QUEUE_NAME,
     RESERVED_EVENT_TYPE,
@@ -71,6 +79,21 @@ async def main() -> None:
                 prefetch_count=1,
             )
             logger.info("order-worker: reservation-result consumer started")
+
+            # issue #375, D7: собственная очередь результатов авторизации —
+            # отдельные retry/DLQ-очереди от inventory-событий.
+            payment_queue = await declare_topology(
+                channel,
+                service_name="order",
+                queue_name=PAYMENT_EVENTS_QUEUE_NAME,
+                routing_keys=tuple(AUTHORIZATION_OUTCOME_BY_EVENT_TYPE),
+            )
+            await consume(
+                payment_queue,
+                build_authorization_result_handler(session_factory),
+                prefetch_count=1,
+            )
+            logger.info("order-worker: authorization-result consumer started")
 
             # finding 9: order-worker сам объявляет топологию каждой команды
             # перед публикацией — не полагается на то, что inventory-worker/

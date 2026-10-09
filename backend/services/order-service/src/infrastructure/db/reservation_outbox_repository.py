@@ -18,8 +18,9 @@ from infrastructure.db.entity_configurations.models import ReservationOutboxMode
 
 RESERVE_COMMAND_TYPE = "inventory.reserve.v1"
 AUTHORIZE_COMMAND_TYPE = "payment.authorize.v1"
+RELEASE_COMMAND_TYPE = "inventory.release.v1"
 # Все типы, которые order-worker публикует — для объявления command-топологии.
-COMMAND_TYPES = (RESERVE_COMMAND_TYPE, AUTHORIZE_COMMAND_TYPE)
+COMMAND_TYPES = (RESERVE_COMMAND_TYPE, AUTHORIZE_COMMAND_TYPE, RELEASE_COMMAND_TYPE)
 
 
 class ReservationOutboxRepository:
@@ -56,6 +57,14 @@ class ReservationOutboxRepository:
                 "amount": amount_kopecks,
                 "payment_method_token": payment_method_token,
             },
+        )
+
+    async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
+        # inventory-service's `inventory.release.v1` читает только `order_id`.
+        self._add(
+            order_id=order_id,
+            command_type=RELEASE_COMMAND_TYPE,
+            payload={"order_id": str(order_id)},
         )
 
     def _add(
