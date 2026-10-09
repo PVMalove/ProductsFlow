@@ -384,9 +384,25 @@ async def test_duplicate_capture_command_id_redelivery_calls_the_psp_once(
         )
 
         # Redeliver the exact same command_id — the inbox gate must ACK it
-        # without re-invoking the handler at all.
+        # without re-invoking the handler at all. A sentinel capture published
+        # right after it is a deterministic barrier instead of a fixed sleep:
+        # `consume_command` runs with prefetch_count=1 and this queue has one
+        # consumer, so the sentinel reaches the handler only after the
+        # duplicate has been delivered and ACKed.
         await publish_command(exchange, command, timeout_seconds=5.0)
-        await asyncio.sleep(0.3)
+        sentinel_authorization_id = await _seed_authorization(
+            command_session_factory, "success"
+        )
+        sentinel = _capture_command(sentinel_authorization_id)
+        handled.clear()
+        await publish_command(exchange, sentinel, timeout_seconds=5.0)
+        await asyncio.wait_for(handled.wait(), timeout=5)
+        await _wait_for_row(
+            command_session_factory,
+            sentinel_authorization_id,
+            status="captured",
+            capture_idempotency_key=str(sentinel.command_id),
+        )
 
         async with command_session_factory() as session:
             inbox_count = await session.scalar(
@@ -401,6 +417,9 @@ async def test_duplicate_capture_command_id_redelivery_calls_the_psp_once(
             )
             == 1
         )
-        assert len(spy_psp.capture_calls) == 1
+        assert spy_psp.capture_calls == [
+            ("success", str(command.command_id)),
+            ("success", str(sentinel.command_id)),
+        ]
     finally:
         await queue.cancel(consumer_tag)
