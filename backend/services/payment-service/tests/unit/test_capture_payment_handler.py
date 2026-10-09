@@ -39,6 +39,9 @@ async def test_capture_success_calls_psp_once_and_commits() -> None:
     assert result.value.status == "captured"
     assert uow.committed is True
     assert psp.capture_calls == ["success"]
+    # Issue #374, brief D2: the PSP receives the capture key, so a later
+    # lookup by that key (and a PSP-side dedup on retry) is coherent.
+    assert psp.capture_idempotency_keys == ["capture-key-1"]
 
 
 async def test_capture_repeated_with_same_key_does_not_call_psp_again() -> None:

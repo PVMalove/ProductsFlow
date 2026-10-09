@@ -5,7 +5,11 @@ from domain.entities.payment_authorization import (
     PaymentAuthorization,
     PaymentAuthorizationStatus,
 )
-from domain.psp_client import PspAuthorizeOutcome, PspCaptureOutcome
+from domain.psp_client import (
+    PspAuthorizeOutcome,
+    PspCaptureLookupOutcome,
+    PspCaptureOutcome,
+)
 
 
 def test_create_rejects_non_positive_amount() -> None:
@@ -148,3 +152,65 @@ def test_capture_from_non_authorized_state_conflicts() -> None:
 
     assert result.is_err
     assert result.error.code == "invalid_authorization_state"
+
+
+def test_reconcile_capture_found_at_the_psp_captures() -> None:
+    payment = _authorized()
+    payment.capture("capture-key-1", PspCaptureOutcome.UNKNOWN)
+
+    result = payment.reconcile_capture(
+        "capture-key-1", PspCaptureLookupOutcome.CAPTURED
+    )
+
+    assert result.is_ok
+    assert payment.status is PaymentAuthorizationStatus.CAPTURED
+    assert payment.capture_idempotency_key == "capture-key-1"
+
+
+def test_reconcile_capture_not_found_returns_to_authorized_and_allows_a_new_key() -> (
+    None
+):
+    """Issue #374, DoD 3: a repeat capture is allowed only after the absence of
+    the operation is confirmed — the existing `capture()` then accepts a new key
+    from AUTHORIZED unchanged."""
+    payment = _authorized()
+    payment.capture("capture-key-1", PspCaptureOutcome.UNKNOWN)
+
+    reconciled = payment.reconcile_capture(
+        "capture-key-1", PspCaptureLookupOutcome.NOT_FOUND
+    )
+
+    assert reconciled.is_ok
+    assert payment.status is PaymentAuthorizationStatus.AUTHORIZED
+    assert payment.capture_idempotency_key == "capture-key-1"
+
+    recaptured = payment.capture("capture-key-2", PspCaptureOutcome.CAPTURED)
+
+    assert recaptured.is_ok
+    assert payment.status is PaymentAuthorizationStatus.CAPTURED
+    assert payment.capture_idempotency_key == "capture-key-2"
+
+
+def test_reconcile_capture_with_another_key_is_not_found() -> None:
+    payment = _authorized()
+    payment.capture("capture-key-1", PspCaptureOutcome.UNKNOWN)
+
+    result = payment.reconcile_capture(
+        "capture-key-2", PspCaptureLookupOutcome.CAPTURED
+    )
+
+    assert result.is_err
+    assert result.error.code == "authorization_not_found"
+    assert payment.status is PaymentAuthorizationStatus.CAPTURE_UNKNOWN
+
+
+def test_reconcile_capture_of_an_already_final_capture_is_a_noop_ok() -> None:
+    payment = _authorized()
+    payment.capture("capture-key-1", PspCaptureOutcome.CAPTURED)
+
+    result = payment.reconcile_capture(
+        "capture-key-1", PspCaptureLookupOutcome.NOT_FOUND
+    )
+
+    assert result.is_ok
+    assert payment.status is PaymentAuthorizationStatus.CAPTURED

@@ -44,9 +44,9 @@ class SpyPspAdapter(MockPspAdapter):
         self.authorize_calls.append((payment_method_token, amount))
         return await super().authorize(payment_method_token, amount)
 
-    async def capture(self, payment_method_token: str):  # type: ignore[override]
+    async def capture(self, payment_method_token: str, idempotency_key: str):  # type: ignore[override]
         self.capture_calls.append(payment_method_token)
-        return await super().capture(payment_method_token)
+        return await super().capture(payment_method_token, idempotency_key)
 
 
 @pytest.fixture

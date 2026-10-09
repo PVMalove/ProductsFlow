@@ -8,6 +8,7 @@ test-утилита (ревью явно потребовало это имя, �
 
 from domain.psp_client import (
     PspAuthorizeOutcome,
+    PspCaptureLookupOutcome,
     PspCaptureOutcome,
     PspClient,
     UnknownPspScenarioTokenError,
@@ -27,6 +28,15 @@ _CAPTURE_OUTCOMES: dict[str, PspCaptureOutcome] = {
     "unknown_capture": PspCaptureOutcome.UNKNOWN,
 }
 
+# Issue #374 (бриф D3): в сценарии `unknown_capture` Test PSP операцию записал
+# (ADR 0016: «сохраняет операцию по idempotency-ключу для сверки») — потерян
+# только ответ, поэтому сверка находит capture. Ключ не участвует: исход
+# по-прежнему выбирает только токен.
+_CAPTURE_LOOKUP_OUTCOMES: dict[str, PspCaptureLookupOutcome] = {
+    "success": PspCaptureLookupOutcome.CAPTURED,
+    "unknown_capture": PspCaptureLookupOutcome.CAPTURED,
+}
+
 
 class MockPspAdapter:
     """Реализация `domain.psp_client.PspClient`. Ни один метод не выполняет
@@ -40,9 +50,19 @@ class MockPspAdapter:
         except KeyError as exc:
             raise UnknownPspScenarioTokenError(payment_method_token) from exc
 
-    async def capture(self, payment_method_token: str) -> PspCaptureOutcome:
+    async def capture(
+        self, payment_method_token: str, idempotency_key: str
+    ) -> PspCaptureOutcome:
         try:
             return _CAPTURE_OUTCOMES[payment_method_token]
+        except KeyError as exc:
+            raise UnknownPspScenarioTokenError(payment_method_token) from exc
+
+    async def lookup_capture(
+        self, payment_method_token: str, idempotency_key: str
+    ) -> PspCaptureLookupOutcome:
+        try:
+            return _CAPTURE_LOOKUP_OUTCOMES[payment_method_token]
         except KeyError as exc:
             raise UnknownPspScenarioTokenError(payment_method_token) from exc
 

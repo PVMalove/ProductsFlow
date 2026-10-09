@@ -8,7 +8,11 @@ from kernel_domain.entity import Entity
 from kernel_domain.result import Result
 
 from domain.errors import PaymentErrors
-from domain.psp_client import PspAuthorizeOutcome, PspCaptureOutcome
+from domain.psp_client import (
+    PspAuthorizeOutcome,
+    PspCaptureLookupOutcome,
+    PspCaptureOutcome,
+)
 
 _MISSING = object()
 
@@ -31,6 +35,13 @@ _AUTHORIZE_STATUS_BY_OUTCOME: dict[PspAuthorizeOutcome, PaymentAuthorizationStat
 _CAPTURE_STATUS_BY_OUTCOME: dict[PspCaptureOutcome, PaymentAuthorizationStatus] = {
     PspCaptureOutcome.CAPTURED: PaymentAuthorizationStatus.CAPTURED,
     PspCaptureOutcome.UNKNOWN: PaymentAuthorizationStatus.CAPTURE_UNKNOWN,
+}
+
+_RECONCILED_STATUS_BY_OUTCOME: dict[
+    PspCaptureLookupOutcome, PaymentAuthorizationStatus
+] = {
+    PspCaptureLookupOutcome.CAPTURED: PaymentAuthorizationStatus.CAPTURED,
+    PspCaptureLookupOutcome.NOT_FOUND: PaymentAuthorizationStatus.AUTHORIZED,
 }
 
 
@@ -142,4 +153,21 @@ class PaymentAuthorization(Entity[uuid.UUID]):
 
         self.capture_idempotency_key = idempotency_key
         self.status = _CAPTURE_STATUS_BY_OUTCOME[outcome]
+        return Result[None].ok(None)
+
+    def reconcile_capture(
+        self, idempotency_key: str, outcome: PspCaptureLookupOutcome
+    ) -> Result[None]:
+        """Сверка `CAPTURE_UNKNOWN` по idempotency-ключу (issue #374, бриф D4).
+        Подтверждённое отсутствие возвращает авторизацию в `AUTHORIZED`, ключ
+        остаётся прежним: повторная сверка тем же ключом отдаёт тот же
+        окончательный факт, а `capture()` новым ключом снова допустим (ADR
+        0016: повтор capture — только после сверки). Уже окончательный
+        статус — идемпотентный no-op."""
+        if self.capture_idempotency_key != idempotency_key:
+            return Result[None].fail(PaymentErrors.authorization_not_found())
+        if self.status is not PaymentAuthorizationStatus.CAPTURE_UNKNOWN:
+            return Result[None].ok(None)
+
+        self.status = _RECONCILED_STATUS_BY_OUTCOME[outcome]
         return Result[None].ok(None)

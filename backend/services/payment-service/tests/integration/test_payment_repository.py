@@ -13,11 +13,14 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Connection, inspect, text
+from sqlalchemy import Connection, inspect, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from domain.entities.payment_authorization import PaymentAuthorization
-from domain.psp_client import PspAuthorizeOutcome
+from domain.entities.payment_authorization import (
+    PaymentAuthorization,
+    PaymentAuthorizationStatus,
+)
+from domain.psp_client import PspAuthorizeOutcome, PspCaptureOutcome
 from infrastructure.db.entity_configurations import models as _models
 from infrastructure.db.payment_repository import PaymentAuthorizationRepository
 
@@ -220,3 +223,40 @@ async def test_get_by_idempotency_key_matches_void_and_capture_columns(
 
     assert fetched is not None
     assert fetched.id == payment.id
+
+
+async def test_get_by_id_rereads_a_row_already_present_in_the_identity_map(
+    db_session: AsyncSession,
+) -> None:
+    """Issue #374, brief D6: the reconcile handler first loads the row through
+    the unlocked `get_by_idempotency_key`, then re-reads it through the locking
+    `get_by_id`. A concurrent reconcile may have changed the row in between
+    (simulated by a Core `UPDATE` that bypasses the session's identity map);
+    `get_by_id` must return the fresh column values, not stale in-memory ones.
+    The identity map holds instances weakly, so the stale-read hazard needs a
+    live instance — `held_row` stands for any holder (the repository's own
+    `save()` loads the row through `session.get`)."""
+    repo = PaymentAuthorizationRepository(db_session)
+    payment = PaymentAuthorization.create(
+        "key-5", 1000, "unknown_capture", PspAuthorizeOutcome.SUCCESS
+    ).value
+    payment.capture("capture-key-5", PspCaptureOutcome.UNKNOWN)
+    await repo.add(payment)
+    await db_session.flush()
+
+    held_row = await db_session.get(_models.PaymentAuthorizationModel, payment.id)
+    assert held_row is not None
+    loaded = await repo.get_by_idempotency_key("capture-key-5")
+    assert loaded is not None
+    assert loaded.status is PaymentAuthorizationStatus.CAPTURE_UNKNOWN
+    connection = await db_session.connection()
+    await connection.execute(
+        update(_models.PaymentAuthorizationModel)
+        .where(_models.PaymentAuthorizationModel.id == payment.id)
+        .values(status=PaymentAuthorizationStatus.CAPTURED.value)
+    )
+
+    fetched = await repo.get_by_id(payment.id)
+
+    assert fetched is not None
+    assert fetched.status is PaymentAuthorizationStatus.CAPTURED
