@@ -94,6 +94,11 @@ class OrderModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # issue #375, D1: id авторизации payment-service после
+    # `payment.authorized.v1`; `NULL` до успешной авторизации.
+    payment_authorization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
 
 
 class OrderLineModel(Base):
@@ -130,11 +135,16 @@ class IdempotencyKeyModel(Base):
 
 
 class ReservationOutboxModel(Base):
-    """Исходящий command-intent для `inventory.reserve.v1` (issue #372, D6) —
-    собственная таблица order-service, НЕ `kernel_platform.OutboxMessage`
-    (находка 5: `id` здесь напрямую годится как `Command.command_id`, UUID,
-    не BigInt). Дренаж — `ReservationOutboxPublisher`, тот же
-    `FOR UPDATE SKIP LOCKED`/backoff идиом, что generic `OutboxPublisher`."""
+    """Исходящий command-intent Saga (issue #372, D6) — собственная таблица
+    order-service, НЕ `kernel_platform.OutboxMessage` (находка 5: `id` здесь
+    напрямую годится как `Command.command_id`, UUID, не BigInt). Дренаж —
+    `ReservationOutboxPublisher`, тот же `FOR UPDATE SKIP LOCKED`/backoff
+    идиом, что generic `OutboxPublisher`.
+
+    issue #375, D3: `command_type` — таблица несёт не только
+    `inventory.reserve.v1`, но и `payment.authorize.v1`/`inventory.release.v1`.
+    Имя `reservation_outbox` — известный naming debt (R5), переименование —
+    отдельный рефакторинг."""
 
     __tablename__ = "reservation_outbox"
     __table_args__ = (
@@ -147,6 +157,7 @@ class ReservationOutboxModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    command_type: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -163,14 +174,19 @@ class ReservationOutboxModel(Base):
 
 
 class ProcessedMessageModel(Base):
-    """Inbox-гейт order-worker'а для `inventory.reserved.v1` (issue #372,
-    D7 — зеркалит inventory-worker's `ProcessedMessage`, issue #367). Свой
-    `Base`, не `kernel_platform.outbox.models.Base`: order-service не заводит
-    generic `outbox_messages`/`inbox_messages` таблицы (см. модульный
-    докстринг)."""
+    """Inbox-гейт order-worker'а (issue #372, D7 — зеркалит inventory-worker's
+    `ProcessedMessage`, issue #367). Свой `Base`, не
+    `kernel_platform.outbox.models.Base`: order-service не заводит generic
+    `outbox_messages`/`inbox_messages` таблицы (см. модульный докстринг).
+
+    issue #375, D4: PK `(source, message_id)` — `message_id` это BigInt
+    sequence outbox'а КАЖДОГО producer'а (inventory, payment), обе стартуют с
+    1; PK только по `message_id` молча пропустил бы событие payment с id уже
+    обработанного события inventory."""
 
     __tablename__ = "processed_messages"
 
+    source: Mapped[str] = mapped_column(Text, primary_key=True)
     message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

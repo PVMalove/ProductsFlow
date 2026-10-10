@@ -37,12 +37,14 @@ class OrderRepository:
                     saga_step=order.saga_step.value,
                     failure_reason=order.failure_reason,
                     created_at=order.created_at,
+                    payment_authorization_id=order.payment_authorization_id,
                 )
             )
         else:
             existing_row.status = order.status.value
             existing_row.saga_step = order.saga_step.value
             existing_row.failure_reason = order.failure_reason
+            existing_row.payment_authorization_id = order.payment_authorization_id
 
         existing_line_rows = {
             row.id: row
@@ -95,6 +97,7 @@ class OrderRepository:
             ],
             failure_reason=row.failure_reason,
             created_at=row.created_at,
+            payment_authorization_id=row.payment_authorization_id,
         )
 
 

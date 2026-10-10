@@ -1,10 +1,11 @@
 # ruff: noqa: E501
 """Дренаж/публикация `reservation_outbox` (issue #372, D6) — тот же
 `FOR UPDATE SKIP LOCKED`/backoff идиом, что `kernel_platform.outbox.publisher
-.OutboxPublisher`, но публикует `Command` (`inventory.reserve.v1`) через
+.OutboxPublisher`, но публикует `Command` через
 `kernel_platform.commands.publish_command`, не доменное событие: собственная
 таблица `reservation_outbox` (UUID PK, годится напрямую как
-`Command.command_id` — находка 5, `OutboxMessage`'s BigInt PK несовместим)."""
+`Command.command_id` — находка 5, `OutboxMessage`'s BigInt PK несовместим).
+issue #375, D3: тип команды берётся из строки (`row.command_type`)."""
 
 import logging
 from datetime import UTC, datetime, timedelta
@@ -27,7 +28,6 @@ _BACKOFF_CEILING_SECONDS = 60.0
 _MAX_BACKOFF_EXPONENT = 5
 _DEFAULT_BATCH_SIZE = 20
 _DEFAULT_PUBLISH_TIMEOUT_SECONDS = 5.0
-COMMAND_TYPE = "inventory.reserve.v1"
 
 
 def compute_backoff(attempts: int) -> timedelta:
@@ -40,9 +40,11 @@ def build_command(row: ReservationOutboxModel) -> Command:
     payload: dict[str, Any] = row.payload
     return Command(
         command_id=row.id,
-        command_type=COMMAND_TYPE,
-        # Единственная причина исходящей команды — создание этого Order
-        # (finding 8) — command_id самой команды годится как causation_id.
+        command_type=row.command_type,
+        # Причина исходящей команды — шаг Saga этого Order (создание,
+        # результат резерва или авторизации; finding 8): входящий BigInt
+        # `message_id` не годится как UUID `causation_id`, поэтому им остаётся
+        # command_id самой команды (R6 брифа #375).
         causation_id=row.id,
         correlation_id=str(row.order_id),
         payload=payload,

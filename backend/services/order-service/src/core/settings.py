@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # issue #372, D6/D8: интервал периодического дренажа reservation_outbox
     # в order-worker — тот же приём, что `catalog_outbox_poll_interval_seconds`.
     order_outbox_poll_interval_seconds: float = 5.0
+    # issue #375, D7: `payment_method_token` для `payment.authorize.v1` —
+    # селектор сценария Test PSP (`success`/`decline`/`timeout`, ADR 0016:17)
+    # для demo/test, не секрет. Checkout API не несёт способа оплаты, поэтому
+    # сценарий задаётся на deployment, а не на Order (R2 брифа).
+    order_payment_method_token: str = "success"
 
     db_pool_size: int = 20
     db_max_overflow: int = 10

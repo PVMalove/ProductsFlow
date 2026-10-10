@@ -6,7 +6,15 @@
 import uuid
 from datetime import UTC, datetime
 
-from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
+import pytest
+
+from domain.entities.order import (
+    AuthorizationOutcome,
+    Order,
+    OrderLine,
+    OrderSagaStep,
+    OrderStatus,
+)
 
 USER_ID = uuid.uuid4()
 
@@ -64,7 +72,7 @@ def test_apply_reservation_result_partial_confirmed_trims_lines() -> None:
 
     assert applied is True
     assert order.status is OrderStatus.PENDING
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert order.failure_reason is None
     assert [line.product_id for line in order.lines] == [confirmed_product_id]
 
@@ -75,8 +83,30 @@ def test_apply_reservation_result_full_confirmed_keeps_all_lines() -> None:
 
     order.apply_reservation_result(confirmed_product_ids=all_product_ids)
 
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert len(order.lines) == 2
+
+
+def test_authorization_amount_is_the_sum_of_confirmed_lines_only() -> None:
+    confirmed = OrderLine(
+        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=3, unit_price_kopecks=1_500
+    )
+    unavailable = OrderLine(
+        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=2, unit_price_kopecks=7_000
+    )
+    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=[confirmed, unavailable])
+
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({confirmed.product_id})
+    )
+
+    assert order.authorization_amount_kopecks() == 3 * 1_500
+
+
+def test_create_has_no_payment_authorization_id() -> None:
+    order, _lines = _order_with_lines()
+
+    assert order.payment_authorization_id is None
 
 
 def test_apply_reservation_result_is_a_no_op_once_already_resolved() -> None:
@@ -90,7 +120,7 @@ def test_apply_reservation_result_is_a_no_op_once_already_resolved() -> None:
     applied_again = order.apply_reservation_result(confirmed_product_ids=frozenset())
 
     assert applied_again is False
-    assert order.saga_step is OrderSagaStep.RESERVATION_CONFIRMED
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert [line.product_id for line in order.lines] == [confirmed_product_id]
 
 
@@ -117,3 +147,121 @@ def test_reconstitute_preserves_all_fields() -> None:
     assert order.lines == [line]
     assert order.failure_reason == "NO_ITEMS_AVAILABLE"
     assert order.created_at == created_at
+    assert order.payment_authorization_id is None
+
+
+def _order_awaiting_authorization() -> Order:
+    order, lines = _order_with_lines(2)
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({lines[0].product_id})
+    )
+    return order
+
+
+def test_authorized_moves_saga_to_allocation_and_stores_authorization_id() -> None:
+    order = _order_awaiting_authorization()
+    authorization_id = uuid.uuid4()
+
+    applied = order.apply_authorization_result(
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=authorization_id
+    )
+
+    assert applied is True
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_ALLOCATION
+    assert order.payment_authorization_id == authorization_id
+    assert order.failure_reason is None
+
+
+@pytest.mark.parametrize(
+    ("outcome", "failure_reason"),
+    [
+        (AuthorizationOutcome.DECLINED, "PAYMENT_DECLINED"),
+        (AuthorizationOutcome.TIMED_OUT, "PAYMENT_TIMED_OUT"),
+    ],
+)
+def test_declined_or_timed_out_fails_order_and_starts_compensation(
+    outcome: AuthorizationOutcome, failure_reason: str
+) -> None:
+    order = _order_awaiting_authorization()
+    lines_before = list(order.lines)
+
+    applied = order.apply_authorization_result(
+        outcome=outcome, authorization_id=uuid.uuid4()
+    )
+
+    assert applied is True
+    assert order.status is OrderStatus.FAILED
+    assert order.failure_reason == failure_reason
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert order.payment_authorization_id is None
+    assert order.lines == lines_before
+
+
+def test_repeated_authorization_result_is_a_no_op() -> None:
+    order = _order_awaiting_authorization()
+    authorization_id = uuid.uuid4()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=authorization_id
+    )
+
+    # Повторная доставка с ДРУГИМ исходом — Saga уже покинула шаг.
+    applied_again = order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+
+    assert applied_again is False
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_ALLOCATION
+    assert order.payment_authorization_id == authorization_id
+
+
+def test_authorization_result_before_reservation_is_a_no_op() -> None:
+    order, _lines = _order_with_lines()
+
+    applied = order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+
+    assert applied is False
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_RESERVATION
+
+
+def _order_compensating() -> Order:
+    order = _order_awaiting_authorization()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+    return order
+
+
+def test_complete_compensation_keeps_failed_order_with_its_lines() -> None:
+    order = _order_compensating()
+    lines_before = list(order.lines)
+
+    completed = order.complete_compensation()
+
+    assert completed is True
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.status is OrderStatus.FAILED
+    assert order.failure_reason == "PAYMENT_DECLINED"
+    assert order.lines == lines_before
+
+
+def test_repeated_compensation_is_a_no_op() -> None:
+    order = _order_compensating()
+    order.complete_compensation()
+
+    assert order.complete_compensation() is False
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+
+
+def test_compensation_outside_compensating_step_is_a_no_op() -> None:
+    order = _order_awaiting_authorization()
+
+    completed = order.complete_compensation()
+
+    assert completed is False
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION

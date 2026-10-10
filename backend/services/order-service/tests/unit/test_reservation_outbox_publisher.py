@@ -16,6 +16,7 @@ def _row(**overrides: object) -> ReservationOutboxModel:
     defaults: dict[str, object] = {
         "id": uuid.uuid4(),
         "order_id": uuid.uuid4(),
+        "command_type": "inventory.reserve.v1",
         "payload": {
             "order_id": str(uuid.uuid4()),
             "lines": [{"product_id": str(uuid.uuid4()), "quantity": 2}],
@@ -39,6 +40,15 @@ def test_build_command_sets_command_type_to_inventory_reserve() -> None:
     command = build_command(_row())
 
     assert command.command_type == "inventory.reserve.v1"
+
+
+def test_build_command_uses_the_row_command_type() -> None:
+    payload = {"amount": 2_500, "payment_method_token": "success"}
+
+    command = build_command(_row(command_type="payment.authorize.v1", payload=payload))
+
+    assert command.command_type == "payment.authorize.v1"
+    assert command.payload == payload
 
 
 def test_build_command_sets_correlation_id_to_order_id() -> None:

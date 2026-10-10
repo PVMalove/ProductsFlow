@@ -7,6 +7,7 @@ from kernel_domain.entity import Entity
 from kernel_domain.result import Result
 
 from domain.entities.cart_line import CartLine
+from domain.entities.order import OrderLine
 from domain.errors import CartErrors
 from domain.value_objects.cart_id import CartId
 
@@ -151,6 +152,37 @@ class Cart(Entity[CartId]):
             line.unavailable_reason = UNAVAILABLE_REASON_INSUFFICIENT_STOCK
             remaining.append(line)
         self.lines = remaining
+
+    def return_order_lines(
+        self, *, lines: list[OrderLine], reason: str, now: datetime
+    ) -> None:
+        """issue #375, D2: компенсация — строки Order возвращаются в корзину
+        с причиной результата (ADR 0016:19). Для каждой строки:
+
+        - товара нет в корзине — новая свободная строка с `id` строки Order
+          (повторная вставка упадёт на PK, а не задублирует строку);
+        - свободная строка того же товара (покупатель добавил его снова) —
+          `quantity` складывается, причина проставляется (merge D4 #369);
+        - строка того же товара заблокирована другим активным Checkout
+          Selection — остаётся без изменений (freeze ADR 0016:11), количество
+          не добавляется (R7 брифа #375)."""
+        for order_line in lines:
+            existing = self._line_by_product_id(order_line.product_id)
+            if existing is None:
+                self.lines.append(
+                    CartLine(
+                        id=order_line.id,
+                        product_id=order_line.product_id,
+                        quantity=order_line.quantity,
+                        added_at=now,
+                        unavailable_reason=reason,
+                    )
+                )
+                continue
+            if existing.locked_by_order_id is not None:
+                continue
+            existing.quantity += order_line.quantity
+            existing.unavailable_reason = reason
 
     def _line_by_id(self, line_id: uuid.UUID) -> CartLine | None:
         for line in self.lines:

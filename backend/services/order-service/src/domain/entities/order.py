@@ -33,8 +33,29 @@ class OrderStatus(Enum):
 
 class OrderSagaStep(Enum):
     AWAITING_RESERVATION = "awaiting_reservation"
-    RESERVATION_CONFIRMED = "reservation_confirmed"
     RESERVATION_FAILED = "reservation_failed"
+    # issue #375, D1: заменяет `reservation_confirmed` (#372) — после резерва
+    # Saga ждёт результата `payment.authorize.v1`.
+    AWAITING_AUTHORIZATION = "awaiting_authorization"
+    AWAITING_ALLOCATION = "awaiting_allocation"
+    # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
+    COMPENSATING = "compensating"
+    # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории.
+    COMPENSATED = "compensated"
+
+
+class AuthorizationOutcome(Enum):
+    """issue #375, D1: результат `payment.authorize.v1` — по одному на каждый
+    факт payment-service (`payment.authorized.v1`,
+    `payment.authorization_declined.v1`, `payment.authorization_timed_out.v1`)."""
+
+    AUTHORIZED = "authorized"
+    DECLINED = "declined"
+    TIMED_OUT = "timed_out"
+
+
+FAILURE_REASON_PAYMENT_DECLINED = "PAYMENT_DECLINED"
+FAILURE_REASON_PAYMENT_TIMED_OUT = "PAYMENT_TIMED_OUT"
 
 
 @dataclass
@@ -62,6 +83,7 @@ class Order(Entity[uuid.UUID]):
         lines: list[OrderLine],
         failure_reason: str | None,
         created_at: datetime,
+        payment_authorization_id: uuid.UUID | None,
     ) -> None:
         super().__init__(marker, id=id)
         self.user_id = user_id
@@ -70,6 +92,7 @@ class Order(Entity[uuid.UUID]):
         self.lines = lines
         self.failure_reason = failure_reason
         self.created_at = created_at
+        self.payment_authorization_id = payment_authorization_id
 
     @classmethod
     def create(
@@ -84,6 +107,7 @@ class Order(Entity[uuid.UUID]):
             lines=lines,
             failure_reason=None,
             created_at=datetime.now(UTC),
+            payment_authorization_id=None,
         )
 
     @classmethod
@@ -97,6 +121,7 @@ class Order(Entity[uuid.UUID]):
         lines: list[OrderLine],
         failure_reason: str | None,
         created_at: datetime,
+        payment_authorization_id: uuid.UUID | None = None,
     ) -> "Order":
         return cls(
             PRIVATE_MARKER,
@@ -107,7 +132,15 @@ class Order(Entity[uuid.UUID]):
             lines=lines,
             failure_reason=failure_reason,
             created_at=created_at,
+            payment_authorization_id=payment_authorization_id,
         )
+
+    def authorization_amount_kopecks(self) -> int:
+        """issue #375, D1/DoD 1: сумма к авторизации — только строки,
+        подтверждённые резервом. После `apply_reservation_result` `lines` уже
+        усечены до подтверждённых, поэтому исходный полный итог Cart сюда не
+        попадает."""
+        return sum(line.quantity * line.unit_price_kopecks for line in self.lines)
 
     def apply_reservation_result(
         self, *, confirmed_product_ids: frozenset[uuid.UUID]
@@ -130,5 +163,43 @@ class Order(Entity[uuid.UUID]):
         self.lines = [
             line for line in self.lines if line.product_id in confirmed_product_ids
         ]
-        self.saga_step = OrderSagaStep.RESERVATION_CONFIRMED
+        self.saga_step = OrderSagaStep.AWAITING_AUTHORIZATION
+        return True
+
+    def apply_authorization_result(
+        self, *, outcome: AuthorizationOutcome, authorization_id: uuid.UUID
+    ) -> bool:
+        """Применяет результат `payment.authorize.v1` (issue #375, D1).
+        Возвращает `False` без мутации вне `AWAITING_AUTHORIZATION` — та же
+        двухслойная идемпотентность, что `apply_reservation_result`.
+
+        Успех сохраняет `authorization_id` и переводит Saga к allocation
+        (статус остаётся `PENDING`). Отказ/таймаут — компенсируемый
+        терминальный результат: внешний статус сразу `FAILED`, Saga переходит
+        в `COMPENSATING` (резерв освобождается отдельным шагом)."""
+        if self.saga_step is not OrderSagaStep.AWAITING_AUTHORIZATION:
+            return False
+
+        if outcome is AuthorizationOutcome.AUTHORIZED:
+            self.payment_authorization_id = authorization_id
+            self.saga_step = OrderSagaStep.AWAITING_ALLOCATION
+            return True
+
+        self.status = OrderStatus.FAILED
+        self.failure_reason = (
+            FAILURE_REASON_PAYMENT_DECLINED
+            if outcome is AuthorizationOutcome.DECLINED
+            else FAILURE_REASON_PAYMENT_TIMED_OUT
+        )
+        self.saga_step = OrderSagaStep.COMPENSATING
+        return True
+
+    def complete_compensation(self) -> bool:
+        """Фиксирует освобождение резерва (`inventory.released.v1`, issue
+        #375, D1). `False` без мутации вне `COMPENSATING` (повторная доставка
+        или release в другом шаге). `lines` не усекаются: Order остаётся в
+        истории со своими строками и статусом `FAILED`."""
+        if self.saga_step is not OrderSagaStep.COMPENSATING:
+            return False
+        self.saga_step = OrderSagaStep.COMPENSATED
         return True
