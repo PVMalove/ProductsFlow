@@ -328,11 +328,18 @@ def _order_awaiting_capture() -> Order:
     return order
 
 
+def _authorization_id(order: Order) -> uuid.UUID:
+    assert order.payment_authorization_id is not None
+    return order.payment_authorization_id
+
+
 def test_capture_result_completes_order_and_records_order_completed() -> None:
     order = _order_awaiting_capture()
     causation_id = uuid.uuid4()
 
-    applied = order.apply_capture_result(causation_id=causation_id)
+    applied = order.apply_capture_result(
+        authorization_id=_authorization_id(order), causation_id=causation_id
+    )
 
     assert applied is True
     assert order.status is OrderStatus.COMPLETED
@@ -355,14 +362,32 @@ def test_capture_result_completes_order_and_records_order_completed() -> None:
 
 def test_repeated_capture_result_is_a_no_op_without_a_second_event() -> None:
     order = _order_awaiting_capture()
-    order.apply_capture_result(causation_id=uuid.uuid4())
+    authorization_id = _authorization_id(order)
+    order.apply_capture_result(
+        authorization_id=authorization_id, causation_id=uuid.uuid4()
+    )
     order.pull_events()
 
-    applied_again = order.apply_capture_result(causation_id=uuid.uuid4())
+    applied_again = order.apply_capture_result(
+        authorization_id=authorization_id, causation_id=uuid.uuid4()
+    )
 
     assert applied_again is False
     assert order.status is OrderStatus.COMPLETED
     assert order.saga_step is OrderSagaStep.CAPTURED
+    assert order.pull_events() == []
+
+
+def test_capture_result_for_another_authorization_is_a_no_op() -> None:
+    order = _order_awaiting_capture()
+
+    applied = order.apply_capture_result(
+        authorization_id=uuid.uuid4(), causation_id=uuid.uuid4()
+    )
+
+    assert applied is False
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
     assert order.pull_events() == []
 
 
@@ -382,7 +407,9 @@ def test_capture_result_outside_awaiting_capture_is_a_no_op(
     status_before = order.status
     step_before = order.saga_step
 
-    applied = order.apply_capture_result(causation_id=uuid.uuid4())
+    applied = order.apply_capture_result(
+        authorization_id=uuid.uuid4(), causation_id=uuid.uuid4()
+    )
 
     assert applied is False
     assert order.status is status_before
@@ -392,7 +419,9 @@ def test_capture_result_outside_awaiting_capture_is_a_no_op(
 
 def test_allocation_result_after_capture_is_a_no_op() -> None:
     order = _order_awaiting_capture()
-    order.apply_capture_result(causation_id=uuid.uuid4())
+    order.apply_capture_result(
+        authorization_id=_authorization_id(order), causation_id=uuid.uuid4()
+    )
 
     assert order.apply_allocation_result() is False
     assert order.status is OrderStatus.COMPLETED

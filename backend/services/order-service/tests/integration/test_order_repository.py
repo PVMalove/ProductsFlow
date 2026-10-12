@@ -194,12 +194,15 @@ async def test_order_save_drains_order_completed_into_outbox_messages(
     order.apply_reservation_result(
         confirmed_product_ids=frozenset(line.product_id for line in order.lines)
     )
+    authorization_id = uuid.uuid4()
     order.apply_authorization_result(
-        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=uuid.uuid4()
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=authorization_id
     )
     order.apply_allocation_result()
     causation_id = uuid.uuid4()
-    order.apply_capture_result(causation_id=causation_id)
+    order.apply_capture_result(
+        authorization_id=authorization_id, causation_id=causation_id
+    )
 
     await repo.save(order)
     await db_session.flush()

@@ -38,15 +38,20 @@ def _order_awaiting_capture() -> Order:
     return order
 
 
-def _command(order_id: uuid.UUID) -> ApplyCaptureResultCommand:
-    return ApplyCaptureResultCommand(order_id=order_id, causation_id=uuid.uuid4())
+def _command(order: Order) -> ApplyCaptureResultCommand:
+    assert order.payment_authorization_id is not None
+    return ApplyCaptureResultCommand(
+        order_id=order.id,
+        authorization_id=order.payment_authorization_id,
+        causation_id=uuid.uuid4(),
+    )
 
 
 async def test_unknown_order_is_a_no_op() -> None:
     order_repo = FakeOrderRepository()
     handler = ApplyCaptureResultCommandHandler(order_repo)
 
-    await handler.execute(_command(uuid.uuid4()))
+    await handler.execute(_command(_order_awaiting_capture()))
 
     assert order_repo.save_calls == []
 
@@ -55,7 +60,7 @@ async def test_captured_completes_order_with_one_order_completed_event() -> None
     order = _order_awaiting_capture()
     order_repo = FakeOrderRepository([order])
     handler = ApplyCaptureResultCommandHandler(order_repo)
-    command = _command(order.id)
+    command = _command(order)
 
     await handler.execute(command)
 
@@ -73,11 +78,11 @@ async def test_repeated_captured_result_is_a_no_op() -> None:
     order = _order_awaiting_capture()
     order_repo = FakeOrderRepository([order])
     handler = ApplyCaptureResultCommandHandler(order_repo)
-    await handler.execute(_command(order.id))
+    await handler.execute(_command(order))
     order.pull_events()
 
     # Тот же факт с другим message_id — Saga уже в терминальном CAPTURED.
-    await handler.execute(_command(order.id))
+    await handler.execute(_command(order))
 
     assert len(order_repo.save_calls) == 1
     assert order.pull_events() == []
@@ -88,9 +93,26 @@ async def test_captured_result_before_allocation_is_a_no_op() -> None:
     order_repo = FakeOrderRepository([order])
     handler = ApplyCaptureResultCommandHandler(order_repo)
 
-    await handler.execute(_command(order.id))
+    await handler.execute(_command(order))
 
     assert order_repo.save_calls == []
     assert order.status is OrderStatus.PENDING
     assert order.saga_step is OrderSagaStep.AWAITING_ALLOCATION
+    assert order.pull_events() == []
+
+
+async def test_captured_result_for_another_authorization_is_a_no_op() -> None:
+    order = _order_awaiting_capture()
+    order_repo = FakeOrderRepository([order])
+    handler = ApplyCaptureResultCommandHandler(order_repo)
+
+    await handler.execute(
+        ApplyCaptureResultCommand(
+            order_id=order.id, authorization_id=uuid.uuid4(), causation_id=uuid.uuid4()
+        )
+    )
+
+    assert order_repo.save_calls == []
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
     assert order.pull_events() == []

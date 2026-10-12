@@ -94,16 +94,20 @@ def parse_capture_result(body: bytes) -> ApplyCaptureResultCommand:
     """Парсит payload `payment.captured.v1` (`{authorization_id,
     correlation_id, causation_id}`, issue #376, D7): `correlation_id` —
     `str(order_id)`, `causation_id` — id команды `payment.capture.v1` этого
-    Order (оба эхом из команды)."""
+    Order (оба эхом из команды); `authorization_id` сверяется с авторизацией
+    Order."""
     payload = _json_object(body)
 
     try:
         order_id = uuid.UUID(str(payload["correlation_id"]))
+        authorization_id = uuid.UUID(str(payload["authorization_id"]))
         causation_id = uuid.UUID(str(payload["causation_id"]))
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"Invalid payment event payload: {payload!r}") from exc
 
-    return ApplyCaptureResultCommand(order_id=order_id, causation_id=causation_id)
+    return ApplyCaptureResultCommand(
+        order_id=order_id, authorization_id=authorization_id, causation_id=causation_id
+    )
 
 
 async def handle_authorization_result(

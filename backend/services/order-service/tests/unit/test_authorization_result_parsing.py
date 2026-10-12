@@ -81,12 +81,13 @@ def test_parse_rejects_non_object_payload() -> None:
         parse_authorization_result("payment.authorized.v1", json.dumps([1]).encode())
 
 
-def test_parse_capture_result_maps_correlation_and_causation_ids() -> None:
+def test_parse_capture_result_maps_authorization_correlation_causation() -> None:
     order_id = uuid.uuid4()
+    authorization_id = uuid.uuid4()
     causation_id = uuid.uuid4()
     body = json.dumps(
         {
-            "authorization_id": str(uuid.uuid4()),
+            "authorization_id": str(authorization_id),
             "correlation_id": str(order_id),
             "causation_id": str(causation_id),
         }
@@ -95,6 +96,7 @@ def test_parse_capture_result_maps_correlation_and_causation_ids() -> None:
     command = parse_capture_result(body)
 
     assert command.order_id == order_id
+    assert command.authorization_id == authorization_id
     assert command.causation_id == causation_id
 
 
@@ -107,9 +109,22 @@ def test_parse_capture_result_rejects_missing_causation_id() -> None:
         parse_capture_result(body)
 
 
+def test_parse_capture_result_rejects_missing_authorization_id() -> None:
+    body = json.dumps(
+        {"correlation_id": str(uuid.uuid4()), "causation_id": str(uuid.uuid4())}
+    ).encode()
+
+    with pytest.raises(ValueError):
+        parse_capture_result(body)
+
+
 def test_parse_capture_result_rejects_non_uuid_correlation_id() -> None:
     body = json.dumps(
-        {"correlation_id": "not-a-uuid", "causation_id": str(uuid.uuid4())}
+        {
+            "authorization_id": str(uuid.uuid4()),
+            "correlation_id": "not-a-uuid",
+            "causation_id": str(uuid.uuid4()),
+        }
     ).encode()
 
     with pytest.raises(ValueError):

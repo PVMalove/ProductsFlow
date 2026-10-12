@@ -512,6 +512,7 @@ async def _deliver_captured(
     session_factory: async_sessionmaker[AsyncSession],
     order_id: uuid.UUID,
     *,
+    authorization_id: uuid.UUID,
     message_id: int,
     causation_id: uuid.UUID | None = None,
 ) -> None:
@@ -520,7 +521,7 @@ async def _deliver_captured(
             "payment.captured.v1",
             message_id,
             {
-                "authorization_id": str(uuid.uuid4()),
+                "authorization_id": str(authorization_id),
                 "correlation_id": str(order_id),
                 "causation_id": str(causation_id or uuid.uuid4()),
             },
@@ -558,10 +559,11 @@ async def _journal(
 
 async def _allocated_order(
     session_factory: async_sessionmaker[AsyncSession],
+    authorization_id: uuid.UUID,
 ) -> _Checkout:
     """Состояние `AWAITING_CAPTURE`: резерв, авторизация и allocation
     применены (inventory message_id 1-2, payment message_id 1)."""
-    checkout = await _authorized_order(session_factory, uuid.uuid4())
+    checkout = await _authorized_order(session_factory, authorization_id)
     await _deliver_allocated(session_factory, checkout, message_id=2)
     return checkout
 
@@ -569,12 +571,14 @@ async def _allocated_order(
 async def test_captured_result_completes_order_with_history_and_order_completed(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    checkout = await _allocated_order(saga_session_factory)
+    authorization_id = uuid.uuid4()
+    checkout = await _allocated_order(saga_session_factory, authorization_id)
     capture_command_id = uuid.uuid4()
 
     await _deliver_captured(
         saga_session_factory,
         checkout.order_id,
+        authorization_id=authorization_id,
         message_id=2,
         causation_id=capture_command_id,
     )
@@ -607,14 +611,25 @@ async def test_captured_result_completes_order_with_history_and_order_completed(
 async def test_repeated_captured_result_adds_no_event_command_or_history(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    checkout = await _allocated_order(saga_session_factory)
-    await _deliver_captured(saga_session_factory, checkout.order_id, message_id=2)
+    authorization_id = uuid.uuid4()
+    checkout = await _allocated_order(saga_session_factory, authorization_id)
+    await _deliver_captured(
+        saga_session_factory,
+        checkout.order_id,
+        authorization_id=authorization_id,
+        message_id=2,
+    )
     commands_before = await _outbox_rows(saga_session_factory, checkout.order_id)
     journal_before = await _journal(saga_session_factory, checkout.order_id)
 
     # Та же доставка (тот же message_id) и тот же факт с другим message_id.
-    await _deliver_captured(saga_session_factory, checkout.order_id, message_id=2)
-    await _deliver_captured(saga_session_factory, checkout.order_id, message_id=3)
+    for message_id in (2, 3):
+        await _deliver_captured(
+            saga_session_factory,
+            checkout.order_id,
+            authorization_id=authorization_id,
+            message_id=message_id,
+        )
 
     assert len(await _event_outbox_rows(saga_session_factory, checkout.order_id)) == 1
     commands_after = await _outbox_rows(saga_session_factory, checkout.order_id)
@@ -624,12 +639,38 @@ async def test_repeated_captured_result_adds_no_event_command_or_history(
     assert order.status is OrderStatus.COMPLETED
 
 
+async def test_captured_result_for_another_authorization_does_not_complete_the_order(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _allocated_order(saga_session_factory, uuid.uuid4())
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    await _deliver_captured(
+        saga_session_factory,
+        checkout.order_id,
+        authorization_id=uuid.uuid4(),
+        message_id=2,
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+    assert await _event_outbox_rows(saga_session_factory, checkout.order_id) == []
+
+
 async def test_captured_result_before_allocation_does_not_advance_the_order(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    checkout = await _authorized_order(saga_session_factory, uuid.uuid4())
+    authorization_id = uuid.uuid4()
+    checkout = await _authorized_order(saga_session_factory, authorization_id)
 
-    await _deliver_captured(saga_session_factory, checkout.order_id, message_id=2)
+    await _deliver_captured(
+        saga_session_factory,
+        checkout.order_id,
+        authorization_id=authorization_id,
+        message_id=2,
+    )
 
     order = await _load_order(saga_session_factory, checkout.order_id)
     assert order.status is OrderStatus.PENDING
@@ -648,8 +689,14 @@ async def test_captured_result_before_allocation_does_not_advance_the_order(
 async def test_allocated_result_after_capture_is_a_no_op(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    checkout = await _allocated_order(saga_session_factory)
-    await _deliver_captured(saga_session_factory, checkout.order_id, message_id=2)
+    authorization_id = uuid.uuid4()
+    checkout = await _allocated_order(saga_session_factory, authorization_id)
+    await _deliver_captured(
+        saga_session_factory,
+        checkout.order_id,
+        authorization_id=authorization_id,
+        message_id=2,
+    )
     journal_before = await _journal(saga_session_factory, checkout.order_id)
 
     await _deliver_allocated(saga_session_factory, checkout, message_id=3)

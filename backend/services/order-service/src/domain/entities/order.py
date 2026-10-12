@@ -213,13 +213,19 @@ class Order(Entity[uuid.UUID]):
         self.saga_step = OrderSagaStep.AWAITING_CAPTURE
         return True
 
-    def apply_capture_result(self, *, causation_id: uuid.UUID) -> bool:
+    def apply_capture_result(
+        self, *, authorization_id: uuid.UUID, causation_id: uuid.UUID
+    ) -> bool:
         """Применяет факт `payment.captured.v1` (issue #376, D1): Order
         `COMPLETED`, Saga в терминальном `CAPTURED`, одно событие
         `OrderCompleted` для transactional outbox. Возвращает `False` без
         мутации и без события вне `AWAITING_CAPTURE` (повторная доставка,
-        capture раньше allocation, любой результат после `CAPTURED`)."""
+        capture раньше allocation, любой результат после `CAPTURED`) и для
+        capture чужой авторизации (`authorization_id` не совпадает с
+        сохранённым `payment_authorization_id`)."""
         if self.saga_step is not OrderSagaStep.AWAITING_CAPTURE:
+            return False
+        if authorization_id != self.payment_authorization_id:
             return False
         self.status = OrderStatus.COMPLETED
         self.saga_step = OrderSagaStep.CAPTURED
