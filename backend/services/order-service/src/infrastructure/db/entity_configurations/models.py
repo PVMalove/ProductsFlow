@@ -119,6 +119,30 @@ class OrderLineModel(Base):
     unit_price_kopecks: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class OrderSagaTransitionModel(Base):
+    """Неизменяемая техническая история Saga (issue #376, D5; ADR 0016:15):
+    одна строка на каждое изменение `(saga_step, status)` Order, пишется
+    централизованно в `OrderRepository.save`. Append-only — код не обновляет
+    и не удаляет строки; порядок задаёт BigInt sequence `id`. Корреляция —
+    `order_id` (каждое сообщение Saga несёт `correlation_id = str(order_id)`);
+    causation/trace-колонки — забота #378."""
+
+    __tablename__ = "order_saga_transitions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    saga_step: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class IdempotencyKeyModel(Base):
     """Idempotency-Key запись (issue #372, D2) — составной PK
     `(user_id, key)`, буквальная HTTP Idempotency-Key семантика."""

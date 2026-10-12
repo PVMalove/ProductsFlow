@@ -18,7 +18,10 @@ from domain.entities.order import (
     OrderSagaStep,
     OrderStatus,
 )
-from infrastructure.db.entity_configurations.models import ReservationOutboxModel
+from infrastructure.db.entity_configurations.models import (
+    OrderSagaTransitionModel,
+    ReservationOutboxModel,
+)
 from infrastructure.db.idempotency_key_repository import IdempotencyKeyRepository
 from infrastructure.db.order_repository import OrderRepository
 from infrastructure.db.reservation_outbox_repository import (
@@ -102,6 +105,69 @@ async def test_order_save_persists_payment_authorization_id(
     assert fetched.status is OrderStatus.PENDING
     assert fetched.saga_step is OrderSagaStep.AWAITING_ALLOCATION
     assert fetched.payment_authorization_id == authorization_id
+
+
+async def _journal(session: AsyncSession, order_id: uuid.UUID) -> list[tuple[str, str]]:
+    rows = (
+        await session.scalars(
+            select(OrderSagaTransitionModel)
+            .where(OrderSagaTransitionModel.order_id == order_id)
+            .order_by(OrderSagaTransitionModel.id)
+        )
+    ).all()
+    return [(row.saga_step, row.status) for row in rows]
+
+
+async def test_order_save_journals_the_initial_step_on_insert(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [("awaiting_reservation", "pending")]
+
+
+async def test_order_save_journals_each_step_or_status_change(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({order.lines[0].product_id})
+    )
+    await repo.save(order)
+    await db_session.flush()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [
+        ("awaiting_reservation", "pending"),
+        ("awaiting_authorization", "pending"),
+        ("compensating", "failed"),
+    ]
+
+
+async def test_order_save_without_a_step_or_status_change_journals_nothing(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [("awaiting_reservation", "pending")]
 
 
 async def test_order_get_by_id_returns_none_for_unknown_order(
