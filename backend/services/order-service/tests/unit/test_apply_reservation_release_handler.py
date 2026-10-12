@@ -280,6 +280,49 @@ async def test_expiry_while_compensating_a_cancel_completes_it() -> None:
     assert {line.unavailable_reason for line in cart.lines} == {"CANCELLED_BY_CUSTOMER"}
 
 
+async def test_expiry_of_a_cancel_awaiting_reservation_unlocks_the_cart() -> None:
+    line = OrderLine(
+        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, unit_price_kopecks=100
+    )
+    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=[line])
+    order.cancel()
+    cart = Cart.create(CartId.new_id(), user_id=USER_ID)
+    cart.add_line(
+        line_id=uuid.uuid4(),
+        product_id=line.product_id,
+        quantity=line.quantity,
+        now=datetime.now(UTC),
+    )
+    cart.lock_for_checkout(order_id=order.id)
+    order_repo = FakeOrderRepository([order])
+    cart_repo = FakeCartRepository([cart])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = _handler(order_repo, cart_repo, outbox)
+
+    await handler.execute(_expired(order.id))
+
+    # inventory уже освободил резерв: release не нужен, компенсация завершена,
+    # строки остаются в Cart и только разблокируются.
+    assert order_repo.save_calls == [order]
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert outbox.release_intents == []
+    assert outbox.void_intents == []
+    assert cart_repo.save_calls == [cart]
+    assert [(cart_line.product_id, cart_line.quantity) for cart_line in cart.lines] == [
+        (line.product_id, line.quantity)
+    ]
+    assert all(cart_line.locked_by_order_id is None for cart_line in cart.lines)
+    assert all(cart_line.unavailable_reason is None for cart_line in cart.lines)
+
+    # Повтор того же факта с другим message_id — no-op.
+    await handler.execute(_expired(order.id))
+
+    assert len(order_repo.save_calls) == 1
+    assert len(cart_repo.save_calls) == 1
+
+
 async def test_expiry_after_capture_was_requested_changes_nothing() -> None:
     order = _order_awaiting_allocation(uuid.uuid4())
     order.apply_allocation_result()

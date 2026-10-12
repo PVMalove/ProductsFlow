@@ -315,6 +315,21 @@ class Order(Entity[uuid.UUID]):
             self.saga_step = OrderSagaStep.COMPENSATED
         return True
 
+    def complete_cancel_on_reservation_expiry(self) -> bool:
+        """Истечение резерва у Order, отменённого, пока результат резерва был
+        в пути (`CANCELLED` + `AWAITING_RESERVATION`, issue #377): inventory
+        уже освободил резерв, освобождать нечего — Saga сразу `COMPENSATED`,
+        статус и причина отмены сохраняются. Поздний `inventory.reserved.v1`
+        после этого — no-op guard'а `apply_reservation_result`. `False` без
+        мутации в любом другом состоянии (`PENDING` истекает через
+        `expire`)."""
+        if self.status is not OrderStatus.CANCELLED:
+            return False
+        if self.saga_step is not OrderSagaStep.AWAITING_RESERVATION:
+            return False
+        self.saga_step = OrderSagaStep.COMPENSATED
+        return True
+
     def record_late_authorization(self, *, authorization_id: uuid.UUID) -> bool:
         """Фиксирует успешную авторизацию, пришедшую после отмены или
         истечения Order (issue #377, D1): вызывающий обязан её аннулировать

@@ -34,8 +34,8 @@ class ApplyReservationReleaseCommandHandler:
     Business Logic Summary
 
     Context & Purpose: Завершает компенсацию после отказа/таймаута авторизации или отмены владельцем — резерв освобождён, строки Order возвращаются в Cart (issue #375, #377, ADR 0016:19); истечение резерва незавершённого Order делает его EXPIRED (issue #377).
-    Validations: Order должен существовать (иначе no-op с warning). В COMPENSATING любой reason события (manual/expired) завершает компенсацию: резерв освобождён в обоих случаях. Иначе reason=expired применяет Order.expire — no-op вне PENDING до запроса capture (повтор, терминал, AWAITING_CAPTURE); reason=manual вне COMPENSATING — no-op.
-    Side Effects: Компенсация -> COMPENSATED (Order остаётся FAILED/CANCELLED в истории со строками). Истечение -> EXPIRED (RESERVATION_EXPIRED) + COMPENSATED и intent payment.void.v1 для сохранённой авторизации; в AWAITING_RESERVATION шаг сохраняется до результата резерва. В обоих случаях при COMPENSATED Cart пользователя (get-or-create, под блокировкой строки) получает строки Order с причиной = failure_reason.
+    Validations: Order должен существовать (иначе no-op с warning). В COMPENSATING любой reason события (manual/expired) завершает компенсацию: резерв освобождён в обоих случаях. Иначе reason=expired применяет Order.expire — no-op вне PENDING до запроса capture (повтор, терминал, AWAITING_CAPTURE) — либо, для CANCELLED в AWAITING_RESERVATION, Order.complete_cancel_on_reservation_expiry; reason=manual вне COMPENSATING — no-op.
+    Side Effects: Компенсация -> COMPENSATED (Order остаётся FAILED/CANCELLED в истории со строками). Истечение -> EXPIRED (RESERVATION_EXPIRED) + COMPENSATED и intent payment.void.v1 для сохранённой авторизации; в AWAITING_RESERVATION шаг сохраняется до результата резерва. В обоих случаях при COMPENSATED Cart пользователя (get-or-create, под блокировкой строки) получает строки Order с причиной = failure_reason. Истечение у CANCELLED в AWAITING_RESERVATION -> COMPENSATED без команд; строки Cart, всё ещё заблокированные этим Order, только разблокируются (Cart.unlock_all), поздний inventory.reserved.v1 — no-op.
     """
 
     def __init__(
@@ -75,6 +75,20 @@ class ApplyReservationReleaseCommandHandler:
                 "Reservation expired: order_id=%s -> EXPIRED (saga_step=%s)",
                 command.order_id,
                 order.saga_step.value,
+            )
+            return
+
+        if command.expired and order.complete_cancel_on_reservation_expiry():
+            await self._order_repo.save(order)
+            # Строки ещё в Cart под блокировкой этого Order: результат резерва
+            # их не забрал.
+            cart = await self._cart_repo.get_locked_by_order(order.id)
+            if cart is not None:
+                cart.unlock_all(order_id=order.id)
+                await self._cart_repo.save(cart)
+            logger.info(
+                "Reservation expired: order_id=%s CANCELLED -> COMPENSATED",
+                command.order_id,
             )
             return
 

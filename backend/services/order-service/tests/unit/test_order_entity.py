@@ -750,3 +750,60 @@ def test_cancel_after_expiry_is_a_no_op() -> None:
     assert order.cancel() is False
     assert order.status is OrderStatus.EXPIRED
     assert order.saga_step is OrderSagaStep.COMPENSATED
+
+
+def test_expiry_after_cancel_awaiting_reservation_completes_compensation() -> None:
+    order, lines = _order_with_lines(2)
+    order.cancel()
+
+    completed = order.complete_cancel_on_reservation_expiry()
+
+    assert completed is True
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines
+    # Поздний результат резерва уже освобождённого резерва — no-op.
+    assert (
+        order.apply_reservation_result(
+            confirmed_product_ids=frozenset({lines[0].product_id})
+        )
+        is False
+    )
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        lambda: _order_with_lines()[0],
+        _order_awaiting_authorization,
+        _order_compensating,
+        _order_compensated,
+        _order_expired_awaiting_reservation,
+        _order_awaiting_capture,
+    ],
+    ids=[
+        "pending_awaiting_reservation",
+        "pending_awaiting_authorization",
+        "failed_compensating",
+        "compensated",
+        "expired_awaiting_reservation",
+        "awaiting_capture",
+    ],
+)
+def test_expiry_completes_no_cancel_outside_cancel_awaiting_reservation(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+    reason_before = order.failure_reason
+
+    completed = order.complete_cancel_on_reservation_expiry()
+
+    assert completed is False
+    assert order.status is status_before
+    assert order.saga_step is step_before
+    assert order.failure_reason == reason_before
