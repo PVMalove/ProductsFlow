@@ -2,7 +2,8 @@
 D4/AC1) — фейковые repo: успех продолжает Saga к allocation с одним
 intent'ом `inventory.allocate.v1`, отказ/таймаут переводит Order в
 компенсируемый терминал с одним intent'ом `inventory.release.v1` (без
-allocate); повторный результат — no-op без второго release/allocate."""
+allocate); повторный результат — no-op без второго release/allocate.
+issue #377: поздний успех после отмены — ровно один `payment.void.v1`."""
 
 import uuid
 
@@ -22,6 +23,7 @@ from domain.entities.order import (
 from tests.unit.fake_order_repository import FakeOrderRepository
 from tests.unit.fake_saga_command_outbox_repository import (
     FakeSagaCommandOutboxRepository,
+    VoidIntent,
 )
 
 
@@ -131,3 +133,62 @@ async def test_repeated_result_is_a_no_op_without_a_second_release() -> None:
     assert saved is not None
     assert saved.saga_step is OrderSagaStep.COMPENSATING
     assert saved.payment_authorization_id is None
+
+
+# --- issue #377: результат авторизации после отмены -------------------------
+
+
+async def test_late_authorized_result_of_a_cancelled_order_requests_one_void() -> None:
+    order = _order_awaiting_authorization()
+    order.cancel()
+    order_repo = FakeOrderRepository([order])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
+    authorization_id = uuid.uuid4()
+
+    await handler.execute(
+        ApplyAuthorizationResultCommand(
+            order_id=order.id,
+            authorization_id=authorization_id,
+            outcome=AuthorizationOutcome.AUTHORIZED,
+        )
+    )
+    # Тот же факт с другим message_id — второй void не ставится.
+    await handler.execute(
+        ApplyAuthorizationResultCommand(
+            order_id=order.id,
+            authorization_id=authorization_id,
+            outcome=AuthorizationOutcome.AUTHORIZED,
+        )
+    )
+
+    assert outbox.void_intents == [
+        VoidIntent(order_id=order.id, authorization_id=authorization_id)
+    ]
+    assert outbox.allocation_intents == []
+    assert len(order_repo.save_calls) == 1
+    saved = await order_repo.get_by_id(order.id)
+    assert saved is not None
+    assert saved.status is OrderStatus.CANCELLED
+    assert saved.saga_step is OrderSagaStep.COMPENSATING
+    assert saved.payment_authorization_id == authorization_id
+
+
+@pytest.mark.parametrize(
+    "outcome", [AuthorizationOutcome.DECLINED, AuthorizationOutcome.TIMED_OUT]
+)
+async def test_late_decline_or_timeout_of_a_cancelled_order_is_a_no_op(
+    outcome: AuthorizationOutcome,
+) -> None:
+    order = _order_awaiting_authorization()
+    order.cancel()
+    order_repo = FakeOrderRepository([order])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
+
+    await handler.execute(_command(order.id, outcome))
+
+    assert order_repo.save_calls == []
+    assert outbox.void_intents == []
+    assert outbox.release_intents == []
+    assert order.status is OrderStatus.CANCELLED

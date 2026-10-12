@@ -24,9 +24,9 @@ class ApplyReservationReleaseCommandHandler:
     """
     Business Logic Summary
 
-    Context & Purpose: Завершает компенсацию после отказа/таймаута авторизации — резерв освобождён, строки Order возвращаются в Cart (issue #375, ADR 0016:19).
+    Context & Purpose: Завершает компенсацию после отказа/таймаута авторизации или отмены владельцем — резерв освобождён, строки Order возвращаются в Cart (issue #375, #377, ADR 0016:19).
     Validations: Order должен существовать (иначе no-op с warning); Order.complete_compensation — no-op вне COMPENSATING (повторная доставка; release в другом шаге — забота #377). Любой reason события (manual/expired) завершает компенсацию: резерв освобождён в обоих случаях.
-    Side Effects: Order -> COMPENSATED (остаётся FAILED в истории со строками); Cart пользователя (get-or-create, под блокировкой строки) получает строки Order с причиной = failure_reason.
+    Side Effects: Order -> COMPENSATED (остаётся FAILED/CANCELLED в истории со строками); Cart пользователя (get-or-create, под блокировкой строки) получает строки Order с причиной = failure_reason.
     """
 
     def __init__(self, order_repo: OrderRepository, cart_repo: CartRepository) -> None:
@@ -52,7 +52,7 @@ class ApplyReservationReleaseCommandHandler:
         await self._order_repo.save(order)
 
         assert order.failure_reason is not None, (
-            "apply_authorization_result always sets a reason before COMPENSATING"
+            "every transition into COMPENSATING sets a reason (failure or cancel)"
         )
         cart = await self._cart_repo.get_or_create_for_user(order.user_id)
         cart.return_order_lines(

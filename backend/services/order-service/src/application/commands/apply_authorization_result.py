@@ -27,7 +27,7 @@ class ApplyAuthorizationResultCommandHandler:
 
     Context & Purpose: Отражает результат авторизации платежа в Order — успех продолжает Saga к allocation, отказ/таймаут делает Order компенсируемым терминалом (issue #375; issue #376 — allocation-запрос).
     Validations: Order должен существовать (иначе no-op с warning); Order.apply_authorization_result несёт saga_step no-op guard против повторной доставки.
-    Side Effects: Успех -> payment_authorization_id сохранён, AWAITING_ALLOCATION и intent inventory.allocate.v1; отказ/таймаут -> FAILED + COMPENSATING и intent inventory.release.v1 (allocate не запрашивается). Void не отправляется: отклонённую или неизвестную авторизацию payment-service не аннулирует.
+    Side Effects: Успех -> payment_authorization_id сохранён, AWAITING_ALLOCATION и intent inventory.allocate.v1; отказ/таймаут -> FAILED + COMPENSATING и intent inventory.release.v1 (allocate не запрашивается). Void не отправляется: отклонённую или неизвестную авторизацию payment-service не аннулирует. Поздний успех после отмены/истечения Order (issue #377) -> payment_authorization_id сохранён и intent payment.void.v1 ровно один раз; поздний отказ/таймаут — no-op.
     """
 
     def __init__(
@@ -49,6 +49,24 @@ class ApplyAuthorizationResultCommandHandler:
             outcome=command.outcome, authorization_id=command.authorization_id
         )
         if not applied:
+            if (
+                command.outcome is AuthorizationOutcome.AUTHORIZED
+                and order.record_late_authorization(
+                    authorization_id=command.authorization_id
+                )
+            ):
+                await self._order_repo.save(order)
+                await self._outbox.enqueue_void(
+                    order_id=command.order_id,
+                    authorization_id=command.authorization_id,
+                )
+                logger.info(
+                    "Authorization result: поздняя авторизация %s "
+                    "отменённого/истёкшего order_id=%s аннулируется",
+                    command.authorization_id,
+                    command.order_id,
+                )
+                return
             logger.info(
                 "Authorization result — no-op: order_id=%s уже покинул "
                 "AWAITING_AUTHORIZATION",

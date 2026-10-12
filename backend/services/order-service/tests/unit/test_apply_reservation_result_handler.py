@@ -234,3 +234,64 @@ async def test_redelivery_of_the_same_fact_is_a_no_op() -> None:
     assert saved_order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert [line.product_id for line in saved_order.lines] == [confirmed_id]
     assert len(outbox.authorization_intents) == 1
+
+
+# --- issue #377: Order отменён, пока резерв был в пути ------------------------
+
+
+async def test_reservation_after_cancel_releases_it_instead_of_authorizing() -> None:
+    confirmed_id = uuid.uuid4()
+    unavailable_id = uuid.uuid4()
+    cart, order, order_id = _locked_cart_and_order([confirmed_id, unavailable_id])
+    order.cancel()
+    order_repo = FakeOrderRepository([order])
+    cart_repo = FakeCartRepository([cart])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = _handler(order_repo, cart_repo, outbox)
+
+    await handler.execute(
+        ApplyReservationResultCommand(
+            order_id=order_id, confirmed_product_ids=frozenset({confirmed_id})
+        )
+    )
+
+    saved_order = await order_repo.get_by_id(order_id)
+    assert saved_order is not None
+    assert saved_order.status is OrderStatus.CANCELLED
+    assert saved_order.saga_step is OrderSagaStep.COMPENSATING
+    assert [line.product_id for line in saved_order.lines] == [confirmed_id]
+    assert outbox.release_intents == [order_id]
+    assert outbox.authorization_intents == []
+    # Подтверждённая строка ушла в Order и вернётся по факту release.
+    saved_cart = await cart_repo.get_for_user(USER_ID)
+    assert saved_cart is not None
+    assert [line.product_id for line in saved_cart.lines] == [unavailable_id]
+    assert saved_cart.lines[0].locked_by_order_id is None
+
+
+async def test_empty_reservation_after_cancel_unlocks_cart_without_commands() -> None:
+    product_id = uuid.uuid4()
+    cart, order, order_id = _locked_cart_and_order([product_id])
+    order.cancel()
+    order_repo = FakeOrderRepository([order])
+    cart_repo = FakeCartRepository([cart])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = _handler(order_repo, cart_repo, outbox)
+
+    await handler.execute(
+        ApplyReservationResultCommand(
+            order_id=order_id, confirmed_product_ids=frozenset()
+        )
+    )
+
+    saved_order = await order_repo.get_by_id(order_id)
+    assert saved_order is not None
+    assert saved_order.status is OrderStatus.CANCELLED
+    assert saved_order.saga_step is OrderSagaStep.COMPENSATED
+    assert outbox.release_intents == []
+    assert outbox.authorization_intents == []
+    saved_cart = await cart_repo.get_for_user(USER_ID)
+    assert saved_cart is not None
+    assert [line.product_id for line in saved_cart.lines] == [product_id]
+    assert saved_cart.lines[0].locked_by_order_id is None
+    assert saved_cart.lines[0].unavailable_reason is None

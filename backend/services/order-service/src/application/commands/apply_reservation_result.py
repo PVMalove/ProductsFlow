@@ -5,14 +5,16 @@ D7) — message-driven use case, мирует inventory's
 `(order_repo, cart_repo, outbox) -> execute(...)`, без UoW/`.commit()` —
 транзакцией управляет вызывающий адаптер (`api/workers/commands/inventory_event_handler.py`).
 issue #375, D6: непустой резерв продолжает Saga intent'ом
-`payment.authorize.v1` в той же транзакции."""
+`payment.authorize.v1` в той же транзакции. issue #377, D4: команды и
+изменения Cart выводятся из итогового состояния Order — отменённый в пути
+Order с подтверждёнными строками освобождает резерв вместо авторизации."""
 
 import logging
 import uuid
 from dataclasses import dataclass
 
 from domain.entities.cart import Cart
-from domain.entities.order import Order
+from domain.entities.order import Order, OrderSagaStep
 from domain.repositories import (
     CartRepository,
     OrderRepository,
@@ -34,7 +36,7 @@ class ApplyReservationResultCommandHandler:
 
     Context & Purpose: Отражает результат async reservation round-trip в Order/Cart; нулевой резерв — терминал Saga, непустой — переход к авторизации платежа (issue #375).
     Validations: Order должен существовать (иначе no-op с warning); Order.apply_reservation_result уже несёт собственный saga_step no-op guard против повторной доставки (D7) — повторный факт не ставит второй authorization intent.
-    Side Effects: Нулевой confirmed -> Cart.unlock_all (строки не меняются); частичный/полный confirmed -> Order.lines усечён, intent payment.authorize.v1 на сумму подтверждённых строк, Cart.resolve_partial_reservation (confirmed строки удаляются, недоступные разблокируются с причиной).
+    Side Effects: Нулевой confirmed -> Cart.unlock_all (строки не меняются); частичный/полный confirmed -> Order.lines усечён, intent payment.authorize.v1 на сумму подтверждённых строк, Cart.resolve_partial_reservation (confirmed строки удаляются, недоступные разблокируются с причиной). Order, отменённый пока резерв был в пути (issue #377): подтверждённые строки -> COMPENSATING, intent inventory.release.v1 и тот же Cart.resolve_partial_reservation (строки вернутся по факту release); иначе (пустой резерв, истёкший Order) -> COMPENSATED и Cart.unlock_all.
     """
 
     def __init__(
@@ -72,12 +74,14 @@ class ApplyReservationResultCommandHandler:
 
         await self._order_repo.save(order)
 
-        if command.confirmed_product_ids:
+        if order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION:
             await self._outbox.enqueue_authorization(
                 order_id=command.order_id,
                 amount_kopecks=order.authorization_amount_kopecks(),
                 payment_method_token=self._payment_method_token,
             )
+        elif order.saga_step is OrderSagaStep.COMPENSATING:
+            await self._outbox.enqueue_release(order_id=command.order_id)
 
         cart: Cart | None = await self._cart_repo.get_locked_by_order(command.order_id)
         if cart is None:
@@ -88,7 +92,12 @@ class ApplyReservationResultCommandHandler:
             )
             return
 
-        if command.confirmed_product_ids:
+        # Подтверждённые строки забраны из Cart в Order: Saga идёт дальше
+        # либо (отменённый Order) вернёт их в Cart по факту release.
+        if order.saga_step in (
+            OrderSagaStep.AWAITING_AUTHORIZATION,
+            OrderSagaStep.COMPENSATING,
+        ):
             cart.resolve_partial_reservation(
                 order_id=command.order_id,
                 confirmed_product_ids=command.confirmed_product_ids,
