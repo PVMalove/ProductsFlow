@@ -33,14 +33,14 @@ from api.workers.commands.authorization_result_handler import (
 from api.workers.commands.authorization_result_handler import (
     QUEUE_NAME as PAYMENT_EVENTS_QUEUE_NAME,
 )
-from api.workers.commands.reservation_result_handler import (
+from api.workers.commands.inventory_event_handler import (
     INVENTORY_EVENT_TYPES,
     QUEUE_NAME,
-    build_reservation_result_handler,
+    build_inventory_event_handler,
 )
 from core.settings import settings
 from infrastructure.amqp.reservation_outbox_publisher import ReservationOutboxPublisher
-from infrastructure.db.reservation_outbox_repository import COMMAND_TYPES
+from infrastructure.db.saga_command_outbox_repository import COMMAND_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ async def main() -> None:
             )
             await consume(
                 queue,
-                build_reservation_result_handler(
+                build_inventory_event_handler(
                     session_factory, settings.order_payment_method_token
                 ),
                 prefetch_count=1,

@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 
 from domain.entities.order import AuthorizationOutcome, Order
-from domain.repositories import OrderRepository, ReservationOutboxRepository
+from domain.repositories import OrderRepository, SagaCommandOutboxRepository
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ApplyAuthorizationResultCommandHandler:
     """
 
     def __init__(
-        self, order_repo: OrderRepository, outbox: ReservationOutboxRepository
+        self, order_repo: OrderRepository, outbox: SagaCommandOutboxRepository
     ) -> None:
         self._order_repo = order_repo
         self._outbox = outbox

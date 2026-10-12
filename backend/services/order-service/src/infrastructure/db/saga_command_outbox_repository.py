@@ -1,10 +1,12 @@
-"""Пишущая сторона `reservation_outbox` (issue #372, D6; issue #375, D3;
-issue #376, D3).
+"""Пишущая сторона outbox исходящих команд Saga (issue #372, D6; issue #375,
+D3; issue #376, D3).
 
-Таблица несёт все исходящие команды Saga, не только `inventory.reserve.v1`
-— имя таблицы/класса осталось от #372 (naming debt R5 брифа #375,
-переименование — отдельный рефакторинг). Тип команды и wire-payload — забота
-этого модуля: доменный порт называет только намерение."""
+Порт и репозиторий названы по содержимому — все исходящие команды Saga, не
+только `inventory.reserve.v1` (issue #376, R6). Физическая таблица сохраняет
+имя `reservation_outbox` от #372: её переименование — миграция схемы (naming
+debt R5 брифа #375); `ReservationOutboxModel`/`ReservationOutboxPublisher`
+названы по таблице. Тип команды и wire-payload — забота этого модуля:
+доменный порт называет только намерение."""
 
 import uuid
 from typing import Any
@@ -13,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.entities.order import OrderLine
 from domain.repositories import (
-    ReservationOutboxRepository as ReservationOutboxRepositoryPort,
+    SagaCommandOutboxRepository as SagaCommandOutboxRepositoryPort,
 )
 from infrastructure.db.entity_configurations.models import ReservationOutboxModel
 
@@ -32,7 +34,7 @@ COMMAND_TYPES = (
 )
 
 
-class ReservationOutboxRepository:
+class SagaCommandOutboxRepository:
     """Используется application-handler'ами внутри их транзакции.
     Дренаж/публикация — забота отдельного `ReservationOutboxPublisher` (не
     этого класса), тот же разрыв, что generic `OutboxPublisher` vs доменные
@@ -108,6 +110,6 @@ class ReservationOutboxRepository:
         )
 
 
-_reservation_outbox_repository_implementation: type[ReservationOutboxRepositoryPort] = (
-    ReservationOutboxRepository
-)
+_saga_command_outbox_repository_implementation: type[
+    SagaCommandOutboxRepositoryPort
+] = SagaCommandOutboxRepository

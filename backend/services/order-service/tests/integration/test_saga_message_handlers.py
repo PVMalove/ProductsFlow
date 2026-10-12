@@ -1,5 +1,5 @@
 """Postgres-интеграция пути сообщений Saga (issue #375, AC1-AC4; issue #376,
-AC1-AC4): `handle_reservation_result`/`handle_authorization_result`
+AC1-AC4): `handle_inventory_event`/`handle_authorization_result`
 прогоняются с заглушкой `AbstractIncomingMessage` поверх настоящей БД —
 резерв -> авторизация -> allocation -> capture либо компенсация, повторная
 доставка, результаты не в своём шаге и inbox-ключ по producer'у. RabbitMQ не
@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from api.workers.commands.authorization_result_handler import (
     handle_authorization_result,
 )
-from api.workers.commands.reservation_result_handler import (
-    handle_reservation_result,
+from api.workers.commands.inventory_event_handler import (
+    handle_inventory_event,
 )
 from contracts.order import OrderView
 from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
@@ -107,7 +107,7 @@ async def _deliver_reserved(
     *,
     message_id: int,
 ) -> None:
-    await handle_reservation_result(
+    await handle_inventory_event(
         _message(
             "inventory.reserved.v1",
             message_id,
@@ -161,7 +161,7 @@ async def _deliver_released(
     *,
     message_id: int,
 ) -> None:
-    await handle_reservation_result(
+    await handle_inventory_event(
         _message(
             "inventory.released.v1",
             message_id,
@@ -178,7 +178,7 @@ async def _deliver_allocated(
     *,
     message_id: int,
 ) -> None:
-    await handle_reservation_result(
+    await handle_inventory_event(
         _message(
             "inventory.allocated.v1",
             message_id,

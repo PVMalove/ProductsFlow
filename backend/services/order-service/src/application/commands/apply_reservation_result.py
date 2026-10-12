@@ -3,7 +3,7 @@
 D7) — message-driven use case, мирует inventory's
 `ReserveInventoryLinesCommandHandler` (issue #370, D8): чистая функция
 `(order_repo, cart_repo, outbox) -> execute(...)`, без UoW/`.commit()` —
-транзакцией управляет вызывающий адаптер (`api/reservation_result_handler.py`).
+транзакцией управляет вызывающий адаптер (`api/workers/commands/inventory_event_handler.py`).
 issue #375, D6: непустой резерв продолжает Saga intent'ом
 `payment.authorize.v1` в той же транзакции."""
 
@@ -16,7 +16,7 @@ from domain.entities.order import Order
 from domain.repositories import (
     CartRepository,
     OrderRepository,
-    ReservationOutboxRepository,
+    SagaCommandOutboxRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class ApplyReservationResultCommandHandler:
         self,
         order_repo: OrderRepository,
         cart_repo: CartRepository,
-        outbox: ReservationOutboxRepository,
+        outbox: SagaCommandOutboxRepository,
         *,
         payment_method_token: str,
     ) -> None:

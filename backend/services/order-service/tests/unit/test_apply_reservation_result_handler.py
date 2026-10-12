@@ -16,9 +16,9 @@ from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
 from domain.value_objects.cart_id import CartId
 from tests.unit.fake_cart_repository import FakeCartRepository
 from tests.unit.fake_order_repository import FakeOrderRepository
-from tests.unit.fake_reservation_outbox_repository import (
+from tests.unit.fake_saga_command_outbox_repository import (
     AuthorizationIntent,
-    FakeReservationOutboxRepository,
+    FakeSagaCommandOutboxRepository,
 )
 
 USER_ID = uuid.uuid4()
@@ -59,7 +59,7 @@ def _locked_cart_and_order(
 def _handler(
     order_repo: FakeOrderRepository,
     cart_repo: FakeCartRepository,
-    outbox: FakeReservationOutboxRepository,
+    outbox: FakeSagaCommandOutboxRepository,
 ) -> ApplyReservationResultCommandHandler:
     return ApplyReservationResultCommandHandler(
         order_repo, cart_repo, outbox, payment_method_token=PAYMENT_METHOD_TOKEN
@@ -69,7 +69,7 @@ def _handler(
 async def test_unknown_order_is_a_no_op() -> None:
     order_repo = FakeOrderRepository()
     cart_repo = FakeCartRepository()
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
 
     await handler.execute(
@@ -88,7 +88,7 @@ async def test_zero_confirmed_marks_order_failed_and_unlocks_cart_untouched() ->
     cart, order, order_id = _locked_cart_and_order([product_id])
     order_repo = FakeOrderRepository([order])
     cart_repo = FakeCartRepository([cart])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
 
     await handler.execute(
@@ -119,7 +119,7 @@ async def test_partial_confirmed_trims_order_and_splits_cart() -> None:
     cart, order, order_id = _locked_cart_and_order([confirmed_id, unavailable_id])
     order_repo = FakeOrderRepository([order])
     cart_repo = FakeCartRepository([cart])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
 
     await handler.execute(
@@ -149,7 +149,7 @@ async def test_partial_confirmed_requests_authorization_of_confirmed_sum_only() 
     )
     order_repo = FakeOrderRepository([order])
     cart_repo = FakeCartRepository([cart])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
 
     await handler.execute(
@@ -174,7 +174,7 @@ async def test_full_confirmed_requests_authorization_of_all_lines() -> None:
         product_ids, quantity=3, unit_price_kopecks=400
     )
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, FakeCartRepository([cart]), outbox)
 
     await handler.execute(
@@ -192,7 +192,7 @@ async def test_authorization_is_requested_even_when_cart_lines_are_gone() -> Non
     confirmed_id = uuid.uuid4()
     _cart, order, order_id = _locked_cart_and_order([confirmed_id])
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     # Cart не найден по блокировке — Order всё равно продолжает Saga.
     handler = _handler(order_repo, FakeCartRepository(), outbox)
 
@@ -211,7 +211,7 @@ async def test_redelivery_of_the_same_fact_is_a_no_op() -> None:
     cart, order, order_id = _locked_cart_and_order([confirmed_id, unavailable_id])
     order_repo = FakeOrderRepository([order])
     cart_repo = FakeCartRepository([cart])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
     command = ApplyReservationResultCommand(
         order_id=order_id, confirmed_product_ids=frozenset({confirmed_id})

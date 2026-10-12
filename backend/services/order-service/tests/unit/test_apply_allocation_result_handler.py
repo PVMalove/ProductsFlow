@@ -17,9 +17,9 @@ from domain.entities.order import (
     OrderStatus,
 )
 from tests.unit.fake_order_repository import FakeOrderRepository
-from tests.unit.fake_reservation_outbox_repository import (
+from tests.unit.fake_saga_command_outbox_repository import (
     CaptureIntent,
-    FakeReservationOutboxRepository,
+    FakeSagaCommandOutboxRepository,
 )
 
 
@@ -42,7 +42,7 @@ def _order_awaiting_allocation(authorization_id: uuid.UUID) -> Order:
 
 async def test_unknown_order_is_a_no_op() -> None:
     order_repo = FakeOrderRepository()
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAllocationResultCommandHandler(order_repo, outbox)
 
     await handler.execute(ApplyAllocationResultCommand(order_id=uuid.uuid4()))
@@ -55,7 +55,7 @@ async def test_allocated_moves_to_capture_and_requests_capture() -> None:
     authorization_id = uuid.uuid4()
     order = _order_awaiting_allocation(authorization_id)
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAllocationResultCommandHandler(order_repo, outbox)
 
     await handler.execute(ApplyAllocationResultCommand(order_id=order.id))
@@ -75,7 +75,7 @@ async def test_allocated_moves_to_capture_and_requests_capture() -> None:
 async def test_repeated_allocated_result_requests_no_second_capture() -> None:
     order = _order_awaiting_allocation(uuid.uuid4())
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAllocationResultCommandHandler(order_repo, outbox)
     await handler.execute(ApplyAllocationResultCommand(order_id=order.id))
 
@@ -89,7 +89,7 @@ async def test_repeated_allocated_result_requests_no_second_capture() -> None:
 async def test_allocated_result_before_authorization_is_a_no_op() -> None:
     order = _order_awaiting_authorization()
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAllocationResultCommandHandler(order_repo, outbox)
 
     await handler.execute(ApplyAllocationResultCommand(order_id=order.id))

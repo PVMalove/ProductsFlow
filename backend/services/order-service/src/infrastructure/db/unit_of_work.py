@@ -7,7 +7,7 @@ from domain.repositories import (
     CartRepository,
     IdempotencyKeyRepository,
     OrderRepository,
-    ReservationOutboxRepository,
+    SagaCommandOutboxRepository,
 )
 from domain.unit_of_work import CartUnitOfWork, CheckoutUnitOfWork
 from infrastructure.db.cart_repository import CartRepository as SqlCartRepository
@@ -15,8 +15,8 @@ from infrastructure.db.idempotency_key_repository import (
     IdempotencyKeyRepository as SqlIdempotencyKeyRepository,
 )
 from infrastructure.db.order_repository import OrderRepository as SqlOrderRepository
-from infrastructure.db.reservation_outbox_repository import (
-    ReservationOutboxRepository as SqlReservationOutboxRepository,
+from infrastructure.db.saga_command_outbox_repository import (
+    SagaCommandOutboxRepository as SqlSagaCommandOutboxRepository,
 )
 
 
@@ -33,8 +33,8 @@ class SqlCartUnitOfWork(SqlAlchemyUnitOfWork):
         self.idempotency_keys: IdempotencyKeyRepository = SqlIdempotencyKeyRepository(
             session
         )
-        self.reservation_outbox: ReservationOutboxRepository = (
-            SqlReservationOutboxRepository(session)
+        self.saga_command_outbox: SagaCommandOutboxRepository = (
+            SqlSagaCommandOutboxRepository(session)
         )
 
 

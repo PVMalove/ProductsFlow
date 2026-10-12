@@ -6,7 +6,8 @@ D7) — мирует `api/worker.py`-style consumer'ов #367/#369's
 `ApplyReservationResultCommandHandler` (`inventory.reserved.v1`),
 `ApplyReservationReleaseCommandHandler` (`inventory.released.v1`) или
 `ApplyAllocationResultCommandHandler` (`inventory.allocated.v1`, issue #376,
-D7) — чистые функции, без AMQP-деталей. Одна очередь на producer сохраняет
+D7) — чистые функции, без AMQP-деталей. Тип события выбирает route в одной
+таблице `_ROUTES` (issue #376, R6). Одна очередь на producer сохраняет
 порядок событий inventory при `prefetch_count=1`."""
 
 import json
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.workers.commands.inbox import (
     INVENTORY_SOURCE,
+    ParsedEvent,
     claim_message,
     parse_outbox_message_id,
 )
@@ -37,8 +39,8 @@ from application.commands.apply_reservation_result import (
 )
 from infrastructure.db.cart_repository import CartRepository
 from infrastructure.db.order_repository import OrderRepository
-from infrastructure.db.reservation_outbox_repository import (
-    ReservationOutboxRepository,
+from infrastructure.db.saga_command_outbox_repository import (
+    SagaCommandOutboxRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,6 @@ logger = logging.getLogger(__name__)
 RESERVED_EVENT_TYPE = "inventory.reserved.v1"
 RELEASED_EVENT_TYPE = "inventory.released.v1"
 ALLOCATED_EVENT_TYPE = "inventory.allocated.v1"
-INVENTORY_EVENT_TYPES = (RESERVED_EVENT_TYPE, RELEASED_EVENT_TYPE, ALLOCATED_EVENT_TYPE)
 QUEUE_NAME = "order.inventory-events"
 
 
@@ -114,7 +115,53 @@ def parse_allocation_result(body: bytes) -> ApplyAllocationResultCommand:
     return ApplyAllocationResultCommand(order_id=order_id)
 
 
-async def handle_reservation_result(
+def _route_reserved(body: bytes, payment_method_token: str) -> ParsedEvent:
+    command = parse_reservation_result(body)
+
+    async def apply(session: AsyncSession) -> None:
+        await ApplyReservationResultCommandHandler(
+            OrderRepository(session),
+            CartRepository(session),
+            SagaCommandOutboxRepository(session),
+            payment_method_token=payment_method_token,
+        ).execute(command)
+
+    return ParsedEvent(command.order_id, apply)
+
+
+def _route_released(body: bytes, _payment_method_token: str) -> ParsedEvent:
+    command = parse_reservation_release(body)
+
+    async def apply(session: AsyncSession) -> None:
+        await ApplyReservationReleaseCommandHandler(
+            OrderRepository(session), CartRepository(session)
+        ).execute(command)
+
+    return ParsedEvent(command.order_id, apply)
+
+
+def _route_allocated(body: bytes, _payment_method_token: str) -> ParsedEvent:
+    command = parse_allocation_result(body)
+
+    async def apply(session: AsyncSession) -> None:
+        await ApplyAllocationResultCommandHandler(
+            OrderRepository(session), SagaCommandOutboxRepository(session)
+        ).execute(command)
+
+    return ParsedEvent(command.order_id, apply)
+
+
+# Единственная точка диспетчеризации фактов inventory по типу события (issue
+# #376, R6): новый факт — одна запись здесь, привязка очереди выводится из неё.
+_ROUTES: dict[str, Callable[[bytes, str], ParsedEvent]] = {
+    RESERVED_EVENT_TYPE: _route_reserved,
+    RELEASED_EVENT_TYPE: _route_released,
+    ALLOCATED_EVENT_TYPE: _route_allocated,
+}
+INVENTORY_EVENT_TYPES = tuple(_ROUTES)
+
+
+async def handle_inventory_event(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -122,17 +169,7 @@ async def handle_reservation_result(
 ) -> None:
     event_type = _event_type(message)
     message_id = parse_outbox_message_id(message)
-    command: (
-        ApplyReservationResultCommand
-        | ApplyReservationReleaseCommand
-        | ApplyAllocationResultCommand
-    )
-    if event_type == RELEASED_EVENT_TYPE:
-        command = parse_reservation_release(message.body)
-    elif event_type == ALLOCATED_EVENT_TYPE:
-        command = parse_allocation_result(message.body)
-    else:
-        command = parse_reservation_result(message.body)
+    event = _ROUTES[event_type](message.body, payment_method_token)
 
     async with session_factory() as session:
         async with session.begin():
@@ -146,36 +183,22 @@ async def handle_reservation_result(
                 )
                 return
 
-            if isinstance(command, ApplyReservationReleaseCommand):
-                await ApplyReservationReleaseCommandHandler(
-                    OrderRepository(session), CartRepository(session)
-                ).execute(command)
-            elif isinstance(command, ApplyAllocationResultCommand):
-                await ApplyAllocationResultCommandHandler(
-                    OrderRepository(session), ReservationOutboxRepository(session)
-                ).execute(command)
-            else:
-                await ApplyReservationResultCommandHandler(
-                    OrderRepository(session),
-                    CartRepository(session),
-                    ReservationOutboxRepository(session),
-                    payment_method_token=payment_method_token,
-                ).execute(command)
+            await event.apply(session)
 
     logger.info(
         "order-worker: applied %s for order_id=%s at outbox message %s",
         event_type,
-        command.order_id,
+        event.order_id,
         message_id,
     )
 
 
-def build_reservation_result_handler(
+def build_inventory_event_handler(
     session_factory: async_sessionmaker[AsyncSession],
     payment_method_token: str,
 ) -> Callable[[AbstractIncomingMessage], Awaitable[None]]:
     async def _handler(message: AbstractIncomingMessage) -> None:
-        await handle_reservation_result(
+        await handle_inventory_event(
             message, session_factory, payment_method_token=payment_method_token
         )
 

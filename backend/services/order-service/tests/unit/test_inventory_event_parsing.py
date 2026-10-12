@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from api.workers.commands.reservation_result_handler import (
+from api.workers.commands.inventory_event_handler import (
     parse_allocation_result,
     parse_reservation_release,
     parse_reservation_result,

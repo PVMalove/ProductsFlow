@@ -69,7 +69,7 @@ class IdempotencyKeyRepository(Protocol):
 
 
 @runtime_checkable
-class ReservationOutboxRepository(Protocol):
+class SagaCommandOutboxRepository(Protocol):
     """Контракт исходящих command-intent'ов Saga (issue #372, D6; issue #375,
     D3; issue #376, D3) — НЕ переиспользует `kernel_platform.OutboxMessage`
     (типовой конфликт BigInt PK vs UUID `command_id`, находка 5). Тип команды

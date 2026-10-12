@@ -1,4 +1,4 @@
-"""Фейковый ReservationOutboxRepository для юнит-тестов (issue #372;
+"""Фейковый SagaCommandOutboxRepository для юнит-тестов (issue #372;
 issue #375 — authorization/release intents; issue #376 — allocation/capture
 intents)."""
 
@@ -21,7 +21,7 @@ class CaptureIntent:
     authorization_id: uuid.UUID
 
 
-class FakeReservationOutboxRepository:
+class FakeSagaCommandOutboxRepository:
     def __init__(self) -> None:
         self.enqueue_calls: list[tuple[uuid.UUID, list[OrderLine]]] = []
         self.authorization_intents: list[AuthorizationIntent] = []

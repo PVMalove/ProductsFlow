@@ -2,14 +2,14 @@
 """Команда и handler применения факта `inventory.allocated.v1` (issue #376,
 D4) — message-driven use case по прецеденту `apply_reservation_result.py`:
 без UoW/`.commit()`, транзакцией управляет вызывающий адаптер
-(`api/workers/commands/reservation_result_handler.py`)."""
+(`api/workers/commands/inventory_event_handler.py`)."""
 
 import logging
 import uuid
 from dataclasses import dataclass
 
 from domain.entities.order import Order
-from domain.repositories import OrderRepository, ReservationOutboxRepository
+from domain.repositories import OrderRepository, SagaCommandOutboxRepository
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class ApplyAllocationResultCommandHandler:
     """
 
     def __init__(
-        self, order_repo: OrderRepository, outbox: ReservationOutboxRepository
+        self, order_repo: OrderRepository, outbox: SagaCommandOutboxRepository
     ) -> None:
         self._order_repo = order_repo
         self._outbox = outbox

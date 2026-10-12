@@ -1,6 +1,6 @@
 # ruff: noqa: E501
 """Message-driven адаптер фактов payment-service (issue #375, D7; issue #376,
-D7) — мирует `reservation_result_handler.py`: `processed_messages`-гейт по
+D7) — мирует `inventory_event_handler.py`: `processed_messages`-гейт по
 `(source="payment", message_id)` + делегирование бизнес-применения
 `ApplyAuthorizationResultCommandHandler` (результаты `payment.authorize.v1`)
 или `ApplyCaptureResultCommandHandler` (`payment.captured.v1`). Одна очередь
@@ -32,8 +32,8 @@ from application.commands.apply_capture_result import (
 )
 from domain.entities.order import AuthorizationOutcome
 from infrastructure.db.order_repository import OrderRepository
-from infrastructure.db.reservation_outbox_repository import (
-    ReservationOutboxRepository,
+from infrastructure.db.saga_command_outbox_repository import (
+    SagaCommandOutboxRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,7 +140,7 @@ async def handle_authorization_result(
                 ).execute(command)
             else:
                 await ApplyAuthorizationResultCommandHandler(
-                    OrderRepository(session), ReservationOutboxRepository(session)
+                    OrderRepository(session), SagaCommandOutboxRepository(session)
                 ).execute(command)
 
     logger.info(

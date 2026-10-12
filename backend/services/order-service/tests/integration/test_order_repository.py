@@ -1,4 +1,4 @@
-"""OrderRepository/IdempotencyKeyRepository/ReservationOutboxRepository
+"""OrderRepository/IdempotencyKeyRepository/SagaCommandOutboxRepository
 round-trip against real Postgres (issue #372, Seams for TDD #9; issue #376 —
 Saga transition journal and drained `order.completed.v1`). The
 migration/diff coverage itself lives in test_cart_repository.py's full
@@ -26,8 +26,8 @@ from infrastructure.db.entity_configurations.models import (
 )
 from infrastructure.db.idempotency_key_repository import IdempotencyKeyRepository
 from infrastructure.db.order_repository import OrderRepository
-from infrastructure.db.reservation_outbox_repository import (
-    ReservationOutboxRepository,
+from infrastructure.db.saga_command_outbox_repository import (
+    SagaCommandOutboxRepository,
 )
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
@@ -284,7 +284,7 @@ async def test_idempotency_key_get_returns_none_when_absent(
 async def test_reservation_outbox_enqueue_persists_an_unpublished_row(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
     lines = [
         OrderLine(
@@ -312,7 +312,7 @@ async def test_reservation_outbox_enqueue_persists_an_unpublished_row(
 async def test_reservation_outbox_enqueue_authorization_persists_payment_command(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
 
     await repo.enqueue_authorization(
@@ -334,7 +334,7 @@ async def test_reservation_outbox_enqueue_authorization_persists_payment_command
 async def test_reservation_outbox_enqueue_release_persists_inventory_command(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
 
     await repo.enqueue_release(order_id=order_id)
