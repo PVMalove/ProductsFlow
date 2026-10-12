@@ -2,7 +2,7 @@
 """Команда и handler применения факта `payment.captured.v1` (issue #376,
 D4) — message-driven use case по прецеденту `apply_reservation_result.py`:
 без UoW/`.commit()`, транзакцией управляет вызывающий адаптер
-(`api/workers/commands/authorization_result_handler.py`)."""
+(`api/workers/commands/payment_event_handler.py`)."""
 
 import logging
 import uuid

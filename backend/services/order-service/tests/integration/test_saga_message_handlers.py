@@ -1,5 +1,5 @@
 """Postgres-интеграция пути сообщений Saga (issue #375, AC1-AC4; issue #376,
-AC1-AC4): `handle_inventory_event`/`handle_authorization_result`
+AC1-AC4): `handle_inventory_event`/`handle_payment_event`
 прогоняются с заглушкой `AbstractIncomingMessage` поверх настоящей БД —
 резерв -> авторизация -> allocation -> capture либо компенсация, повторная
 доставка, результаты не в своём шаге и inbox-ключ по producer'у. RabbitMQ не
@@ -17,11 +17,11 @@ from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from api.workers.commands.authorization_result_handler import (
-    handle_authorization_result,
-)
 from api.workers.commands.inventory_event_handler import (
     handle_inventory_event,
+)
+from api.workers.commands.payment_event_handler import (
+    handle_payment_event,
 )
 from contracts.order import OrderView
 from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
@@ -141,7 +141,7 @@ async def _deliver_authorization(
     message_id: int,
     authorization_id: uuid.UUID | None = None,
 ) -> None:
-    await handle_authorization_result(
+    await handle_payment_event(
         _message(
             event_type,
             message_id,
@@ -516,7 +516,7 @@ async def _deliver_captured(
     message_id: int,
     causation_id: uuid.UUID | None = None,
 ) -> None:
-    await handle_authorization_result(
+    await handle_payment_event(
         _message(
             "payment.captured.v1",
             message_id,

@@ -3,8 +3,9 @@
 D7) — мирует `inventory_event_handler.py`: `processed_messages`-гейт по
 `(source="payment", message_id)` + делегирование бизнес-применения
 `ApplyAuthorizationResultCommandHandler` (результаты `payment.authorize.v1`)
-или `ApplyCaptureResultCommandHandler` (`payment.captured.v1`). Одна очередь
-на producer сохраняет порядок событий payment при `prefetch_count=1`.
+или `ApplyCaptureResultCommandHandler` (`payment.captured.v1`). Тип события
+выбирает route в одной таблице `_ROUTES` (issue #376, R6). Одна очередь на
+producer сохраняет порядок событий payment при `prefetch_count=1`.
 `payment.capture_unknown.v1` нарочно не привязан: reconciliation — вне
 issue #376 (R3 брифа)."""
 
@@ -12,6 +13,7 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from functools import partial
 from typing import Any
 
 from aio_pika.abc import AbstractIncomingMessage
@@ -19,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.workers.commands.inbox import (
     PAYMENT_SOURCE,
+    ParsedEvent,
     claim_message,
     parse_outbox_message_id,
 )
@@ -45,8 +48,6 @@ AUTHORIZATION_OUTCOME_BY_EVENT_TYPE: dict[str, AuthorizationOutcome] = {
     "payment.authorization_timed_out.v1": AuthorizationOutcome.TIMED_OUT,
 }
 CAPTURED_EVENT_TYPE = "payment.captured.v1"
-# Все факты payment, которые order-worker привязывает к своей очереди.
-PAYMENT_EVENT_TYPES = (*AUTHORIZATION_OUTCOME_BY_EVENT_TYPE, CAPTURED_EVENT_TYPE)
 
 
 def _event_type(message: AbstractIncomingMessage) -> str:
@@ -110,17 +111,48 @@ def parse_capture_result(body: bytes) -> ApplyCaptureResultCommand:
     )
 
 
-async def handle_authorization_result(
+def _route_authorization_result(event_type: str, body: bytes) -> ParsedEvent:
+    command = parse_authorization_result(event_type, body)
+
+    async def apply(session: AsyncSession) -> None:
+        await ApplyAuthorizationResultCommandHandler(
+            OrderRepository(session), SagaCommandOutboxRepository(session)
+        ).execute(command)
+
+    return ParsedEvent(command.order_id, apply)
+
+
+def _route_captured(body: bytes) -> ParsedEvent:
+    command = parse_capture_result(body)
+
+    async def apply(session: AsyncSession) -> None:
+        await ApplyCaptureResultCommandHandler(OrderRepository(session)).execute(
+            command
+        )
+
+    return ParsedEvent(command.order_id, apply)
+
+
+# Единственная точка диспетчеризации фактов payment по типу события (issue
+# #376, R6): новый факт — одна запись здесь, привязка очереди выводится из неё.
+_ROUTES: dict[str, Callable[[bytes], ParsedEvent]] = {
+    **{
+        event_type: partial(_route_authorization_result, event_type)
+        for event_type in AUTHORIZATION_OUTCOME_BY_EVENT_TYPE
+    },
+    CAPTURED_EVENT_TYPE: _route_captured,
+}
+# Все факты payment, которые order-worker привязывает к своей очереди.
+PAYMENT_EVENT_TYPES = tuple(_ROUTES)
+
+
+async def handle_payment_event(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     event_type = _event_type(message)
     message_id = parse_outbox_message_id(message)
-    command: ApplyAuthorizationResultCommand | ApplyCaptureResultCommand
-    if event_type == CAPTURED_EVENT_TYPE:
-        command = parse_capture_result(message.body)
-    else:
-        command = parse_authorization_result(event_type, message.body)
+    event = _ROUTES[event_type](message.body)
 
     async with session_factory() as session:
         async with session.begin():
@@ -134,27 +166,20 @@ async def handle_authorization_result(
                 )
                 return
 
-            if isinstance(command, ApplyCaptureResultCommand):
-                await ApplyCaptureResultCommandHandler(
-                    OrderRepository(session)
-                ).execute(command)
-            else:
-                await ApplyAuthorizationResultCommandHandler(
-                    OrderRepository(session), SagaCommandOutboxRepository(session)
-                ).execute(command)
+            await event.apply(session)
 
     logger.info(
         "order-worker: applied %s for order_id=%s at outbox message %s",
         event_type,
-        command.order_id,
+        event.order_id,
         message_id,
     )
 
 
-def build_authorization_result_handler(
+def build_payment_event_handler(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> Callable[[AbstractIncomingMessage], Awaitable[None]]:
     async def _handler(message: AbstractIncomingMessage) -> None:
-        await handle_authorization_result(message, session_factory)
+        await handle_payment_event(message, session_factory)
 
     return _handler

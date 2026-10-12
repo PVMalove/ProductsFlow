@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from api.workers.commands.authorization_result_handler import (
+from api.workers.commands.payment_event_handler import (
     parse_authorization_result,
     parse_capture_result,
 )

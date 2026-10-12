@@ -26,17 +26,17 @@ from kernel_platform.topology import (
 from observability.tracing import configure_tracing
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from api.workers.commands.authorization_result_handler import (
-    PAYMENT_EVENT_TYPES,
-    build_authorization_result_handler,
-)
-from api.workers.commands.authorization_result_handler import (
-    QUEUE_NAME as PAYMENT_EVENTS_QUEUE_NAME,
-)
 from api.workers.commands.inventory_event_handler import (
     INVENTORY_EVENT_TYPES,
     QUEUE_NAME,
     build_inventory_event_handler,
+)
+from api.workers.commands.payment_event_handler import (
+    PAYMENT_EVENT_TYPES,
+    build_payment_event_handler,
+)
+from api.workers.commands.payment_event_handler import (
+    QUEUE_NAME as PAYMENT_EVENTS_QUEUE_NAME,
 )
 from core.settings import settings
 from infrastructure.amqp.reservation_outbox_publisher import ReservationOutboxPublisher
@@ -97,10 +97,10 @@ async def main() -> None:
             )
             await consume(
                 payment_queue,
-                build_authorization_result_handler(session_factory),
+                build_payment_event_handler(session_factory),
                 prefetch_count=1,
             )
-            logger.info("order-worker: authorization-result consumer started")
+            logger.info("order-worker: payment-event consumer started")
 
             # finding 9: order-worker сам объявляет топологию каждой команды
             # перед публикацией — не полагается на то, что inventory-worker/
