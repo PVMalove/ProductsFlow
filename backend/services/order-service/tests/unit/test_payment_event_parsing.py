@@ -1,6 +1,7 @@
 """Чистые функции парсинга фактов payment-service (issue #375, D7; issue
-#376, D7): `order_id` берётся из `correlation_id`; исход авторизации — из
-типа события; `payment.captured.v1` несёт ещё `causation_id`."""
+#376, D7; issue #377, D7): `order_id` берётся из `correlation_id`; исход
+авторизации — из типа события; `payment.captured.v1` несёт ещё
+`causation_id`; `payment.voided.v1` только подтверждается."""
 
 import json
 import uuid
@@ -8,8 +9,10 @@ import uuid
 import pytest
 
 from api.workers.commands.payment_event_handler import (
+    PAYMENT_EVENT_TYPES,
     parse_authorization_result,
     parse_capture_result,
+    parse_voided_order_id,
 )
 from domain.entities.order import AuthorizationOutcome
 
@@ -139,3 +142,32 @@ def test_parse_capture_result_rejects_invalid_json() -> None:
 def test_parse_capture_result_rejects_non_object_payload() -> None:
     with pytest.raises(ValueError):
         parse_capture_result(json.dumps([1]).encode())
+
+
+def test_voided_fact_is_bound_to_the_payment_queue() -> None:
+    assert "payment.voided.v1" in PAYMENT_EVENT_TYPES
+
+
+def test_parse_voided_maps_correlation_id_to_order_id() -> None:
+    order_id = uuid.uuid4()
+
+    parsed = parse_voided_order_id(
+        _body(order_id=order_id, authorization_id=uuid.uuid4())
+    )
+
+    assert parsed == order_id
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        json.dumps({"authorization_id": str(uuid.uuid4())}).encode(),
+        json.dumps({"correlation_id": "not-a-uuid"}).encode(),
+        b"not-json",
+        json.dumps([1]).encode(),
+    ],
+    ids=["missing_correlation_id", "non_uuid_correlation_id", "invalid_json", "array"],
+)
+def test_parse_voided_rejects_a_bad_payload(body: bytes) -> None:
+    with pytest.raises(ValueError):
+        parse_voided_order_id(body)

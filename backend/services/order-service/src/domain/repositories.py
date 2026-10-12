@@ -107,3 +107,10 @@ class SagaCommandOutboxRepository(Protocol):
         """`payment.capture.v1` — capture авторизации после успешной
         allocation (issue #376)."""
         ...
+
+    async def enqueue_void(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        """`payment.void.v1` — аннулирование авторизации отменённого или
+        истёкшего Order (issue #377), в том числе поздней авторизации."""
+        ...

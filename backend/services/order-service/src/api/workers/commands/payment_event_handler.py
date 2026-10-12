@@ -7,7 +7,9 @@ D7) — мирует `inventory_event_handler.py`: `processed_messages`-гейт
 выбирает route в одной таблице `_ROUTES` (issue #376, R6). Одна очередь на
 producer сохраняет порядок событий payment при `prefetch_count=1`.
 `payment.capture_unknown.v1` нарочно не привязан: reconciliation — вне
-issue #376 (R3 брифа)."""
+issue #376 (R3 брифа). `payment.voided.v1` (issue #377, D7) привязан только
+для подтверждения: факт не меняет Order, но без привязки неподтверждённая
+публикация payment-service ретраится бесконечно."""
 
 import json
 import logging
@@ -48,6 +50,7 @@ AUTHORIZATION_OUTCOME_BY_EVENT_TYPE: dict[str, AuthorizationOutcome] = {
     "payment.authorization_timed_out.v1": AuthorizationOutcome.TIMED_OUT,
 }
 CAPTURED_EVENT_TYPE = "payment.captured.v1"
+VOIDED_EVENT_TYPE = "payment.voided.v1"
 
 
 def _event_type(message: AbstractIncomingMessage) -> str:
@@ -111,6 +114,18 @@ def parse_capture_result(body: bytes) -> ApplyCaptureResultCommand:
     )
 
 
+def parse_voided_order_id(body: bytes) -> uuid.UUID:
+    """Парсит payload `payment.voided.v1` (`{authorization_id,
+    correlation_id, causation_id}`, issue #377, D7) — нужен только
+    `correlation_id` (`str(order_id)`) для лога подтверждения."""
+    payload = _json_object(body)
+
+    try:
+        return uuid.UUID(str(payload["correlation_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid payment event payload: {payload!r}") from exc
+
+
 def _route_authorization_result(event_type: str, body: bytes) -> ParsedEvent:
     command = parse_authorization_result(event_type, body)
 
@@ -133,6 +148,17 @@ def _route_captured(body: bytes) -> ParsedEvent:
     return ParsedEvent(command.order_id, apply)
 
 
+def _route_voided(body: bytes) -> ParsedEvent:
+    order_id = parse_voided_order_id(body)
+
+    async def apply(_session: AsyncSession) -> None:
+        # issue #377, D7: Order — инициатор void; факт только подтверждается
+        # inbox-гейтом. Состояние Order уже терминально, Cart не ждёт void.
+        return None
+
+    return ParsedEvent(order_id, apply)
+
+
 # Единственная точка диспетчеризации фактов payment по типу события (issue
 # #376, R6): новый факт — одна запись здесь, привязка очереди выводится из неё.
 _ROUTES: dict[str, Callable[[bytes], ParsedEvent]] = {
@@ -141,6 +167,7 @@ _ROUTES: dict[str, Callable[[bytes], ParsedEvent]] = {
         for event_type in AUTHORIZATION_OUTCOME_BY_EVENT_TYPE
     },
     CAPTURED_EVENT_TYPE: _route_captured,
+    VOIDED_EVENT_TYPE: _route_voided,
 }
 # Все факты payment, которые order-worker привязывает к своей очереди.
 PAYMENT_EVENT_TYPES = tuple(_ROUTES)
