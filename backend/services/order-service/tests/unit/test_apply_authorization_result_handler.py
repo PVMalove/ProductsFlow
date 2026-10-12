@@ -1,7 +1,8 @@
-"""ApplyAuthorizationResultCommandHandler (issue #375, D6/AC2) — фейковые
-repo: успех продолжает Saga без исходящих команд, отказ/таймаут переводит
-Order в компенсируемый терминал с одним intent'ом `inventory.release.v1`;
-повторный результат — no-op без второго release."""
+"""ApplyAuthorizationResultCommandHandler (issue #375, D6/AC2; issue #376,
+D4/AC1) — фейковые repo: успех продолжает Saga к allocation с одним
+intent'ом `inventory.allocate.v1`, отказ/таймаут переводит Order в
+компенсируемый терминал с одним intent'ом `inventory.release.v1` (без
+allocate); повторный результат — no-op без второго release/allocate."""
 
 import uuid
 
@@ -19,8 +20,8 @@ from domain.entities.order import (
     OrderStatus,
 )
 from tests.unit.fake_order_repository import FakeOrderRepository
-from tests.unit.fake_reservation_outbox_repository import (
-    FakeReservationOutboxRepository,
+from tests.unit.fake_saga_command_outbox_repository import (
+    FakeSagaCommandOutboxRepository,
 )
 
 
@@ -43,7 +44,7 @@ def _command(
 
 async def test_unknown_order_is_a_no_op() -> None:
     order_repo = FakeOrderRepository()
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
 
     await handler.execute(_command(uuid.uuid4(), AuthorizationOutcome.DECLINED))
@@ -52,10 +53,10 @@ async def test_unknown_order_is_a_no_op() -> None:
     assert outbox.release_intents == []
 
 
-async def test_authorized_moves_to_allocation_without_outgoing_commands() -> None:
+async def test_authorized_moves_to_allocation_and_requests_one_allocation() -> None:
     order = _order_awaiting_authorization()
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
     command = _command(order.id, AuthorizationOutcome.AUTHORIZED)
 
@@ -67,8 +68,23 @@ async def test_authorized_moves_to_allocation_without_outgoing_commands() -> Non
     assert saved.saga_step is OrderSagaStep.AWAITING_ALLOCATION
     assert saved.payment_authorization_id == command.authorization_id
     assert len(order_repo.save_calls) == 1
+    assert outbox.allocation_intents == [order.id]
     assert outbox.release_intents == []
     assert outbox.authorization_intents == []
+    assert outbox.capture_intents == []
+
+
+async def test_repeated_authorized_result_requests_no_second_allocation() -> None:
+    order = _order_awaiting_authorization()
+    order_repo = FakeOrderRepository([order])
+    outbox = FakeSagaCommandOutboxRepository()
+    handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
+    await handler.execute(_command(order.id, AuthorizationOutcome.AUTHORIZED))
+
+    await handler.execute(_command(order.id, AuthorizationOutcome.AUTHORIZED))
+
+    assert outbox.allocation_intents == [order.id]
+    assert len(order_repo.save_calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -83,7 +99,7 @@ async def test_decline_or_timeout_fails_order_and_requests_release(
 ) -> None:
     order = _order_awaiting_authorization()
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
 
     await handler.execute(_command(order.id, outcome))
@@ -94,12 +110,13 @@ async def test_decline_or_timeout_fails_order_and_requests_release(
     assert saved.failure_reason == failure_reason
     assert saved.saga_step is OrderSagaStep.COMPENSATING
     assert outbox.release_intents == [order.id]
+    assert outbox.allocation_intents == []
 
 
 async def test_repeated_result_is_a_no_op_without_a_second_release() -> None:
     order = _order_awaiting_authorization()
     order_repo = FakeOrderRepository([order])
-    outbox = FakeReservationOutboxRepository()
+    outbox = FakeSagaCommandOutboxRepository()
     handler = ApplyAuthorizationResultCommandHandler(order_repo, outbox)
     await handler.execute(_command(order.id, AuthorizationOutcome.DECLINED))
 
@@ -108,6 +125,7 @@ async def test_repeated_result_is_a_no_op_without_a_second_release() -> None:
     await handler.execute(_command(order.id, AuthorizationOutcome.AUTHORIZED))
 
     assert outbox.release_intents == [order.id]
+    assert outbox.allocation_intents == []
     assert len(order_repo.save_calls) == 1
     saved = await order_repo.get_by_id(order.id)
     assert saved is not None

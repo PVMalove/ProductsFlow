@@ -8,7 +8,8 @@ import uuid
 
 import pytest
 
-from api.workers.commands.reservation_result_handler import (
+from api.workers.commands.inventory_event_handler import (
+    parse_allocation_result,
     parse_reservation_release,
     parse_reservation_result,
 )
@@ -92,3 +93,37 @@ def test_parse_reservation_release_rejects_missing_order_id() -> None:
 def test_parse_reservation_release_rejects_invalid_json() -> None:
     with pytest.raises(ValueError):
         parse_reservation_release(b"not-json")
+
+
+def test_parse_allocation_result_extracts_order_id() -> None:
+    order_id = uuid.uuid4()
+    body = json.dumps(
+        {
+            "order_id": str(order_id),
+            "allocated_lines": [{"product_id": str(uuid.uuid4()), "quantity": 2}],
+        }
+    ).encode()
+
+    command = parse_allocation_result(body)
+
+    assert command.order_id == order_id
+
+
+def test_parse_allocation_result_rejects_missing_order_id() -> None:
+    with pytest.raises(ValueError):
+        parse_allocation_result(json.dumps({"allocated_lines": []}).encode())
+
+
+def test_parse_allocation_result_rejects_non_uuid_order_id() -> None:
+    with pytest.raises(ValueError):
+        parse_allocation_result(json.dumps({"order_id": "not-a-uuid"}).encode())
+
+
+def test_parse_allocation_result_rejects_invalid_json() -> None:
+    with pytest.raises(ValueError):
+        parse_allocation_result(b"not-json")
+
+
+def test_parse_allocation_result_rejects_non_object_payload() -> None:
+    with pytest.raises(ValueError):
+        parse_allocation_result(json.dumps([1]).encode())

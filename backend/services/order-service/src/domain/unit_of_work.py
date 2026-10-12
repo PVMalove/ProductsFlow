@@ -8,7 +8,7 @@ from domain.repositories import (
     CartRepository,
     IdempotencyKeyRepository,
     OrderRepository,
-    ReservationOutboxRepository,
+    SagaCommandOutboxRepository,
 )
 
 
@@ -25,4 +25,4 @@ class CheckoutUnitOfWork(UnitOfWork, Protocol):
     carts: CartRepository
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
-    reservation_outbox: ReservationOutboxRepository
+    saga_command_outbox: SagaCommandOutboxRepository

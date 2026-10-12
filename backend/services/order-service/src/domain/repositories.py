@@ -69,11 +69,11 @@ class IdempotencyKeyRepository(Protocol):
 
 
 @runtime_checkable
-class ReservationOutboxRepository(Protocol):
+class SagaCommandOutboxRepository(Protocol):
     """Контракт исходящих command-intent'ов Saga (issue #372, D6; issue #375,
-    D3) — НЕ переиспользует `kernel_platform.OutboxMessage` (типовой конфликт
-    BigInt PK vs UUID `command_id`, находка 5). Тип команды и wire-payload —
-    забота инфраструктуры; порт называет только намерение."""
+    D3; issue #376, D3) — НЕ переиспользует `kernel_platform.OutboxMessage`
+    (типовой конфликт BigInt PK vs UUID `command_id`, находка 5). Тип команды
+    и wire-payload — забота инфраструктуры; порт называет только намерение."""
 
     async def enqueue(self, *, order_id: uuid.UUID, lines: list[OrderLine]) -> None:
         """`inventory.reserve.v1` — резерв строк Checkout Selection."""
@@ -87,4 +87,16 @@ class ReservationOutboxRepository(Protocol):
 
     async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
         """`inventory.release.v1` — компенсация резерва заказа."""
+        ...
+
+    async def enqueue_allocation(self, *, order_id: uuid.UUID) -> None:
+        """`inventory.allocate.v1` — обратимая allocation резерва заказа
+        после успешной авторизации (issue #376)."""
+        ...
+
+    async def enqueue_capture(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        """`payment.capture.v1` — capture авторизации после успешной
+        allocation (issue #376)."""
         ...

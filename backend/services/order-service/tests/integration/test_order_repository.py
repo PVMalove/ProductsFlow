@@ -1,5 +1,6 @@
-"""OrderRepository/IdempotencyKeyRepository/ReservationOutboxRepository
-round-trip against real Postgres (issue #372, Seams for TDD #9). The
+"""OrderRepository/IdempotencyKeyRepository/SagaCommandOutboxRepository
+round-trip against real Postgres (issue #372, Seams for TDD #9; issue #376 —
+Saga transition journal and drained `order.completed.v1`). The
 migration/diff coverage itself lives in test_cart_repository.py's full
 history round-trip test."""
 
@@ -7,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from kernel_platform.outbox.models import OutboxMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,11 +20,14 @@ from domain.entities.order import (
     OrderSagaStep,
     OrderStatus,
 )
-from infrastructure.db.entity_configurations.models import ReservationOutboxModel
+from infrastructure.db.entity_configurations.models import (
+    OrderSagaTransitionModel,
+    ReservationOutboxModel,
+)
 from infrastructure.db.idempotency_key_repository import IdempotencyKeyRepository
 from infrastructure.db.order_repository import OrderRepository
-from infrastructure.db.reservation_outbox_repository import (
-    ReservationOutboxRepository,
+from infrastructure.db.saga_command_outbox_repository import (
+    SagaCommandOutboxRepository,
 )
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
@@ -104,6 +109,137 @@ async def test_order_save_persists_payment_authorization_id(
     assert fetched.payment_authorization_id == authorization_id
 
 
+async def _journal(session: AsyncSession, order_id: uuid.UUID) -> list[tuple[str, str]]:
+    rows = (
+        await session.scalars(
+            select(OrderSagaTransitionModel)
+            .where(OrderSagaTransitionModel.order_id == order_id)
+            .order_by(OrderSagaTransitionModel.id)
+        )
+    ).all()
+    return [(row.saga_step, row.status) for row in rows]
+
+
+async def test_order_save_journals_the_initial_step_on_insert(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [("awaiting_reservation", "pending")]
+
+
+async def test_order_save_journals_each_step_or_status_change(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({order.lines[0].product_id})
+    )
+    await repo.save(order)
+    await db_session.flush()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    )
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [
+        ("awaiting_reservation", "pending"),
+        ("awaiting_authorization", "pending"),
+        ("compensating", "failed"),
+    ]
+
+
+async def test_order_save_without_a_step_or_status_change_journals_nothing(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _journal(db_session, order.id) == [("awaiting_reservation", "pending")]
+
+
+async def _outbox_messages(
+    session: AsyncSession, order_id: uuid.UUID
+) -> list[OutboxMessage]:
+    return list(
+        (
+            await session.scalars(
+                select(OutboxMessage).where(OutboxMessage.aggregate_id == order_id)
+            )
+        ).all()
+    )
+
+
+async def test_order_save_drains_order_completed_into_outbox_messages(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset(line.product_id for line in order.lines)
+    )
+    authorization_id = uuid.uuid4()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=authorization_id
+    )
+    order.apply_allocation_result()
+    causation_id = uuid.uuid4()
+    order.apply_capture_result(
+        authorization_id=authorization_id, causation_id=causation_id
+    )
+
+    await repo.save(order)
+    await db_session.flush()
+
+    rows = await _outbox_messages(db_session, order.id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.event_type == "order.completed.v1"
+    assert row.aggregate_type == "Order"
+    assert row.published_at is None
+    assert row.payload == {
+        "order_id": str(order.id),
+        "correlation_id": str(order.id),
+        "causation_id": str(causation_id),
+    }
+    assert await _journal(db_session, order.id) == [
+        ("awaiting_reservation", "pending"),
+        ("captured", "completed"),
+    ]
+    fetched = await repo.get_by_id(order.id)
+    assert fetched is not None
+    assert fetched.status is OrderStatus.COMPLETED
+    assert fetched.saga_step is OrderSagaStep.CAPTURED
+
+
+async def test_order_save_without_domain_events_writes_no_outbox_message(
+    db_session: AsyncSession,
+) -> None:
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+
+    await repo.save(order)
+    await db_session.flush()
+
+    assert await _outbox_messages(db_session, order.id) == []
+
+
 async def test_order_get_by_id_returns_none_for_unknown_order(
     db_session: AsyncSession,
 ) -> None:
@@ -148,7 +284,7 @@ async def test_idempotency_key_get_returns_none_when_absent(
 async def test_reservation_outbox_enqueue_persists_an_unpublished_row(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
     lines = [
         OrderLine(
@@ -176,7 +312,7 @@ async def test_reservation_outbox_enqueue_persists_an_unpublished_row(
 async def test_reservation_outbox_enqueue_authorization_persists_payment_command(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
 
     await repo.enqueue_authorization(
@@ -198,7 +334,7 @@ async def test_reservation_outbox_enqueue_authorization_persists_payment_command
 async def test_reservation_outbox_enqueue_release_persists_inventory_command(
     db_session: AsyncSession,
 ) -> None:
-    repo = ReservationOutboxRepository(db_session)
+    repo = SagaCommandOutboxRepository(db_session)
     order_id = uuid.uuid4()
 
     await repo.enqueue_release(order_id=order_id)

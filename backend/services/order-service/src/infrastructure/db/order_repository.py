@@ -1,17 +1,24 @@
 import uuid
 
+from kernel_platform.outbox.drain import drain_events_to_outbox
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
 from domain.repositories import OrderRepository as OrderRepositoryPort
-from infrastructure.db.entity_configurations.models import OrderLineModel, OrderModel
+from infrastructure.db.entity_configurations.models import (
+    OrderLineModel,
+    OrderModel,
+    OrderSagaTransitionModel,
+)
 
 
 class OrderRepository:
     """CRUD для `Order`/`OrderLine` (issue #372). `save` — diff-based, тот же
     приём, что `CartRepository.save` (issue #369): набор строк только
-    сокращается после создания (D7), никогда не растёт."""
+    сокращается после создания (D7), никогда не растёт. issue #376, D5:
+    `save` дописывает строку `order_saga_transitions` на создание Order и на
+    каждое изменение `(saga_step, status)` — в той же транзакции."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -40,7 +47,14 @@ class OrderRepository:
                     payment_authorization_id=order.payment_authorization_id,
                 )
             )
+            self._journal_transition(order)
         else:
+            # issue #376, D5: сравнение — ДО присваивания новых значений.
+            if (existing_row.saga_step, existing_row.status) != (
+                order.saga_step.value,
+                order.status.value,
+            ):
+                self._journal_transition(order)
             existing_row.status = order.status.value
             existing_row.saga_step = order.saga_step.value
             existing_row.failure_reason = order.failure_reason
@@ -70,6 +84,19 @@ class OrderRepository:
                         unit_price_kopecks=line.unit_price_kopecks,
                     )
                 )
+
+        # issue #376, D6: доменные события (`order.completed.v1`) попадают в
+        # `outbox_messages` той же транзакцией, что и переход Order.
+        await drain_events_to_outbox(self.session, order)
+
+    def _journal_transition(self, order: Order) -> None:
+        self.session.add(
+            OrderSagaTransitionModel(
+                order_id=order.id,
+                saga_step=order.saga_step.value,
+                status=order.status.value,
+            )
+        )
 
     async def _to_domain(self, row: OrderModel) -> Order:
         line_rows = list(

@@ -34,6 +34,12 @@ _CHECKOUT_REVISION = run_path(
 _AUTHORIZATION_REVISION = run_path(
     str(_VERSIONS_DIR / "3230339cab9b_order_authorization_and_compensation.py")
 )
+_SAGA_TRANSITIONS_REVISION = run_path(
+    str(_VERSIONS_DIR / "b1c564e8cc23_order_saga_transitions.py")
+)
+_DOMAIN_OUTBOX_REVISION = run_path(
+    str(_VERSIONS_DIR / "225840d6a75f_order_domain_outbox.py")
+)
 _TABLES = ("cart_lines", "carts")
 _CHECKOUT_TABLES = (
     "orders",
@@ -41,6 +47,14 @@ _CHECKOUT_TABLES = (
     "idempotency_keys",
     "reservation_outbox",
     "processed_messages",
+)
+_SAGA_TRANSITIONS_TABLES = ("order_saga_transitions",)
+_DOMAIN_OUTBOX_TABLES = ("outbox_messages", "inbox_messages")
+_ALL_TABLES = (
+    *_DOMAIN_OUTBOX_TABLES,
+    *_SAGA_TRANSITIONS_TABLES,
+    *_CHECKOUT_TABLES,
+    *_TABLES,
 )
 
 
@@ -69,6 +83,10 @@ def _order_lines_foreign_keys(connection: Connection) -> list[Any]:
     return inspect(connection).get_foreign_keys("order_lines")
 
 
+def _saga_transitions_foreign_keys(connection: Connection) -> list[Any]:
+    return inspect(connection).get_foreign_keys("order_saga_transitions")
+
+
 def _processed_messages_pk_columns(connection: Connection) -> list[str]:
     return inspect(connection).get_pk_constraint("processed_messages")[
         "constrained_columns"
@@ -84,7 +102,7 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
     async with db_engine.connect() as connection:
         await connection.begin()
         try:
-            for table in (*_CHECKOUT_TABLES, *_TABLES):
+            for table in _ALL_TABLES:
                 await connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
 
             await connection.run_sync(
@@ -95,6 +113,12 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
             )
             await connection.run_sync(
                 lambda conn: _run(_AUTHORIZATION_REVISION, conn, "upgrade")
+            )
+            await connection.run_sync(
+                lambda conn: _run(_SAGA_TRANSITIONS_REVISION, conn, "upgrade")
+            )
+            await connection.run_sync(
+                lambda conn: _run(_DOMAIN_OUTBOX_REVISION, conn, "upgrade")
             )
 
             pk_columns = await connection.run_sync(_carts_pk_columns)
@@ -114,10 +138,26 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
                 _processed_messages_pk_columns
             )
             assert set(processed_messages_pk) == {"source", "message_id"}
+            # issue #376, D5: журнал Saga удаляется вместе с Order.
+            saga_transitions_fks = await connection.run_sync(
+                _saga_transitions_foreign_keys
+            )
+            assert any(
+                fk["referred_table"] == "orders"
+                and fk["constrained_columns"] == ["order_id"]
+                and fk["options"].get("ondelete") == "CASCADE"
+                for fk in saga_transitions_fks
+            )
 
             diffs = await connection.run_sync(_diff_against_orm_metadata)
             assert diffs == []
 
+            await connection.run_sync(
+                lambda conn: _run(_DOMAIN_OUTBOX_REVISION, conn, "downgrade")
+            )
+            await connection.run_sync(
+                lambda conn: _run(_SAGA_TRANSITIONS_REVISION, conn, "downgrade")
+            )
             await connection.run_sync(
                 lambda conn: _run(_AUTHORIZATION_REVISION, conn, "downgrade")
             )
@@ -136,7 +176,7 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
                     "SELECT count(*) FROM information_schema.tables "
                     "WHERE table_schema = 'public' AND table_name = ANY(:tables)"
                 ),
-                {"tables": [*_TABLES, *_CHECKOUT_TABLES]},
+                {"tables": list(_ALL_TABLES)},
             )
             assert remaining_tables == 0
         finally:

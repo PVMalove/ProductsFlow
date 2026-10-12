@@ -21,8 +21,8 @@ from tests.unit.fake_catalog_client import FakeCatalogClient
 from tests.unit.fake_checkout_unit_of_work import FakeCheckoutUnitOfWork
 from tests.unit.fake_idempotency_key_repository import FakeIdempotencyKeyRepository
 from tests.unit.fake_order_repository import FakeOrderRepository
-from tests.unit.fake_reservation_outbox_repository import (
-    FakeReservationOutboxRepository,
+from tests.unit.fake_saga_command_outbox_repository import (
+    FakeSagaCommandOutboxRepository,
 )
 
 ACTOR = Actor(id=uuid.uuid4(), role=ActorRole.USER)
@@ -47,12 +47,12 @@ def _handler(
     cart_repo = FakeCartRepository([cart] if cart is not None else [])
     order_repo = FakeOrderRepository()
     idempotency_repo = FakeIdempotencyKeyRepository()
-    outbox_repo = FakeReservationOutboxRepository()
+    outbox_repo = FakeSagaCommandOutboxRepository()
     uow = FakeCheckoutUnitOfWork(
         carts=cart_repo,
         orders=order_repo,
         idempotency_keys=idempotency_repo,
-        reservation_outbox=outbox_repo,
+        saga_command_outbox=outbox_repo,
     )
     handler = CheckoutCommandHandler(uow, catalog or FakeCatalogClient())
     return handler, uow
@@ -85,7 +85,7 @@ async def test_catalog_unavailable_raises_without_persisting_anything() -> None:
     assert uow.committed is False
     assert uow.orders.save_calls == []
     assert uow.idempotency_keys.save_calls == []
-    assert uow.reservation_outbox.enqueue_calls == []
+    assert uow.saga_command_outbox.enqueue_calls == []
     # Cart не заблокирована — checkout не дошёл до selection freeze.
     assert cart.lines[0].locked_by_order_id is None
 
@@ -108,7 +108,7 @@ async def test_happy_path_creates_order_locks_cart_and_enqueues_reservation() ->
     assert uow.committed is True
     assert len(uow.orders.save_calls) == 1
     assert len(uow.idempotency_keys.save_calls) == 1
-    assert len(uow.reservation_outbox.enqueue_calls) == 1
+    assert len(uow.saga_command_outbox.enqueue_calls) == 1
     assert cart.lines[0].locked_by_order_id == order_view.id
     assert len(catalog.calls) == 1
 
@@ -128,7 +128,7 @@ async def test_identical_replay_returns_the_same_order_without_requoting() -> No
     assert second.value.id == first.value.id
     assert len(catalog.calls) == 1
     assert len(uow.orders.save_calls) == 1
-    assert len(uow.reservation_outbox.enqueue_calls) == 1
+    assert len(uow.saga_command_outbox.enqueue_calls) == 1
 
 
 async def test_same_key_different_cart_conflicts() -> None:
@@ -177,7 +177,7 @@ async def test_second_checkout_of_a_still_locked_cart_is_rejected() -> None:
     assert result.error.code == "line_locked"
     assert cart.lines[0].locked_by_order_id == locked_order_id
     assert len(uow.orders.save_calls) == 1
-    assert len(uow.reservation_outbox.enqueue_calls) == 1
+    assert len(uow.saga_command_outbox.enqueue_calls) == 1
 
 
 async def test_different_key_is_independent_even_with_identical_cart() -> None:
@@ -208,12 +208,12 @@ async def test_different_key_is_independent_even_with_identical_cart() -> None:
             created_at=datetime.now(UTC),
         )
     )
-    outbox_repo = FakeReservationOutboxRepository()
+    outbox_repo = FakeSagaCommandOutboxRepository()
     uow = FakeCheckoutUnitOfWork(
         carts=cart_repo,
         orders=order_repo,
         idempotency_keys=idempotency_repo,
-        reservation_outbox=outbox_repo,
+        saga_command_outbox=outbox_repo,
     )
     handler = CheckoutCommandHandler(uow, FakeCatalogClient())
 

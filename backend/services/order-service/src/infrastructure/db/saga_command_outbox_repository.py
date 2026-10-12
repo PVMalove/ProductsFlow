@@ -1,9 +1,12 @@
-"""Пишущая сторона `reservation_outbox` (issue #372, D6; issue #375, D3).
+"""Пишущая сторона outbox исходящих команд Saga (issue #372, D6; issue #375,
+D3; issue #376, D3).
 
-Таблица несёт все исходящие команды Saga, не только `inventory.reserve.v1`
-— имя таблицы/класса осталось от #372 (naming debt R5 брифа #375,
-переименование — отдельный рефакторинг). Тип команды и wire-payload — забота
-этого модуля: доменный порт называет только намерение."""
+Порт и репозиторий названы по содержимому — все исходящие команды Saga, не
+только `inventory.reserve.v1` (issue #376, R6). Физическая таблица сохраняет
+имя `reservation_outbox` от #372: её переименование — миграция схемы (naming
+debt R5 брифа #375); `ReservationOutboxModel`/`ReservationOutboxPublisher`
+названы по таблице. Тип команды и wire-payload — забота этого модуля:
+доменный порт называет только намерение."""
 
 import uuid
 from typing import Any
@@ -12,18 +15,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.entities.order import OrderLine
 from domain.repositories import (
-    ReservationOutboxRepository as ReservationOutboxRepositoryPort,
+    SagaCommandOutboxRepository as SagaCommandOutboxRepositoryPort,
 )
 from infrastructure.db.entity_configurations.models import ReservationOutboxModel
 
 RESERVE_COMMAND_TYPE = "inventory.reserve.v1"
 AUTHORIZE_COMMAND_TYPE = "payment.authorize.v1"
 RELEASE_COMMAND_TYPE = "inventory.release.v1"
+ALLOCATE_COMMAND_TYPE = "inventory.allocate.v1"
+CAPTURE_COMMAND_TYPE = "payment.capture.v1"
 # Все типы, которые order-worker публикует — для объявления command-топологии.
-COMMAND_TYPES = (RESERVE_COMMAND_TYPE, AUTHORIZE_COMMAND_TYPE, RELEASE_COMMAND_TYPE)
+COMMAND_TYPES = (
+    RESERVE_COMMAND_TYPE,
+    AUTHORIZE_COMMAND_TYPE,
+    RELEASE_COMMAND_TYPE,
+    ALLOCATE_COMMAND_TYPE,
+    CAPTURE_COMMAND_TYPE,
+)
 
 
-class ReservationOutboxRepository:
+class SagaCommandOutboxRepository:
     """Используется application-handler'ами внутри их транзакции.
     Дренаж/публикация — забота отдельного `ReservationOutboxPublisher` (не
     этого класса), тот же разрыв, что generic `OutboxPublisher` vs доменные
@@ -67,6 +78,25 @@ class ReservationOutboxRepository:
             payload={"order_id": str(order_id)},
         )
 
+    async def enqueue_allocation(self, *, order_id: uuid.UUID) -> None:
+        # inventory-service's `inventory.allocate.v1` читает только `order_id`.
+        self._add(
+            order_id=order_id,
+            command_type=ALLOCATE_COMMAND_TYPE,
+            payload={"order_id": str(order_id)},
+        )
+
+    async def enqueue_capture(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        # payment-service's `payment.capture.v1` читает только
+        # `authorization_id`; idempotency key capture — `command_id` строки.
+        self._add(
+            order_id=order_id,
+            command_type=CAPTURE_COMMAND_TYPE,
+            payload={"authorization_id": str(authorization_id)},
+        )
+
     def _add(
         self, *, order_id: uuid.UUID, command_type: str, payload: dict[str, Any]
     ) -> None:
@@ -80,6 +110,6 @@ class ReservationOutboxRepository:
         )
 
 
-_reservation_outbox_repository_implementation: type[ReservationOutboxRepositoryPort] = (
-    ReservationOutboxRepository
-)
+_saga_command_outbox_repository_implementation: type[
+    SagaCommandOutboxRepositoryPort
+] = SagaCommandOutboxRepository

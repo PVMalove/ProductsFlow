@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from kernel_platform.outbox.models import Base
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -15,19 +16,17 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-# Собственный `Base`, НЕ общий `kernel_platform.outbox.models.Base` (issue #369,
-# архитектурный бриф D1). issue #372 добавляет order-service собственные
-# `reservation_outbox`/`processed_messages` (D6/D7/D8) — но НЕ переиспользует
-# generic `kernel_platform.outbox.models.Base` (`OutboxMessage`/`InboxMessage`,
-# BigInt PK): типовой конфликт с UUID `command_id` (находка 5), и order не
-# эмитит доменные события через `drain_events_to_outbox` — только исходящие
-# Saga-команды через свою собственную таблицу.
-
-
-class Base(DeclarativeBase):
-    pass
+# Общий `kernel_platform.outbox.models.Base` (issue #376, архитектурный бриф
+# D6) — разворот решения #369/#372 (собственный `Base`), по прецеденту
+# payment-service #371: order-service теперь эмитит доменное событие
+# `order.completed.v1` через `drain_events_to_outbox` в общий
+# `outbox_messages`. Импорт этого `Base` регистрирует `OutboxMessage` и
+# `InboxMessage` на одном `Base.metadata` (`inbox_messages` не используется,
+# R5). Исходящие Saga-команды остаются в собственной `reservation_outbox`:
+# её UUID `id` напрямую годится как `Command.command_id` (находка 5,
+# `OutboxMessage`'s BigInt PK несовместим).
 
 
 class CartModel(Base):
@@ -119,6 +118,30 @@ class OrderLineModel(Base):
     unit_price_kopecks: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class OrderSagaTransitionModel(Base):
+    """Неизменяемая техническая история Saga (issue #376, D5; ADR 0016:15):
+    одна строка на каждое изменение `(saga_step, status)` Order, пишется
+    централизованно в `OrderRepository.save`. Append-only — код не обновляет
+    и не удаляет строки; порядок задаёт BigInt sequence `id`. Корреляция —
+    `order_id` (каждое сообщение Saga несёт `correlation_id = str(order_id)`);
+    causation/trace-колонки — забота #378."""
+
+    __tablename__ = "order_saga_transitions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    saga_step: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class IdempotencyKeyModel(Base):
     """Idempotency-Key запись (issue #372, D2) — составной PK
     `(user_id, key)`, буквальная HTTP Idempotency-Key семантика."""
@@ -175,9 +198,9 @@ class ReservationOutboxModel(Base):
 
 class ProcessedMessageModel(Base):
     """Inbox-гейт order-worker'а (issue #372, D7 — зеркалит inventory-worker's
-    `ProcessedMessage`, issue #367). Свой `Base`, не
-    `kernel_platform.outbox.models.Base`: order-service не заводит generic
-    `outbox_messages`/`inbox_messages` таблицы (см. модульный докстринг).
+    `ProcessedMessage`, issue #367) для входящих событий: generic
+    `inbox_messages` ключуется UUID `command_id` команд и сюда не подходит
+    (см. модульный комментарий).
 
     issue #375, D4: PK `(source, message_id)` — `message_id` это BigInt
     sequence outbox'а КАЖДОГО producer'а (inventory, payment), обе стартуют с

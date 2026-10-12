@@ -5,6 +5,10 @@ producer'а (inventory-service, payment-service); обе sequence стартую
 поэтому ключ дедупликации — пара `(source, message_id)`, не один
 `message_id`."""
 
+import uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+
 from aio_pika.abc import AbstractIncomingMessage
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +17,16 @@ from infrastructure.db.entity_configurations.models import ProcessedMessageModel
 
 INVENTORY_SOURCE = "inventory"
 PAYMENT_SOURCE = "payment"
+
+
+@dataclass(frozen=True)
+class ParsedEvent:
+    """Факт producer'а, распарсенный до транзакции inbox-гейта (невалидный
+    payload падает до `claim_message`): `order_id` — для лога, `apply` —
+    бизнес-применение внутри транзакции гейта (issue #376, R6)."""
+
+    order_id: uuid.UUID
+    apply: Callable[[AsyncSession], Awaitable[None]]
 
 
 def parse_outbox_message_id(message: AbstractIncomingMessage) -> int:

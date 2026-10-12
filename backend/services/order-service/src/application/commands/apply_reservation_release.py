@@ -2,7 +2,7 @@
 """Команда и handler применения факта `inventory.released.v1` (issue #375,
 D6) — завершение компенсации Saga по прецеденту `apply_reservation_result.py`:
 без UoW/`.commit()`, транзакцией управляет вызывающий адаптер
-(`api/workers/commands/reservation_result_handler.py`)."""
+(`api/workers/commands/inventory_event_handler.py`)."""
 
 import logging
 import uuid

@@ -135,7 +135,7 @@ class CheckoutCommandHandler:
                 )
             )
             await self._uow.carts.save(cart)
-            await self._uow.reservation_outbox.enqueue(
+            await self._uow.saga_command_outbox.enqueue(
                 order_id=order.id, lines=quoted_lines
             )
             await self._uow.commit()
