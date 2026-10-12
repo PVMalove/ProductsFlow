@@ -1,9 +1,10 @@
 """Postgres-интеграция пути сообщений Saga (issue #375, AC1-AC4; issue #376,
-AC1-AC4): `handle_inventory_event`/`handle_payment_event`
+AC1-AC4; issue #377, AC1-AC4): `handle_inventory_event`/`handle_payment_event`
 прогоняются с заглушкой `AbstractIncomingMessage` поверх настоящей БД —
-резерв -> авторизация -> allocation -> capture либо компенсация, повторная
-доставка, результаты не в своём шаге и inbox-ключ по producer'у. RabbitMQ не
-участвует: адаптеры получают сообщение напрямую."""
+резерв -> авторизация -> allocation -> capture либо компенсация, отмена
+владельцем и истечение резерва, повторная доставка, результаты не в своём
+шаге и inbox-ключ по producer'у. RabbitMQ не участвует: адаптеры получают
+сообщение напрямую."""
 
 import json
 import uuid
@@ -13,7 +14,9 @@ from typing import cast
 
 import pytest
 from aio_pika.abc import AbstractIncomingMessage
+from kernel_domain.result import Result
 from kernel_platform.outbox.models import OutboxMessage
+from kernel_platform.security import Actor, ActorRole
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -23,15 +26,22 @@ from api.workers.commands.inventory_event_handler import (
 from api.workers.commands.payment_event_handler import (
     handle_payment_event,
 )
+from application.commands.cancel_order import (
+    CancelOrderCommand,
+    CancelOrderCommandHandler,
+)
 from contracts.order import OrderView
+from domain.entities.cart_line import CartLine
 from domain.entities.order import Order, OrderLine, OrderSagaStep, OrderStatus
 from infrastructure.db.cart_repository import CartRepository
 from infrastructure.db.entity_configurations.models import (
     OrderLineModel,
     OrderSagaTransitionModel,
+    ProcessedMessageModel,
     ReservationOutboxModel,
 )
 from infrastructure.db.order_repository import OrderRepository
+from infrastructure.db.unit_of_work import SqlCartUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -160,12 +170,13 @@ async def _deliver_released(
     order_id: uuid.UUID,
     *,
     message_id: int,
+    reason: str = "manual",
 ) -> None:
     await handle_inventory_event(
         _message(
             "inventory.released.v1",
             message_id,
-            {"order_id": str(order_id), "reason": "manual", "released_lines": []},
+            {"order_id": str(order_id), "reason": reason, "released_lines": []},
         ),
         session_factory,
         payment_method_token=PAYMENT_METHOD_TOKEN,
@@ -708,3 +719,432 @@ async def test_allocated_result_after_capture_is_a_no_op(
     assert len(_rows_of_type(rows, "payment.capture.v1")) == 1
     assert await _journal(saga_session_factory, checkout.order_id) == journal_before
     assert len(await _event_outbox_rows(saga_session_factory, checkout.order_id)) == 1
+
+
+# --- issue #377: отмена владельцем и истечение резерва ----------------------
+
+
+async def _cancel(
+    session_factory: async_sessionmaker[AsyncSession], checkout: _Checkout
+) -> Result[OrderView]:
+    async with session_factory() as session:
+        return await CancelOrderCommandHandler(SqlCartUnitOfWork(session)).execute(
+            CancelOrderCommand(
+                actor=Actor(id=checkout.user_id, role=ActorRole.USER),
+                order_id=checkout.order_id,
+            )
+        )
+
+
+async def _deliver_voided(
+    session_factory: async_sessionmaker[AsyncSession],
+    order_id: uuid.UUID,
+    *,
+    authorization_id: uuid.UUID,
+    message_id: int,
+) -> None:
+    await handle_payment_event(
+        _message(
+            "payment.voided.v1",
+            message_id,
+            {
+                "authorization_id": str(authorization_id),
+                "correlation_id": str(order_id),
+                "causation_id": str(uuid.uuid4()),
+            },
+        ),
+        session_factory,
+    )
+
+
+async def _cart_lines(
+    session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> dict[uuid.UUID, CartLine]:
+    async with session_factory() as session:
+        cart = await CartRepository(session).get_for_user(user_id)
+    assert cart is not None
+    return {line.product_id: line for line in cart.lines}
+
+
+def _payloads(
+    rows: list[ReservationOutboxModel], command_type: str
+) -> list[dict[str, object]]:
+    return [row.payload for row in _rows_of_type(rows, command_type)]
+
+
+async def test_cancel_awaiting_authorization_releases_then_returns_lines(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    # Результат резерва ДО отмены: строка уже ушла из Cart в Order.
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+
+    result = await _cancel(saga_session_factory, checkout)
+
+    assert result.is_ok
+    assert result.value.status == "cancelled"
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _payloads(rows, "inventory.release.v1") == [
+        {"order_id": str(checkout.order_id)}
+    ]
+    assert _rows_of_type(rows, "payment.void.v1") == []
+    # Строки возвращаются только по факту release.
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert checkout.confirmed.product_id not in lines
+
+    await _deliver_released(saga_session_factory, checkout.order_id, message_id=2)
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    returned = lines[checkout.confirmed.product_id]
+    assert returned.quantity == checkout.confirmed.quantity
+    assert returned.unavailable_reason == "CANCELLED_BY_CUSTOMER"
+    assert returned.locked_by_order_id is None
+    assert lines[checkout.unavailable.product_id].unavailable_reason == (
+        "insufficient_stock"
+    )
+    assert await _journal(saga_session_factory, checkout.order_id) == [
+        ("awaiting_reservation", "pending"),
+        ("awaiting_authorization", "pending"),
+        ("compensating", "cancelled"),
+        ("compensated", "cancelled"),
+    ]
+
+
+async def test_cancel_awaiting_allocation_voids_and_releases_then_returns_lines(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    authorization_id = uuid.uuid4()
+    # Авторизация ДО отмены: Order хранит authorization_id.
+    checkout = await _authorized_order(saga_session_factory, authorization_id)
+
+    result = await _cancel(saga_session_factory, checkout)
+
+    assert result.is_ok
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _payloads(rows, "payment.void.v1") == [
+        {"authorization_id": str(authorization_id)}
+    ]
+    assert _payloads(rows, "inventory.release.v1") == [
+        {"order_id": str(checkout.order_id)}
+    ]
+
+    # Позднее allocation не запрашивает capture.
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+    await _deliver_released(saga_session_factory, checkout.order_id, message_id=3)
+    await _deliver_voided(
+        saga_session_factory,
+        checkout.order_id,
+        authorization_id=authorization_id,
+        message_id=2,
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _rows_of_type(rows, "payment.capture.v1") == []
+    assert len(_rows_of_type(rows, "payment.void.v1")) == 1
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert lines[checkout.confirmed.product_id].unavailable_reason == (
+        "CANCELLED_BY_CUSTOMER"
+    )
+
+
+async def test_reservation_result_after_cancel_releases_without_authorization(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    result = await _cancel(saga_session_factory, checkout)
+    assert result.is_ok
+    assert await _outbox_rows(saga_session_factory, checkout.order_id) == []
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.saga_step is OrderSagaStep.AWAITING_RESERVATION
+
+    # Результат резерва ПОСЛЕ отмены.
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert [line.product_id for line in order.lines] == [checkout.confirmed.product_id]
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert [row.command_type for row in rows] == ["inventory.release.v1"]
+
+    await _deliver_released(saga_session_factory, checkout.order_id, message_id=2)
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert lines[checkout.confirmed.product_id].unavailable_reason == (
+        "CANCELLED_BY_CUSTOMER"
+    )
+    assert lines[checkout.confirmed.product_id].quantity == checkout.confirmed.quantity
+    assert all(line.locked_by_order_id is None for line in lines.values())
+
+
+async def test_empty_reservation_result_after_cancel_unlocks_the_cart(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _cancel(saga_session_factory, checkout)
+
+    await handle_inventory_event(
+        _message(
+            "inventory.reserved.v1",
+            1,
+            {
+                "order_id": str(checkout.order_id),
+                "confirmed_lines": [],
+                "unavailable_lines": [],
+            },
+        ),
+        saga_session_factory,
+        payment_method_token=PAYMENT_METHOD_TOKEN,
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert await _outbox_rows(saga_session_factory, checkout.order_id) == []
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert set(lines) == {
+        checkout.confirmed.product_id,
+        checkout.unavailable.product_id,
+    }
+    assert all(line.locked_by_order_id is None for line in lines.values())
+    assert all(line.unavailable_reason is None for line in lines.values())
+
+
+async def test_late_authorization_after_cancel_is_voided_once(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+    await _cancel(saga_session_factory, checkout)
+    late_authorization_id = uuid.uuid4()
+
+    # Авторизация ПОСЛЕ отмены; повтор того же факта с другим message_id.
+    for message_id in (1, 2):
+        await _deliver_authorization(
+            saga_session_factory,
+            checkout.order_id,
+            "payment.authorized.v1",
+            message_id=message_id,
+            authorization_id=late_authorization_id,
+        )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert order.payment_authorization_id == late_authorization_id
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _payloads(rows, "payment.void.v1") == [
+        {"authorization_id": str(late_authorization_id)}
+    ]
+    assert _rows_of_type(rows, "inventory.allocate.v1") == []
+    assert len(_rows_of_type(rows, "inventory.release.v1")) == 1
+
+
+async def test_cancel_after_allocation_conflicts_and_changes_nothing(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    # Allocation ДО отмены: Saga уже запросила capture.
+    checkout = await _allocated_order(saga_session_factory, uuid.uuid4())
+    rows_before = await _outbox_rows(saga_session_factory, checkout.order_id)
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    result = await _cancel(saga_session_factory, checkout)
+
+    assert result.is_err
+    assert result.error.code == "order_not_cancellable"
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+    rows_after = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert len(rows_after) == len(rows_before)
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+
+
+async def test_repeated_cancel_adds_no_command_or_history(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _authorized_order(saga_session_factory, uuid.uuid4())
+    await _cancel(saga_session_factory, checkout)
+    rows_before = await _outbox_rows(saga_session_factory, checkout.order_id)
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    result = await _cancel(saga_session_factory, checkout)
+
+    assert result.is_ok
+    assert result.value.status == "cancelled"
+    rows_after = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert len(rows_after) == len(rows_before)
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+
+
+async def test_voided_fact_is_acknowledged_without_changes(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    authorization_id = uuid.uuid4()
+    checkout = await _authorized_order(saga_session_factory, authorization_id)
+    await _cancel(saga_session_factory, checkout)
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    # Первая доставка захватывает inbox-ключ, повторная — пропускается.
+    for message_id in (5, 5):
+        await _deliver_voided(
+            saga_session_factory,
+            checkout.order_id,
+            authorization_id=authorization_id,
+            message_id=message_id,
+        )
+
+    async with saga_session_factory() as session:
+        claimed = (
+            await session.scalars(
+                select(ProcessedMessageModel.message_id).where(
+                    ProcessedMessageModel.source == "payment",
+                    ProcessedMessageModel.message_id == 5,
+                )
+            )
+        ).all()
+    assert claimed == [5]
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+
+
+async def test_expiry_awaiting_authorization_expires_and_returns_lines(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.EXPIRED
+    assert order.failure_reason == "RESERVATION_EXPIRED"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert OrderView.from_domain(order).status == "expired"
+    assert (await _journal(saga_session_factory, checkout.order_id))[-1] == (
+        "compensated",
+        "expired",
+    )
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert [row.command_type for row in rows] == ["payment.authorize.v1"]
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    returned = lines[checkout.confirmed.product_id]
+    assert returned.quantity == checkout.confirmed.quantity
+    assert returned.unavailable_reason == "RESERVATION_EXPIRED"
+    assert returned.locked_by_order_id is None
+
+    # Поздняя авторизация истёкшего Order аннулируется.
+    late_authorization_id = uuid.uuid4()
+    await _deliver_authorization(
+        saga_session_factory,
+        checkout.order_id,
+        "payment.authorized.v1",
+        message_id=1,
+        authorization_id=late_authorization_id,
+    )
+
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _payloads(rows, "payment.void.v1") == [
+        {"authorization_id": str(late_authorization_id)}
+    ]
+    assert _rows_of_type(rows, "inventory.allocate.v1") == []
+
+
+async def test_expiry_awaiting_allocation_voids_the_stored_authorization(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    authorization_id = uuid.uuid4()
+    checkout = await _authorized_order(saga_session_factory, authorization_id)
+
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.EXPIRED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _payloads(rows, "payment.void.v1") == [
+        {"authorization_id": str(authorization_id)}
+    ]
+    assert _rows_of_type(rows, "inventory.release.v1") == []
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert lines[checkout.confirmed.product_id].unavailable_reason == (
+        "RESERVATION_EXPIRED"
+    )
+
+
+async def test_repeated_expiry_neither_doubles_lines_nor_voids_twice(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _authorized_order(saga_session_factory, uuid.uuid4())
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    # Та же доставка (тот же message_id) и тот же факт с другим message_id.
+    for message_id in (2, 3):
+        await _deliver_released(
+            saga_session_factory,
+            checkout.order_id,
+            message_id=message_id,
+            reason="expired",
+        )
+
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert len(_rows_of_type(rows, "payment.void.v1")) == 1
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert lines[checkout.confirmed.product_id].quantity == checkout.confirmed.quantity
+
+
+async def test_expiry_after_capture_was_requested_changes_nothing(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _allocated_order(saga_session_factory, uuid.uuid4())
+    rows_before = await _outbox_rows(saga_session_factory, checkout.order_id)
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
+
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=3, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+    rows_after = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert len(rows_after) == len(rows_before)
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+
+
+async def test_cancel_after_expiry_conflicts(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+
+    result = await _cancel(saga_session_factory, checkout)
+
+    assert result.is_err
+    assert result.error.code == "order_not_cancellable"
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.EXPIRED
