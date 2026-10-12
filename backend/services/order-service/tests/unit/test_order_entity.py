@@ -675,3 +675,78 @@ def test_late_authorization_outside_cancelled_or_expired_is_a_no_op(
 
     assert order.record_late_authorization(authorization_id=uuid.uuid4()) is False
     assert order.payment_authorization_id is None
+
+
+# --- issue #377: истечение резерва -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("order_factory", "saga_step_after"),
+    [
+        (lambda: _order_with_lines()[0], OrderSagaStep.AWAITING_RESERVATION),
+        (_order_awaiting_authorization, OrderSagaStep.COMPENSATED),
+        (_order_awaiting_allocation, OrderSagaStep.COMPENSATED),
+    ],
+    ids=["awaiting_reservation", "awaiting_authorization", "awaiting_allocation"],
+)
+def test_expire_before_capture_expires_the_order(
+    order_factory: Callable[[], Order], saga_step_after: OrderSagaStep
+) -> None:
+    order = order_factory()
+    lines_before = list(order.lines)
+    authorization_before = order.payment_authorization_id
+
+    expired = order.expire()
+
+    assert expired is True
+    assert order.status is OrderStatus.EXPIRED
+    assert order.failure_reason == "RESERVATION_EXPIRED"
+    assert order.saga_step is saga_step_after
+    assert order.lines == lines_before
+    assert order.payment_authorization_id == authorization_before
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_awaiting_capture,
+        _order_captured,
+        _order_compensating,
+        _order_compensated,
+        _order_reservation_failed,
+        _order_cancelled_awaiting_reservation,
+        _order_expired_awaiting_reservation,
+    ],
+    ids=[
+        "awaiting_capture",
+        "captured",
+        "compensating",
+        "compensated",
+        "reservation_failed",
+        "cancelled",
+        "already_expired",
+    ],
+)
+def test_expire_outside_pending_before_capture_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+    reason_before = order.failure_reason
+
+    expired = order.expire()
+
+    assert expired is False
+    assert order.status is status_before
+    assert order.saga_step is step_before
+    assert order.failure_reason == reason_before
+
+
+def test_cancel_after_expiry_is_a_no_op() -> None:
+    order = _order_awaiting_authorization()
+    order.expire()
+
+    assert order.cancel() is False
+    assert order.status is OrderStatus.EXPIRED
+    assert order.saga_step is OrderSagaStep.COMPENSATED

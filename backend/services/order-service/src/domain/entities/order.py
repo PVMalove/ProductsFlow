@@ -72,6 +72,7 @@ FAILURE_REASON_PAYMENT_TIMED_OUT = "PAYMENT_TIMED_OUT"
 # issue #377, D1: `failure_reason` несёт и причину отмены/истечения — она же
 # попадает в `unavailable_reason` возвращённых строк Cart.
 FAILURE_REASON_CANCELLED_BY_CUSTOMER = "CANCELLED_BY_CUSTOMER"
+FAILURE_REASON_RESERVATION_EXPIRED = "RESERVATION_EXPIRED"
 
 # issue #377, D1/R1: «до capture» — до запроса `payment.capture.v1`. В
 # `AWAITING_CAPTURE` capture уже отправлен: void после него — тихий no-op
@@ -295,6 +296,23 @@ class Order(Entity[uuid.UUID]):
         self.failure_reason = FAILURE_REASON_CANCELLED_BY_CUSTOMER
         if self.saga_step is not OrderSagaStep.AWAITING_RESERVATION:
             self.saga_step = OrderSagaStep.COMPENSATING
+        return True
+
+    def expire(self) -> bool:
+        """Истечение резерва (`inventory.released.v1` с `reason=expired`,
+        issue #377, D1). Тот же guard, что `cancel`: `False` без мутации, если
+        Order не `PENDING` или Saga уже запросила capture (allocated резерв
+        не истекает). Иначе Order `EXPIRED` с причиной `RESERVATION_EXPIRED`
+        и Saga сразу `COMPENSATED` — inventory уже освободил резерв;
+        вызывающий аннулирует сохранённую авторизацию и возвращает строки в
+        Cart. В `AWAITING_RESERVATION` (только после потерянного
+        `inventory.reserved.v1`) шаг сохраняется до результата резерва."""
+        if not self._is_pending_before_capture():
+            return False
+        self.status = OrderStatus.EXPIRED
+        self.failure_reason = FAILURE_REASON_RESERVATION_EXPIRED
+        if self.saga_step is not OrderSagaStep.AWAITING_RESERVATION:
+            self.saga_step = OrderSagaStep.COMPENSATED
         return True
 
     def record_late_authorization(self, *, authorization_id: uuid.UUID) -> bool:

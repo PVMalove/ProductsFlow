@@ -49,6 +49,10 @@ RESERVED_EVENT_TYPE = "inventory.reserved.v1"
 RELEASED_EVENT_TYPE = "inventory.released.v1"
 ALLOCATED_EVENT_TYPE = "inventory.allocated.v1"
 QUEUE_NAME = "order.inventory-events"
+# `inventory.released.v1.reason` (inventory-service): освобождение по команде
+# Saga (`inventory.release.v1`) или истечение резерва.
+RELEASE_REASON_EXPIRED = "expired"
+RELEASE_REASONS = ("manual", RELEASE_REASON_EXPIRED)
 
 
 def _event_type(message: AbstractIncomingMessage) -> str:
@@ -89,16 +93,22 @@ def parse_reservation_result(body: bytes) -> ApplyReservationResultCommand:
 
 def parse_reservation_release(body: bytes) -> ApplyReservationReleaseCommand:
     """Парсит payload `inventory.released.v1` (`{order_id, reason,
-    released_lines}`) — для компенсации нужен только `order_id`: любой
-    `reason` (`manual`/`expired`) означает, что резерв освобождён."""
+    released_lines}`). Любой `reason` означает, что резерв освобождён;
+    `expired` (issue #377, D7) дополнительно переводит незавершённый Order в
+    `EXPIRED`. Иной `reason` — невалидный payload."""
     payload = _json_object(body)
 
     try:
         order_id = uuid.UUID(str(payload["order_id"]))
+        reason = payload["reason"]
     except (KeyError, ValueError) as exc:
         raise ValueError(f"Invalid reservation event payload: {payload!r}") from exc
+    if reason not in RELEASE_REASONS:
+        raise ValueError(f"Invalid reservation event payload: {payload!r}")
 
-    return ApplyReservationReleaseCommand(order_id=order_id)
+    return ApplyReservationReleaseCommand(
+        order_id=order_id, expired=reason == RELEASE_REASON_EXPIRED
+    )
 
 
 def parse_allocation_result(body: bytes) -> ApplyAllocationResultCommand:
@@ -134,7 +144,9 @@ def _route_released(body: bytes, _payment_method_token: str) -> ParsedEvent:
 
     async def apply(session: AsyncSession) -> None:
         await ApplyReservationReleaseCommandHandler(
-            OrderRepository(session), CartRepository(session)
+            OrderRepository(session),
+            CartRepository(session),
+            SagaCommandOutboxRepository(session),
         ).execute(command)
 
     return ParsedEvent(command.order_id, apply)
