@@ -922,6 +922,52 @@ async def test_empty_reservation_result_after_cancel_unlocks_the_cart(
     assert all(line.unavailable_reason is None for line in lines.values())
 
 
+async def test_expiry_before_a_late_reservation_result_completes_the_cancel(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _cancel(saga_session_factory, checkout)
+
+    # Истечение резерва обгоняет его результат (inventory.reserved.v1
+    # задержан, например повтор из DLQ): inventory уже освободил резерв.
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert all(line.locked_by_order_id is None for line in lines.values())
+
+    # Поздний результат резерва и повтор истечения с другим message_id.
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=3, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert len(order.lines) == 2
+    assert await _outbox_rows(saga_session_factory, checkout.order_id) == []
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert {
+        product_id: (line.quantity, line.unavailable_reason)
+        for product_id, line in lines.items()
+    } == {
+        checkout.confirmed.product_id: (checkout.confirmed.quantity, None),
+        checkout.unavailable.product_id: (checkout.unavailable.quantity, None),
+    }
+    assert all(line.locked_by_order_id is None for line in lines.values())
+    assert await _journal(saga_session_factory, checkout.order_id) == [
+        ("awaiting_reservation", "pending"),
+        ("awaiting_reservation", "cancelled"),
+        ("compensated", "cancelled"),
+    ]
+
+
 async def test_late_authorization_after_cancel_is_voided_once(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
