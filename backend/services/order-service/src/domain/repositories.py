@@ -51,6 +51,13 @@ class OrderRepository(Protocol):
 
     async def get_by_id(self, order_id: uuid.UUID) -> Order | None: ...
 
+    async def get_locked_by_id(self, order_id: uuid.UUID) -> Order | None:
+        """issue #377, D2: та же выборка, что `get_by_id`, но с `SELECT ...
+        FOR UPDATE` строки `orders` — для каждого пишущего пути Saga (step
+        result, cancel, expiry): отмена и результат шага сериализуются, guard
+        второго видит зафиксированное состояние первого."""
+        ...
+
     async def save(self, order: Order) -> None:
         """Персистит `lines` по diff (мирует `CartRepository.save`) — набор
         строк только сокращается после создания (D7), никогда не растёт."""

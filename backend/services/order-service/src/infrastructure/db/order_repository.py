@@ -31,6 +31,14 @@ class OrderRepository:
             return None
         return await self._to_domain(row)
 
+    async def get_locked_by_id(self, order_id: uuid.UUID) -> Order | None:
+        row = await self.session.scalar(
+            select(OrderModel).where(OrderModel.id == order_id).with_for_update()
+        )
+        if row is None:
+            return None
+        return await self._to_domain(row)
+
     async def save(self, order: Order) -> None:
         existing_row = await self.session.scalar(
             select(OrderModel).where(OrderModel.id == order.id)

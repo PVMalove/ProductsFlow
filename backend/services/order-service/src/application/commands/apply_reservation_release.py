@@ -34,7 +34,7 @@ class ApplyReservationReleaseCommandHandler:
         self._cart_repo = cart_repo
 
     async def execute(self, command: ApplyReservationReleaseCommand) -> None:
-        order: Order | None = await self._order_repo.get_by_id(command.order_id)
+        order: Order | None = await self._order_repo.get_locked_by_id(command.order_id)
         if order is None:
             logger.warning(
                 "Reservation release проигнорирован: order_id=%s не найден",

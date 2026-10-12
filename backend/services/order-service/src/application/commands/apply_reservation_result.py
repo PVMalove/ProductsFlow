@@ -51,7 +51,7 @@ class ApplyReservationResultCommandHandler:
         self._payment_method_token = payment_method_token
 
     async def execute(self, command: ApplyReservationResultCommand) -> None:
-        order: Order | None = await self._order_repo.get_by_id(command.order_id)
+        order: Order | None = await self._order_repo.get_locked_by_id(command.order_id)
         if order is None:
             logger.warning(
                 "Reservation result проигнорирован: order_id=%s не найден",
