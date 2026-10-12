@@ -3,6 +3,7 @@
 `apply_reservation_result` реализует обе ветки D7 и no-op guard на повторную
 доставку того же факта."""
 
+import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,6 +17,7 @@ from domain.entities.order import (
     OrderSagaStep,
     OrderStatus,
 )
+from domain.events.order_domain_event import OrderCompleted
 
 USER_ID = uuid.uuid4()
 
@@ -318,3 +320,80 @@ def test_allocation_result_outside_awaiting_allocation_is_a_no_op(
     assert applied is False
     assert order.status is status_before
     assert order.saga_step is step_before
+
+
+def _order_awaiting_capture() -> Order:
+    order = _order_awaiting_allocation()
+    order.apply_allocation_result()
+    return order
+
+
+def test_capture_result_completes_order_and_records_order_completed() -> None:
+    order = _order_awaiting_capture()
+    causation_id = uuid.uuid4()
+
+    applied = order.apply_capture_result(causation_id=causation_id)
+
+    assert applied is True
+    assert order.status is OrderStatus.COMPLETED
+    assert order.saga_step is OrderSagaStep.CAPTURED
+    assert order.failure_reason is None
+    events = order.pull_events()
+    assert len(events) == 1
+    event = events[0]
+    assert isinstance(event, OrderCompleted)
+    assert event.event_type == "order.completed.v1"
+    assert event.aggregate_type == "Order"
+    assert event.aggregate_id() == order.id
+    assert event.to_payload() == {
+        "order_id": str(order.id),
+        "correlation_id": str(order.id),
+        "causation_id": str(causation_id),
+    }
+    assert str(order.user_id) not in json.dumps(event.to_payload())
+
+
+def test_repeated_capture_result_is_a_no_op_without_a_second_event() -> None:
+    order = _order_awaiting_capture()
+    order.apply_capture_result(causation_id=uuid.uuid4())
+    order.pull_events()
+
+    applied_again = order.apply_capture_result(causation_id=uuid.uuid4())
+
+    assert applied_again is False
+    assert order.status is OrderStatus.COMPLETED
+    assert order.saga_step is OrderSagaStep.CAPTURED
+    assert order.pull_events() == []
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_awaiting_authorization,
+        _order_awaiting_allocation,
+        _order_compensating,
+    ],
+    ids=["awaiting_authorization", "awaiting_allocation", "compensating"],
+)
+def test_capture_result_outside_awaiting_capture_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+
+    applied = order.apply_capture_result(causation_id=uuid.uuid4())
+
+    assert applied is False
+    assert order.status is status_before
+    assert order.saga_step is step_before
+    assert order.pull_events() == []
+
+
+def test_allocation_result_after_capture_is_a_no_op() -> None:
+    order = _order_awaiting_capture()
+    order.apply_capture_result(causation_id=uuid.uuid4())
+
+    assert order.apply_allocation_result() is False
+    assert order.status is OrderStatus.COMPLETED
+    assert order.saga_step is OrderSagaStep.CAPTURED

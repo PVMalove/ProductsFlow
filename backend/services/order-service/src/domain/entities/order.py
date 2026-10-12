@@ -5,8 +5,8 @@
 
 `OrderStatus` — внешний, прескрайбленный ADR 0016:7 набор, не раскрывающий
 внутренний Saga Step; `OrderSagaStep` — внутреннее состояние, отдельное поле
-(D4). #372 достигает только `PENDING`/`FAILED` — `COMPLETED`/`CANCELLED`/
-`EXPIRED` требуют шагов Saga за пределами этого тикета (#373+).
+(D4). Saga достигает `PENDING`/`FAILED` (#372/#375) и `COMPLETED` после
+подтверждённого capture (#376); `CANCELLED`/`EXPIRED` — шаги #377.
 
 Конструктор вызывается только через `create()` (новый заказ) или
 `reconstitute()` (гидратация из БД)."""
@@ -19,6 +19,8 @@ from typing import cast
 
 from kernel_domain import PRIVATE_MARKER
 from kernel_domain.entity import Entity
+
+from domain.events.order_domain_event import OrderCompleted
 
 _MISSING = object()
 
@@ -41,6 +43,9 @@ class OrderSagaStep(Enum):
     # issue #376, D1: резерв переведён в allocation — Saga ждёт результата
     # `payment.capture.v1`.
     AWAITING_CAPTURE = "awaiting_capture"
+    # Терминал успешной Saga: capture подтверждён, Order `COMPLETED`. Имя
+    # шага нарочно отличается от значения `OrderStatus` (CONTEXT.md).
+    CAPTURED = "captured"
     # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
     COMPENSATING = "compensating"
     # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории.
@@ -206,6 +211,21 @@ class Order(Entity[uuid.UUID]):
         if self.saga_step is not OrderSagaStep.AWAITING_ALLOCATION:
             return False
         self.saga_step = OrderSagaStep.AWAITING_CAPTURE
+        return True
+
+    def apply_capture_result(self, *, causation_id: uuid.UUID) -> bool:
+        """Применяет факт `payment.captured.v1` (issue #376, D1): Order
+        `COMPLETED`, Saga в терминальном `CAPTURED`, одно событие
+        `OrderCompleted` для transactional outbox. Возвращает `False` без
+        мутации и без события вне `AWAITING_CAPTURE` (повторная доставка,
+        capture раньше allocation, любой результат после `CAPTURED`)."""
+        if self.saga_step is not OrderSagaStep.AWAITING_CAPTURE:
+            return False
+        self.status = OrderStatus.COMPLETED
+        self.saga_step = OrderSagaStep.CAPTURED
+        self.add_domain_event(
+            OrderCompleted(order_id=self.id, causation_id=causation_id)
+        )
         return True
 
     def complete_compensation(self) -> bool:

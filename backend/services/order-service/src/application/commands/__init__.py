@@ -12,6 +12,10 @@ from application.commands.apply_authorization_result import (
     ApplyAuthorizationResultCommand,
     ApplyAuthorizationResultCommandHandler,
 )
+from application.commands.apply_capture_result import (
+    ApplyCaptureResultCommand,
+    ApplyCaptureResultCommandHandler,
+)
 from application.commands.apply_reservation_release import (
     ApplyReservationReleaseCommand,
     ApplyReservationReleaseCommandHandler,
@@ -37,6 +41,8 @@ __all__ = [
     "ApplyAllocationResultCommandHandler",
     "ApplyAuthorizationResultCommand",
     "ApplyAuthorizationResultCommandHandler",
+    "ApplyCaptureResultCommand",
+    "ApplyCaptureResultCommandHandler",
     "ApplyReservationReleaseCommand",
     "ApplyReservationReleaseCommandHandler",
     "ApplyReservationResultCommand",

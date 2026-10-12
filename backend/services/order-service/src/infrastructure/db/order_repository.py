@@ -1,5 +1,6 @@
 import uuid
 
+from kernel_platform.outbox.drain import drain_events_to_outbox
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +84,10 @@ class OrderRepository:
                         unit_price_kopecks=line.unit_price_kopecks,
                     )
                 )
+
+        # issue #376, D6: доменные события (`order.completed.v1`) попадают в
+        # `outbox_messages` той же транзакцией, что и переход Order.
+        await drain_events_to_outbox(self.session, order)
 
     def _journal_transition(self, order: Order) -> None:
         self.session.add(

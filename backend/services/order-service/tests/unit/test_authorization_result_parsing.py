@@ -1,5 +1,6 @@
-"""Чистая функция парсинга фактов авторизации payment-service (issue #375,
-D7): `order_id` берётся из `correlation_id`, исход — из типа события."""
+"""Чистые функции парсинга фактов payment-service (issue #375, D7; issue
+#376, D7): `order_id` берётся из `correlation_id`; исход авторизации — из
+типа события; `payment.captured.v1` несёт ещё `causation_id`."""
 
 import json
 import uuid
@@ -8,6 +9,7 @@ import pytest
 
 from api.workers.commands.authorization_result_handler import (
     parse_authorization_result,
+    parse_capture_result,
 )
 from domain.entities.order import AuthorizationOutcome
 
@@ -77,3 +79,48 @@ def test_parse_rejects_invalid_json() -> None:
 def test_parse_rejects_non_object_payload() -> None:
     with pytest.raises(ValueError):
         parse_authorization_result("payment.authorized.v1", json.dumps([1]).encode())
+
+
+def test_parse_capture_result_maps_correlation_and_causation_ids() -> None:
+    order_id = uuid.uuid4()
+    causation_id = uuid.uuid4()
+    body = json.dumps(
+        {
+            "authorization_id": str(uuid.uuid4()),
+            "correlation_id": str(order_id),
+            "causation_id": str(causation_id),
+        }
+    ).encode()
+
+    command = parse_capture_result(body)
+
+    assert command.order_id == order_id
+    assert command.causation_id == causation_id
+
+
+def test_parse_capture_result_rejects_missing_causation_id() -> None:
+    body = json.dumps(
+        {"authorization_id": str(uuid.uuid4()), "correlation_id": str(uuid.uuid4())}
+    ).encode()
+
+    with pytest.raises(ValueError):
+        parse_capture_result(body)
+
+
+def test_parse_capture_result_rejects_non_uuid_correlation_id() -> None:
+    body = json.dumps(
+        {"correlation_id": "not-a-uuid", "causation_id": str(uuid.uuid4())}
+    ).encode()
+
+    with pytest.raises(ValueError):
+        parse_capture_result(body)
+
+
+def test_parse_capture_result_rejects_invalid_json() -> None:
+    with pytest.raises(ValueError):
+        parse_capture_result(b"not-json")
+
+
+def test_parse_capture_result_rejects_non_object_payload() -> None:
+    with pytest.raises(ValueError):
+        parse_capture_result(json.dumps([1]).encode())

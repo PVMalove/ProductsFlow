@@ -37,6 +37,9 @@ _AUTHORIZATION_REVISION = run_path(
 _SAGA_TRANSITIONS_REVISION = run_path(
     str(_VERSIONS_DIR / "b1c564e8cc23_order_saga_transitions.py")
 )
+_DOMAIN_OUTBOX_REVISION = run_path(
+    str(_VERSIONS_DIR / "225840d6a75f_order_domain_outbox.py")
+)
 _TABLES = ("cart_lines", "carts")
 _CHECKOUT_TABLES = (
     "orders",
@@ -46,6 +49,13 @@ _CHECKOUT_TABLES = (
     "processed_messages",
 )
 _SAGA_TRANSITIONS_TABLES = ("order_saga_transitions",)
+_DOMAIN_OUTBOX_TABLES = ("outbox_messages", "inbox_messages")
+_ALL_TABLES = (
+    *_DOMAIN_OUTBOX_TABLES,
+    *_SAGA_TRANSITIONS_TABLES,
+    *_CHECKOUT_TABLES,
+    *_TABLES,
+)
 
 
 def _run(revision: dict[str, Any], connection: Connection, action: str) -> None:
@@ -92,7 +102,7 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
     async with db_engine.connect() as connection:
         await connection.begin()
         try:
-            for table in (*_SAGA_TRANSITIONS_TABLES, *_CHECKOUT_TABLES, *_TABLES):
+            for table in _ALL_TABLES:
                 await connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
 
             await connection.run_sync(
@@ -106,6 +116,9 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
             )
             await connection.run_sync(
                 lambda conn: _run(_SAGA_TRANSITIONS_REVISION, conn, "upgrade")
+            )
+            await connection.run_sync(
+                lambda conn: _run(_DOMAIN_OUTBOX_REVISION, conn, "upgrade")
             )
 
             pk_columns = await connection.run_sync(_carts_pk_columns)
@@ -140,6 +153,9 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
             assert diffs == []
 
             await connection.run_sync(
+                lambda conn: _run(_DOMAIN_OUTBOX_REVISION, conn, "downgrade")
+            )
+            await connection.run_sync(
                 lambda conn: _run(_SAGA_TRANSITIONS_REVISION, conn, "downgrade")
             )
             await connection.run_sync(
@@ -160,7 +176,7 @@ async def test_alembic_upgrade_to_head_matches_orm_metadata_and_downgrade_revert
                     "SELECT count(*) FROM information_schema.tables "
                     "WHERE table_schema = 'public' AND table_name = ANY(:tables)"
                 ),
-                {"tables": [*_TABLES, *_CHECKOUT_TABLES, *_SAGA_TRANSITIONS_TABLES]},
+                {"tables": list(_ALL_TABLES)},
             )
             assert remaining_tables == 0
         finally:
