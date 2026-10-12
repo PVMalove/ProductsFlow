@@ -38,6 +38,9 @@ class OrderSagaStep(Enum):
     # Saga ждёт результата `payment.authorize.v1`.
     AWAITING_AUTHORIZATION = "awaiting_authorization"
     AWAITING_ALLOCATION = "awaiting_allocation"
+    # issue #376, D1: резерв переведён в allocation — Saga ждёт результата
+    # `payment.capture.v1`.
+    AWAITING_CAPTURE = "awaiting_capture"
     # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
     COMPENSATING = "compensating"
     # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории.
@@ -192,6 +195,17 @@ class Order(Entity[uuid.UUID]):
             else FAILURE_REASON_PAYMENT_TIMED_OUT
         )
         self.saga_step = OrderSagaStep.COMPENSATING
+        return True
+
+    def apply_allocation_result(self) -> bool:
+        """Применяет факт `inventory.allocated.v1` (issue #376, D1): Saga
+        переходит к capture, статус остаётся `PENDING`. Возвращает `False`
+        без мутации вне `AWAITING_ALLOCATION` — та же двухслойная
+        идемпотентность: повтор с другим `message_id` и результат не в своём
+        шаге не продвигают Saga."""
+        if self.saga_step is not OrderSagaStep.AWAITING_ALLOCATION:
+            return False
+        self.saga_step = OrderSagaStep.AWAITING_CAPTURE
         return True
 
     def complete_compensation(self) -> bool:

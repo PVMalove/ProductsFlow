@@ -3,9 +3,11 @@
 D7) — мирует `api/worker.py`-style consumer'ов #367/#369's
 `handle_product_event`: собственный `processed_messages`-гейт по
 `(source, message_id)` (issue #375, D4) + делегирование бизнес-применения
-`ApplyReservationResultCommandHandler` (`inventory.reserved.v1`) или
-`ApplyReservationReleaseCommandHandler` (`inventory.released.v1`) — чистые
-функции, без AMQP-деталей."""
+`ApplyReservationResultCommandHandler` (`inventory.reserved.v1`),
+`ApplyReservationReleaseCommandHandler` (`inventory.released.v1`) или
+`ApplyAllocationResultCommandHandler` (`inventory.allocated.v1`, issue #376,
+D7) — чистые функции, без AMQP-деталей. Одна очередь на producer сохраняет
+порядок событий inventory при `prefetch_count=1`."""
 
 import json
 import logging
@@ -20,6 +22,10 @@ from api.workers.commands.inbox import (
     INVENTORY_SOURCE,
     claim_message,
     parse_outbox_message_id,
+)
+from application.commands.apply_allocation_result import (
+    ApplyAllocationResultCommand,
+    ApplyAllocationResultCommandHandler,
 )
 from application.commands.apply_reservation_release import (
     ApplyReservationReleaseCommand,
@@ -39,7 +45,8 @@ logger = logging.getLogger(__name__)
 
 RESERVED_EVENT_TYPE = "inventory.reserved.v1"
 RELEASED_EVENT_TYPE = "inventory.released.v1"
-INVENTORY_EVENT_TYPES = (RESERVED_EVENT_TYPE, RELEASED_EVENT_TYPE)
+ALLOCATED_EVENT_TYPE = "inventory.allocated.v1"
+INVENTORY_EVENT_TYPES = (RESERVED_EVENT_TYPE, RELEASED_EVENT_TYPE, ALLOCATED_EVENT_TYPE)
 QUEUE_NAME = "order.inventory-events"
 
 
@@ -93,6 +100,20 @@ def parse_reservation_release(body: bytes) -> ApplyReservationReleaseCommand:
     return ApplyReservationReleaseCommand(order_id=order_id)
 
 
+def parse_allocation_result(body: bytes) -> ApplyAllocationResultCommand:
+    """Парсит payload `inventory.allocated.v1` (`{order_id,
+    allocated_lines}`, issue #376, D7) — для перехода к capture нужен только
+    `order_id`."""
+    payload = _json_object(body)
+
+    try:
+        order_id = uuid.UUID(str(payload["order_id"]))
+    except (KeyError, ValueError) as exc:
+        raise ValueError(f"Invalid reservation event payload: {payload!r}") from exc
+
+    return ApplyAllocationResultCommand(order_id=order_id)
+
+
 async def handle_reservation_result(
     message: AbstractIncomingMessage,
     session_factory: async_sessionmaker[AsyncSession],
@@ -101,9 +122,15 @@ async def handle_reservation_result(
 ) -> None:
     event_type = _event_type(message)
     message_id = parse_outbox_message_id(message)
-    command: ApplyReservationResultCommand | ApplyReservationReleaseCommand
+    command: (
+        ApplyReservationResultCommand
+        | ApplyReservationReleaseCommand
+        | ApplyAllocationResultCommand
+    )
     if event_type == RELEASED_EVENT_TYPE:
         command = parse_reservation_release(message.body)
+    elif event_type == ALLOCATED_EVENT_TYPE:
+        command = parse_allocation_result(message.body)
     else:
         command = parse_reservation_result(message.body)
 
@@ -122,6 +149,10 @@ async def handle_reservation_result(
             if isinstance(command, ApplyReservationReleaseCommand):
                 await ApplyReservationReleaseCommandHandler(
                     OrderRepository(session), CartRepository(session)
+                ).execute(command)
+            elif isinstance(command, ApplyAllocationResultCommand):
+                await ApplyAllocationResultCommandHandler(
+                    OrderRepository(session), ReservationOutboxRepository(session)
                 ).execute(command)
             else:
                 await ApplyReservationResultCommandHandler(

@@ -4,6 +4,7 @@
 доставку того же факта."""
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -265,3 +266,55 @@ def test_compensation_outside_compensating_step_is_a_no_op() -> None:
     assert completed is False
     assert order.status is OrderStatus.PENDING
     assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
+
+
+def _order_awaiting_allocation() -> Order:
+    order = _order_awaiting_authorization()
+    order.apply_authorization_result(
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=uuid.uuid4()
+    )
+    return order
+
+
+def test_allocation_result_moves_saga_to_capture_and_keeps_order_pending() -> None:
+    order = _order_awaiting_allocation()
+    authorization_id = order.payment_authorization_id
+
+    applied = order.apply_allocation_result()
+
+    assert applied is True
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+    assert order.payment_authorization_id == authorization_id
+    assert order.failure_reason is None
+
+
+def test_repeated_allocation_result_is_a_no_op() -> None:
+    order = _order_awaiting_allocation()
+    order.apply_allocation_result()
+
+    assert order.apply_allocation_result() is False
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        lambda: _order_with_lines()[0],
+        _order_awaiting_authorization,
+        _order_compensating,
+    ],
+    ids=["awaiting_reservation", "awaiting_authorization", "compensating"],
+)
+def test_allocation_result_outside_awaiting_allocation_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+
+    applied = order.apply_allocation_result()
+
+    assert applied is False
+    assert order.status is status_before
+    assert order.saga_step is step_before

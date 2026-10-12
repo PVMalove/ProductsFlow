@@ -4,6 +4,10 @@ from application.commands.add_cart_line import (
     AddCartLineCommand,
     AddCartLineCommandHandler,
 )
+from application.commands.apply_allocation_result import (
+    ApplyAllocationResultCommand,
+    ApplyAllocationResultCommandHandler,
+)
 from application.commands.apply_authorization_result import (
     ApplyAuthorizationResultCommand,
     ApplyAuthorizationResultCommandHandler,
@@ -29,6 +33,8 @@ from application.commands.update_cart_line_quantity import (
 __all__ = [
     "AddCartLineCommand",
     "AddCartLineCommandHandler",
+    "ApplyAllocationResultCommand",
+    "ApplyAllocationResultCommandHandler",
     "ApplyAuthorizationResultCommand",
     "ApplyAuthorizationResultCommandHandler",
     "ApplyReservationReleaseCommand",

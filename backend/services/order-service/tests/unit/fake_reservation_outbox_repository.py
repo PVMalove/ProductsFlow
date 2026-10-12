@@ -1,5 +1,6 @@
 """Фейковый ReservationOutboxRepository для юнит-тестов (issue #372;
-issue #375 — authorization/release intents)."""
+issue #375 — authorization/release intents; issue #376 — allocation/capture
+intents)."""
 
 import uuid
 from dataclasses import dataclass
@@ -14,11 +15,19 @@ class AuthorizationIntent:
     payment_method_token: str
 
 
+@dataclass(frozen=True)
+class CaptureIntent:
+    order_id: uuid.UUID
+    authorization_id: uuid.UUID
+
+
 class FakeReservationOutboxRepository:
     def __init__(self) -> None:
         self.enqueue_calls: list[tuple[uuid.UUID, list[OrderLine]]] = []
         self.authorization_intents: list[AuthorizationIntent] = []
         self.release_intents: list[uuid.UUID] = []
+        self.allocation_intents: list[uuid.UUID] = []
+        self.capture_intents: list[CaptureIntent] = []
 
     async def enqueue(self, *, order_id: uuid.UUID, lines: list[OrderLine]) -> None:
         self.enqueue_calls.append((order_id, lines))
@@ -36,3 +45,13 @@ class FakeReservationOutboxRepository:
 
     async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
         self.release_intents.append(order_id)
+
+    async def enqueue_allocation(self, *, order_id: uuid.UUID) -> None:
+        self.allocation_intents.append(order_id)
+
+    async def enqueue_capture(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        self.capture_intents.append(
+            CaptureIntent(order_id=order_id, authorization_id=authorization_id)
+        )

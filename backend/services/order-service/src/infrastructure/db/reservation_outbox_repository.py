@@ -1,4 +1,5 @@
-"""Пишущая сторона `reservation_outbox` (issue #372, D6; issue #375, D3).
+"""Пишущая сторона `reservation_outbox` (issue #372, D6; issue #375, D3;
+issue #376, D3).
 
 Таблица несёт все исходящие команды Saga, не только `inventory.reserve.v1`
 — имя таблицы/класса осталось от #372 (naming debt R5 брифа #375,
@@ -19,8 +20,16 @@ from infrastructure.db.entity_configurations.models import ReservationOutboxMode
 RESERVE_COMMAND_TYPE = "inventory.reserve.v1"
 AUTHORIZE_COMMAND_TYPE = "payment.authorize.v1"
 RELEASE_COMMAND_TYPE = "inventory.release.v1"
+ALLOCATE_COMMAND_TYPE = "inventory.allocate.v1"
+CAPTURE_COMMAND_TYPE = "payment.capture.v1"
 # Все типы, которые order-worker публикует — для объявления command-топологии.
-COMMAND_TYPES = (RESERVE_COMMAND_TYPE, AUTHORIZE_COMMAND_TYPE, RELEASE_COMMAND_TYPE)
+COMMAND_TYPES = (
+    RESERVE_COMMAND_TYPE,
+    AUTHORIZE_COMMAND_TYPE,
+    RELEASE_COMMAND_TYPE,
+    ALLOCATE_COMMAND_TYPE,
+    CAPTURE_COMMAND_TYPE,
+)
 
 
 class ReservationOutboxRepository:
@@ -65,6 +74,25 @@ class ReservationOutboxRepository:
             order_id=order_id,
             command_type=RELEASE_COMMAND_TYPE,
             payload={"order_id": str(order_id)},
+        )
+
+    async def enqueue_allocation(self, *, order_id: uuid.UUID) -> None:
+        # inventory-service's `inventory.allocate.v1` читает только `order_id`.
+        self._add(
+            order_id=order_id,
+            command_type=ALLOCATE_COMMAND_TYPE,
+            payload={"order_id": str(order_id)},
+        )
+
+    async def enqueue_capture(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        # payment-service's `payment.capture.v1` читает только
+        # `authorization_id`; idempotency key capture — `command_id` строки.
+        self._add(
+            order_id=order_id,
+            command_type=CAPTURE_COMMAND_TYPE,
+            payload={"authorization_id": str(authorization_id)},
         )
 
     def _add(

@@ -1,8 +1,9 @@
-"""Postgres-интеграция пути сообщений Saga (issue #375, AC1-AC4):
-`handle_reservation_result`/`handle_authorization_result` прогоняются с
-заглушкой `AbstractIncomingMessage` поверх настоящей БД — резерв ->
-авторизация -> компенсация, повторная доставка и inbox-ключ по producer'у.
-RabbitMQ не участвует: адаптеры получают сообщение напрямую."""
+"""Postgres-интеграция пути сообщений Saga (issue #375, AC1-AC4; issue #376,
+AC1-AC4): `handle_reservation_result`/`handle_authorization_result`
+прогоняются с заглушкой `AbstractIncomingMessage` поверх настоящей БД —
+резерв -> авторизация -> allocation -> capture либо компенсация, повторная
+доставка, результаты не в своём шаге и inbox-ключ по producer'у. RabbitMQ не
+участвует: адаптеры получают сообщение напрямую."""
 
 import json
 import uuid
@@ -168,6 +169,31 @@ async def _deliver_released(
     )
 
 
+async def _deliver_allocated(
+    session_factory: async_sessionmaker[AsyncSession],
+    checkout: _Checkout,
+    *,
+    message_id: int,
+) -> None:
+    await handle_reservation_result(
+        _message(
+            "inventory.allocated.v1",
+            message_id,
+            {
+                "order_id": str(checkout.order_id),
+                "allocated_lines": [
+                    {
+                        "product_id": str(checkout.confirmed.product_id),
+                        "quantity": checkout.confirmed.quantity,
+                    }
+                ],
+            },
+        ),
+        session_factory,
+        payment_method_token=PAYMENT_METHOD_TOKEN,
+    )
+
+
 async def _outbox_rows(
     session_factory: async_sessionmaker[AsyncSession], order_id: uuid.UUID
 ) -> list[ReservationOutboxModel]:
@@ -210,7 +236,7 @@ async def test_partial_reservation_authorizes_only_the_confirmed_amount(
     assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
 
 
-async def test_authorized_result_moves_to_allocation_without_new_commands(
+async def test_authorized_result_moves_to_allocation_and_requests_allocation(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     checkout = await _checked_out_order(saga_session_factory)
@@ -230,7 +256,108 @@ async def test_authorized_result_moves_to_allocation_without_new_commands(
     assert order.saga_step is OrderSagaStep.AWAITING_ALLOCATION
     assert order.payment_authorization_id == authorization_id
     rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert sorted(row.command_type for row in rows) == [
+        "inventory.allocate.v1",
+        "payment.authorize.v1",
+    ]
+    allocate_rows = [row for row in rows if row.command_type == "inventory.allocate.v1"]
+    assert [row.payload for row in allocate_rows] == [
+        {"order_id": str(checkout.order_id)}
+    ]
+
+
+async def _authorized_order(
+    session_factory: async_sessionmaker[AsyncSession],
+    authorization_id: uuid.UUID,
+) -> _Checkout:
+    """Состояние `AWAITING_ALLOCATION`: резерв и авторизация применены."""
+    checkout = await _checked_out_order(session_factory)
+    await _deliver_reserved(session_factory, checkout, message_id=1)
+    await _deliver_authorization(
+        session_factory,
+        checkout.order_id,
+        "payment.authorized.v1",
+        message_id=1,
+        authorization_id=authorization_id,
+    )
+    return checkout
+
+
+def _rows_of_type(
+    rows: list[ReservationOutboxModel], command_type: str
+) -> list[ReservationOutboxModel]:
+    return [row for row in rows if row.command_type == command_type]
+
+
+async def test_allocated_result_moves_to_capture_and_requests_capture(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    authorization_id = uuid.uuid4()
+    checkout = await _authorized_order(saga_session_factory, authorization_id)
+
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    capture_rows = _rows_of_type(rows, "payment.capture.v1")
+    assert [row.payload for row in capture_rows] == [
+        {"authorization_id": str(authorization_id)}
+    ]
+
+
+async def test_allocated_result_before_authorization_changes_nothing(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.PENDING
+    assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
     assert [row.command_type for row in rows] == ["payment.authorize.v1"]
+
+
+async def test_repeated_allocated_result_requests_one_capture(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _authorized_order(saga_session_factory, uuid.uuid4())
+
+    # Та же доставка (тот же message_id) и тот же факт с другим message_id.
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+    await _deliver_allocated(saga_session_factory, checkout, message_id=3)
+
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert len(_rows_of_type(rows, "payment.capture.v1")) == 1
+    assert len(_rows_of_type(rows, "inventory.allocate.v1")) == 1
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
+
+
+async def test_declined_authorization_requests_no_allocation(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+    await _deliver_authorization(
+        saga_session_factory,
+        checkout.order_id,
+        "payment.authorization_declined.v1",
+        message_id=1,
+    )
+
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+
+    rows = await _outbox_rows(saga_session_factory, checkout.order_id)
+    assert _rows_of_type(rows, "inventory.allocate.v1") == []
+    assert _rows_of_type(rows, "payment.capture.v1") == []
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.saga_step is OrderSagaStep.COMPENSATING
 
 
 @pytest.mark.parametrize(
