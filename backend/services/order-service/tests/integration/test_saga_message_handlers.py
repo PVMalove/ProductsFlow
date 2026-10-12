@@ -329,15 +329,18 @@ async def test_repeated_allocated_result_requests_one_capture(
     saga_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     checkout = await _authorized_order(saga_session_factory, uuid.uuid4())
+    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
+    journal_before = await _journal(saga_session_factory, checkout.order_id)
 
     # Та же доставка (тот же message_id) и тот же факт с другим message_id.
-    await _deliver_allocated(saga_session_factory, checkout, message_id=2)
     await _deliver_allocated(saga_session_factory, checkout, message_id=2)
     await _deliver_allocated(saga_session_factory, checkout, message_id=3)
 
     rows = await _outbox_rows(saga_session_factory, checkout.order_id)
     assert len(_rows_of_type(rows, "payment.capture.v1")) == 1
     assert len(_rows_of_type(rows, "inventory.allocate.v1")) == 1
+    assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+    assert await _event_outbox_rows(saga_session_factory, checkout.order_id) == []
     order = await _load_order(saga_session_factory, checkout.order_id)
     assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
 
