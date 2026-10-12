@@ -5,6 +5,8 @@ TDD #4, по образцу payment's test_cqrs_payment_seams.py) — ловит
 from application.commands import (
     AddCartLineCommand,
     AddCartLineCommandHandler,
+    CancelOrderCommand,
+    CancelOrderCommandHandler,
     CheckoutCommand,
     CheckoutCommandHandler,
     RemoveCartLineCommand,
@@ -15,18 +17,20 @@ from application.commands import (
 from application.queries import GetCartQuery, GetCartQueryHandler
 
 
-def test_order_application_exposes_exactly_four_command_handlers() -> None:
+def test_order_application_exposes_exactly_five_http_command_handlers() -> None:
     command_types = (
         AddCartLineCommandHandler,
         UpdateCartLineQuantityCommandHandler,
         RemoveCartLineCommandHandler,
         CheckoutCommandHandler,
+        CancelOrderCommandHandler,
     )
     command_dto_types = (
         AddCartLineCommand,
         UpdateCartLineQuantityCommand,
         RemoveCartLineCommand,
         CheckoutCommand,
+        CancelOrderCommand,
     )
 
     assert all(hasattr(handler_type, "execute") for handler_type in command_types)

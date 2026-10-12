@@ -55,3 +55,12 @@ class OrderErrors:
             "idempotency_key_conflict",
             "Idempotency-Key уже использован с другим содержимым корзины",
         )
+
+    @staticmethod
+    def order_not_cancellable() -> Error:
+        """Отмена допустима только для `PENDING` Order до запроса capture
+        (issue #377, D1/R1, ADR 0016)."""
+        return Error.conflict(
+            "order_not_cancellable",
+            "Заказ нельзя отменить: он уже завершён или ожидает списания оплаты",
+        )

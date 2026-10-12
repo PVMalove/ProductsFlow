@@ -37,6 +37,23 @@ class CartAccessDeniedError(ApplicationError):
     status_code = HTTPStatus.FORBIDDEN
 
 
+class OrderNotFoundError(ApplicationError):
+    """`order_id` не существует вовсе (issue #377, D5)."""
+
+    code = "ORDER_NOT_FOUND"
+    message = "Заказ не найден"
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class OrderAccessDeniedError(ApplicationError):
+    """`order_id` существует, но принадлежит другому пользователю (issue
+    #377, D5 — то же разделение 404/403, что у строк корзины)."""
+
+    code = "ORDER_ACCESS_DENIED"
+    message = "Нет прав на этот заказ"
+    status_code = HTTPStatus.FORBIDDEN
+
+
 class CatalogUnavailableError(ApplicationError):
     """catalog-service недоступен (сеть/timeout/5xx) либо отказал по
     бизнес-причине конкретной строке (404/409 — товар удалён/скрыт/

@@ -26,3 +26,12 @@ class CheckoutUnitOfWork(UnitOfWork, Protocol):
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     saga_command_outbox: SagaCommandOutboxRepository
+
+
+class OrderCancellationUnitOfWork(UnitOfWork, Protocol):
+    """issue #377, D5 — одна локальная транзакция отмены: Order под
+    блокировкой строки, переход и intents компенсации (`payment.void.v1`,
+    `inventory.release.v1`) фиксируются вместе."""
+
+    orders: OrderRepository
+    saga_command_outbox: SagaCommandOutboxRepository

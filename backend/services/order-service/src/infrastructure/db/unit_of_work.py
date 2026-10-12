@@ -9,7 +9,11 @@ from domain.repositories import (
     OrderRepository,
     SagaCommandOutboxRepository,
 )
-from domain.unit_of_work import CartUnitOfWork, CheckoutUnitOfWork
+from domain.unit_of_work import (
+    CartUnitOfWork,
+    CheckoutUnitOfWork,
+    OrderCancellationUnitOfWork,
+)
 from infrastructure.db.cart_repository import CartRepository as SqlCartRepository
 from infrastructure.db.idempotency_key_repository import (
     IdempotencyKeyRepository as SqlIdempotencyKeyRepository,
@@ -21,8 +25,9 @@ from infrastructure.db.saga_command_outbox_repository import (
 
 
 class SqlCartUnitOfWork(SqlAlchemyUnitOfWork):
-    """Один конкретный класс удовлетворяет и `CartUnitOfWork` (issue #369),
-    и `CheckoutUnitOfWork` (issue #372, D5) — все репозитории делят одну
+    """Один конкретный класс удовлетворяет `CartUnitOfWork` (issue #369),
+    `CheckoutUnitOfWork` (issue #372, D5) и `OrderCancellationUnitOfWork`
+    (issue #377, D5) — все репозитории делят одну
     сессию/транзакцию, отдельный класс на каждый Protocol был бы чистой
     дупликацией переиспользуемой bookkeeping-обвязки."""
 
@@ -40,3 +45,6 @@ class SqlCartUnitOfWork(SqlAlchemyUnitOfWork):
 
 _cart_unit_of_work_implementation: type[CartUnitOfWork] = SqlCartUnitOfWork
 _checkout_unit_of_work_implementation: type[CheckoutUnitOfWork] = SqlCartUnitOfWork
+_order_cancellation_unit_of_work_implementation: type[OrderCancellationUnitOfWork] = (
+    SqlCartUnitOfWork
+)
