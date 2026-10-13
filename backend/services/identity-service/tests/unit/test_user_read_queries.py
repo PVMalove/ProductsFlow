@@ -9,9 +9,13 @@ from application.ports import (
     UserPage,
     UserReadModel,
 )
-from application.queries.get_user_audit import (
-    GetUserAuditQuery,
-    GetUserAuditQueryHandler,
+from application.queries.get_global_audit import (
+    GetGlobalAuditQuery,
+    GetGlobalAuditQueryHandler,
+)
+from application.queries.get_personal_audit import (
+    GetPersonalAuditQuery,
+    GetPersonalAuditQueryHandler,
 )
 from application.queries.list_users import ListUsersQuery, ListUsersQueryHandler
 from domain.role import Role
@@ -35,8 +39,13 @@ class FakeUserReadRepository:
             page_info=PageInfo("next", "previous", True, True),
         )
         self.list_call: tuple[int, Cursor | None, Cursor | None] | None = None
+        from kernel_platform.pagination import OffsetPageInfo
+
         self.audit_page = UserAuditPage(
-            items=[], page_index=2, page_size=10, total=11, total_pages=2
+            items=[],
+            page_info=OffsetPageInfo(
+                page_index=2, page_size=10, total=11, total_pages=2
+            ),
         )
         self.audit_entries = [
             UserAuditEntry(
@@ -81,15 +90,16 @@ async def test_list_users_query_returns_cursor_page_from_read_repository() -> No
         ListUsersQuery(limit=5, after=after)
     )
 
-    assert result is repository.users
+    assert result.is_ok
+    assert result.value is repository.users
     assert repository.list_call == (5, after, None)
 
 
 async def test_user_audit_query_returns_global_offset_page() -> None:
     repository = FakeUserReadRepository()
 
-    result = await GetUserAuditQueryHandler(repository, repository).execute(
-        GetUserAuditQuery(page_index=2, page_size=10)
+    result = await GetGlobalAuditQueryHandler(repository).execute(
+        GetGlobalAuditQuery(page_index=2, page_size=10)
     )
 
     assert result.is_ok
@@ -102,8 +112,8 @@ async def test_user_audit_query_reads_personal_audit_without_pagination() -> Non
     repository = FakeUserReadRepository()
     user_id = repository.users.items[0].id
 
-    result = await GetUserAuditQueryHandler(repository, repository).execute(
-        GetUserAuditQuery(user_id=user_id)
+    result = await GetPersonalAuditQueryHandler(repository, repository).execute(
+        GetPersonalAuditQuery(user_id=user_id)
     )
 
     assert result.is_ok
@@ -115,8 +125,8 @@ async def test_user_audit_query_reads_personal_audit_without_pagination() -> Non
 async def test_user_audit_query_returns_not_found_for_an_unknown_target_user() -> None:
     repository = FakeUserReadRepository()
 
-    result = await GetUserAuditQueryHandler(repository, repository).execute(
-        GetUserAuditQuery(user_id=UserId.new_id())
+    result = await GetPersonalAuditQueryHandler(repository, repository).execute(
+        GetPersonalAuditQuery(user_id=UserId.new_id())
     )
 
     assert result.is_err

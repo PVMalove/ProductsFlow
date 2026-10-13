@@ -68,7 +68,7 @@ services:
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
-    command: ["python", "-m", "api.worker"]
+    command: ["python", "-m", "api.workers.worker"]
     environment:
       APP_ENV: ${APP_ENV}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
@@ -180,7 +180,7 @@ services:
       [
         "sh",
         "-c",
-        "for i in 1 2 3 4 5; do python -m api.worker && exit 0; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
+        "for i in 1 2 3 4 5; do python -m api.workers.worker && exit 0; echo \"catalog-worker: attempt $$i failed, retrying in 3s\"; sleep 3; done; exit 1",
       ]
     environment:
       APP_ENV: ${APP_ENV}
@@ -197,7 +197,7 @@ services:
     build:
       context: .
       dockerfile: services/catalog-service/Dockerfile
-    command: ["python", "-m", "api.outbox_worker"]
+    command: ["python", "-m", "api.workers.outbox_worker"]
     environment:
       APP_ENV: ${APP_ENV}
       CATALOG_DATABASE_URL: ${CATALOG_DATABASE_URL}
@@ -296,7 +296,7 @@ services:
       - backend-network
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-admin}
@@ -389,7 +389,7 @@ services:
     build:
       context: .
       dockerfile: services/support-service/Dockerfile
-    command: ["python", "-m", "api.worker"]
+    command: ["python", "-m", "api.workers.worker"]
     environment:
       APP_ENV: ${APP_ENV}
       SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL}
@@ -403,6 +403,261 @@ services:
     networks:
       - backend-network
 
+  inventory-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: inventory
+    volumes:
+      - inventory_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d inventory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  inventory-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #367): alembic upgrade head,
+    # then a DB connectivity check — inventory has no seed stage of its own;
+    # demo data appears organically once inventory-worker projects the
+    # already-seeded catalog's product.created.v2 events (see inventory-worker
+    # in `make demo`, Makefile).
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      INVENTORY_DATABASE_URL: ${INVENTORY_DATABASE_URL}
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  inventory-api:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      INVENTORY_DATABASE_URL: ${INVENTORY_DATABASE_URL}
+      INVENTORY_IDENTITY_BASE_URL: ${INVENTORY_IDENTITY_BASE_URL}
+    depends_on:
+      inventory-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  inventory-worker:
+    restart: unless-stopped
+    # Product-lifecycle consumer (ADR 0016, issue #367) — idempotently
+    # creates a zero-stock Inventory row per product.created.v2. Depends on
+    # inventory-bootstrap (not just inventory-db): unlike catalog-worker,
+    # nothing needs this worker to race ahead of its own migration.
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    command: ["python", "-m", "api.workers.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      INVENTORY_DATABASE_URL: ${INVENTORY_DATABASE_URL}
+      INVENTORY_AMQP_URL: ${INVENTORY_AMQP_URL}
+    depends_on:
+      inventory-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  inventory-outbox-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    command: ["python", "-m", "api.workers.outbox_worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      INVENTORY_DATABASE_URL: ${INVENTORY_DATABASE_URL}
+      INVENTORY_AMQP_URL: ${INVENTORY_AMQP_URL}
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  payment-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: payment
+    volumes:
+      - payment_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  payment-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #368): alembic upgrade head,
+    # then a DB connectivity check — no seed stage. payment-worker/
+    # payment-outbox-worker (RabbitMQ command/event wiring, issue #371)
+    # depend on this completing first, same as inventory-bootstrap.
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  payment-api:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_IDENTITY_BASE_URL: ${PAYMENT_IDENTITY_BASE_URL}
+    depends_on:
+      payment-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  payment-worker:
+    restart: unless-stopped
+    # payment.authorize.v1/payment.void.v1 command consumer (issue #371).
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command: ["python", "-m", "api.workers.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_AMQP_URL: ${PAYMENT_AMQP_URL}
+    depends_on:
+      payment-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  payment-outbox-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    command: ["python", "-m", "api.workers.outbox_worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      PAYMENT_DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      PAYMENT_AMQP_URL: ${PAYMENT_AMQP_URL}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  order-db:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: order
+    volumes:
+      - order_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d order"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend-network
+
+  order-bootstrap:
+    # One-off bootstrap step (ADR 0001, issue #369): alembic upgrade head,
+    # then a DB connectivity check — no seed stage, no worker (REST+DB only
+    # per the architect brief D1; #370+ own Checkout/Order/Saga/RabbitMQ).
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic -c infrastructure/db/alembic.ini upgrade head && python -m api.bootstrap",
+      ]
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+    depends_on:
+      order-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  order-api:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+      ORDER_IDENTITY_BASE_URL: ${ORDER_IDENTITY_BASE_URL}
+      ORDER_CATALOG_BASE_URL: ${ORDER_CATALOG_BASE_URL}
+    depends_on:
+      order-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
+  order-worker:
+    restart: unless-stopped
+    # inventory.reserved.v1 event-consumer + reservation_outbox drain/publish
+    # loop for inventory.reserve.v1 (issue #372, D6/D7/D8) — order-service's
+    # first AMQP-connected process (mirrors inventory-worker's wiring).
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    command: ["python", "-m", "api.workers.worker"]
+    environment:
+      APP_ENV: ${APP_ENV}
+      ORDER_DATABASE_URL: ${ORDER_DATABASE_URL}
+      ORDER_AMQP_URL: ${ORDER_AMQP_URL}
+    depends_on:
+      order-bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+
   gateway:
     image: nginx:1.27-alpine
     volumes:
@@ -412,6 +667,9 @@ services:
       - identity-api
       - catalog-api
       - support-api
+      - inventory-api
+      - payment-api
+      - order-api
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
       interval: 5s
@@ -429,4 +687,10 @@ volumes:
   identity_db_data:
   catalog_db_data:
   support_db_data:
+  inventory_db_data:
+  payment_db_data:
+  order_db_data:
   opensearch_data:
+
+
+

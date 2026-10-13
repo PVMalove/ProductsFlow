@@ -1,0 +1,116 @@
+import uuid
+from typing import Protocol, runtime_checkable
+
+from domain.entities.cart import Cart
+from domain.entities.idempotency_key import IdempotencyKeyRecord
+from domain.entities.order import Order, OrderLine
+
+
+@runtime_checkable
+class CartRepository(Protocol):
+    """Контракт персистентности агрегата `Cart` (ADR 0006, issue #369)."""
+
+    async def get_or_create_for_user(self, user_id: uuid.UUID) -> Cart:
+        """Атомарный get-or-create (D3): `INSERT ... ON CONFLICT(user_id) DO
+        NOTHING` + повторное чтение при конфликте — закрывает TOCTOU-гонку
+        двух конкурентных первых `AddCartLine`."""
+        ...
+
+    async def get_for_user(self, user_id: uuid.UUID) -> Cart | None:
+        """Для `GET /api/v1/cart` — без побочного эффекта записи (D3)."""
+        ...
+
+    async def get_line_owner(self, line_id: uuid.UUID) -> Cart | None:
+        """Возвращает родительский `Cart` строки целиком (без фильтра по
+        владельцу — D5 требует увидеть owner, чтобы решить 403 vs 404) или
+        `None`, если `line_id` не существует вовсе."""
+        ...
+
+    async def save(self, cart: Cart) -> None:
+        """Персистит `lines` добавление/upsert/delete по diff (мирует
+        `TicketRepository`, не одна SQL-мутация на метод)."""
+        ...
+
+    async def get_locked_for_user(self, user_id: uuid.UUID) -> Cart | None:
+        """issue #372, D5/Risk 4: та же выборка, что `get_for_user`, но с
+        `SELECT ... FOR UPDATE` — checkout обязан удержать блокировку строк
+        на время своей транзакции, иначе два параллельных checkout одного
+        пользователя могут захватить одни и те же строки."""
+        ...
+
+    async def get_locked_by_order(self, order_id: uuid.UUID) -> Cart | None:
+        """issue #372, D7: находит `Cart`, чьи строки заблокированы данным
+        `order_id` (может отсутствовать вовсе, если Cart уже пуст/не
+        существует) — для reservation-result consumer'а."""
+        ...
+
+
+@runtime_checkable
+class OrderRepository(Protocol):
+    """Контракт персистентности агрегата `Order` (issue #372, D4)."""
+
+    async def get_by_id(self, order_id: uuid.UUID) -> Order | None: ...
+
+    async def get_locked_by_id(self, order_id: uuid.UUID) -> Order | None:
+        """issue #377, D2: та же выборка, что `get_by_id`, но с `SELECT ...
+        FOR UPDATE` строки `orders` — для каждого пишущего пути Saga (step
+        result, cancel, expiry): отмена и результат шага сериализуются, guard
+        второго видит зафиксированное состояние первого."""
+        ...
+
+    async def save(self, order: Order) -> None:
+        """Персистит `lines` по diff (мирует `CartRepository.save`) — набор
+        строк только сокращается после создания (D7), никогда не растёт."""
+        ...
+
+
+@runtime_checkable
+class IdempotencyKeyRepository(Protocol):
+    """Контракт персистентности идемпотентности checkout (issue #372, D2)."""
+
+    async def get(
+        self, user_id: uuid.UUID, key: str
+    ) -> IdempotencyKeyRecord | None: ...
+
+    async def save(self, record: IdempotencyKeyRecord) -> None: ...
+
+
+@runtime_checkable
+class SagaCommandOutboxRepository(Protocol):
+    """Контракт исходящих command-intent'ов Saga (issue #372, D6; issue #375,
+    D3; issue #376, D3) — НЕ переиспользует `kernel_platform.OutboxMessage`
+    (типовой конфликт BigInt PK vs UUID `command_id`, находка 5). Тип команды
+    и wire-payload — забота инфраструктуры; порт называет только намерение."""
+
+    async def enqueue(self, *, order_id: uuid.UUID, lines: list[OrderLine]) -> None:
+        """`inventory.reserve.v1` — резерв строк Checkout Selection."""
+        ...
+
+    async def enqueue_authorization(
+        self, *, order_id: uuid.UUID, amount_kopecks: int, payment_method_token: str
+    ) -> None:
+        """`payment.authorize.v1` — авторизация суммы подтверждённых строк."""
+        ...
+
+    async def enqueue_release(self, *, order_id: uuid.UUID) -> None:
+        """`inventory.release.v1` — компенсация резерва заказа."""
+        ...
+
+    async def enqueue_allocation(self, *, order_id: uuid.UUID) -> None:
+        """`inventory.allocate.v1` — обратимая allocation резерва заказа
+        после успешной авторизации (issue #376)."""
+        ...
+
+    async def enqueue_capture(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        """`payment.capture.v1` — capture авторизации после успешной
+        allocation (issue #376)."""
+        ...
+
+    async def enqueue_void(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        """`payment.void.v1` — аннулирование авторизации отменённого или
+        истёкшего Order (issue #377), в том числе поздней авторизации."""
+        ...

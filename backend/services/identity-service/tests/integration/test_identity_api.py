@@ -11,7 +11,7 @@ import pytest_asyncio
 from kernel_platform.outbox.models import Base
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from api.main import app
+from api.http.main import app
 from core.settings import settings
 from domain.role import Role
 from domain.value_objects.user_id import UserId

@@ -89,3 +89,30 @@ class ProductImageTooLargeError(ApplicationError):
     code = "PRODUCT_IMAGE_TOO_LARGE"
     message = "Файл больше 5 МБ"
     status_code = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+
+
+class CheckoutQuoteProductNotFoundError(ApplicationError):
+    """Запрошенный для checkout quote товар не существует (никогда не
+    существовал, либо был удалён — репозиторий не различает эти случаи,
+    issue #366)."""
+
+    code = "CHECKOUT_QUOTE_PRODUCT_NOT_FOUND"
+    message = "Товар не найден"
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class CheckoutQuoteProductHiddenError(ApplicationError):
+    """Владелец товара деактивирован — checkout quote недоступен, даже если
+    сам товар активен."""
+
+    code = "CHECKOUT_QUOTE_PRODUCT_HIDDEN"
+    message = "Товар недоступен для оформления"
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class CheckoutQuoteProductInactiveError(ApplicationError):
+    """Товар существует и виден, но деактивирован — не готов к оформлению."""
+
+    code = "CHECKOUT_QUOTE_PRODUCT_INACTIVE"
+    message = "Товар деактивирован"
+    status_code = HTTPStatus.CONFLICT

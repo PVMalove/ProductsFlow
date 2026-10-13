@@ -1,5 +1,9 @@
 """Публичный query-side интерфейс для application use case'ов catalog."""
 
+from application.queries.get_checkout_quote import (
+    GetCheckoutQuoteQuery,
+    GetCheckoutQuoteQueryHandler,
+)
 from application.queries.get_product import GetProductQuery, GetProductQueryHandler
 from application.queries.get_product_audit import (
     GetProductAuditQuery,
@@ -19,6 +23,8 @@ from application.queries.search_products import (
 )
 
 __all__ = [
+    "GetCheckoutQuoteQuery",
+    "GetCheckoutQuoteQueryHandler",
     "GetProductAuditQuery",
     "GetProductAuditQueryHandler",
     "GetProductImageQuery",

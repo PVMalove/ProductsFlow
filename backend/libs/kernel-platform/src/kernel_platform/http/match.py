@@ -8,7 +8,7 @@ from kernel_platform.http.errors import (
     details_for_error,
     status_code_for_error_type,
 )
-from kernel_platform.pagination import Page, PageInfo
+from kernel_platform.pagination import OffsetPage, OffsetPageInfo, Page, PageInfo
 
 
 def _raise_for_error[T](result: Result[T]) -> None:
@@ -28,6 +28,14 @@ def match_result[T](result: Result[T]) -> ApiResponse[T]:
     структурированный `ErrorResponse` с сохранением `Error.code`."""
     _raise_for_error(result)
     return ApiResponse(data=result.value)
+
+
+def unwrap_result[T](result: Result[T]) -> T:
+    """Извлекает значение из `Result`, поднимая `ApiError` при неудаче.
+    Используется, когда нужно получить значение до конструирования финального
+    HTTP-ответа, и обычные `match_result`/`match_created` не подходят."""
+    _raise_for_error(result)
+    return result.value
 
 
 def match_created[T](result: Result[T]) -> ApiResponse[T]:
@@ -52,3 +60,20 @@ def match_page[T](result: Result[Page[T]]) -> ApiResponse[list[T]]:
     _raise_for_error(result)
     page = result.value
     return ApiResponse(data=page.items, meta=_page_meta(page.page_info))
+
+
+def _offset_page_meta(page_info: OffsetPageInfo) -> dict[str, object]:
+    return {
+        "page_index": page_info.page_index,
+        "page_size": page_info.page_size,
+        "total": page_info.total,
+        "total_pages": page_info.total_pages,
+    }
+
+
+def match_offset_page[T](result: Result[OffsetPage[T]]) -> ApiResponse[list[T]]:
+    """Семантический вариант `match_result` для offset-пагинированных
+    list-эндпоинтов."""
+    _raise_for_error(result)
+    page = result.value
+    return ApiResponse(data=page.items, meta=_offset_page_meta(page.page_info))

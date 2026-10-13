@@ -14,7 +14,7 @@ from kernel_platform.outbox.settings import EVENTS_EXCHANGE_NAME
 from kernel_platform.topology import declare_topology
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.worker import build_user_event_handler
+from api.workers.worker import build_user_event_handler
 from infrastructure.db.user_projection import UserProjectionRow
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

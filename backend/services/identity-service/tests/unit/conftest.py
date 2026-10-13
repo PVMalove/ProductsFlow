@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from api.main import app as identity_app
+from api.http.main import app as identity_app
 from core.settings import settings
 from tests.unit.counting_transport import CountingTransport
 from tests.unit.keygen import write_rsa_key_file

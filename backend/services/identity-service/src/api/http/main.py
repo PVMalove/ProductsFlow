@@ -1,0 +1,63 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from kernel_platform.http.exception_handlers import register_error_handlers
+from observability.db_metrics import instrument_sqlalchemy_sessionmaker
+from observability.metrics import register_exception_metrics, register_http_metrics
+from observability.middleware import RequestContextMiddleware
+from observability.tracing import (
+    instrument_fastapi,
+    instrument_httpx,
+    instrument_sqlalchemy,
+)
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from api.http.endpoints.auth import router as auth_router
+from api.http.endpoints.jwks import router as jwks_router
+from api.http.endpoints.users import router as users_router
+from application.errors import ApplicationError
+from core.logging_config import configure_logging
+from core.secrets import validate_prod_key
+from core.security.verifier import LocalTokenVerifier
+from core.settings import settings
+
+configure_logging(settings.app_env)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    validate_prod_key(settings)
+    if not settings.identity_database_url:
+        raise RuntimeError("IDENTITY_DATABASE_URL must be configured")
+    engine = create_async_engine(
+        settings.identity_database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+    )
+    app.state.sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+    instrument_sqlalchemy_sessionmaker(
+        app, app.state.sessionmaker, service_name="identity-service"
+    )
+    instrument_sqlalchemy(app, app.state.sessionmaker)
+    try:
+        yield
+    finally:
+        await engine.dispose()
+
+
+app = FastAPI(lifespan=lifespan)
+register_error_handlers(
+    app,
+    service_error_type=ApplicationError,
+    on_unhandled_exception=register_exception_metrics("identity-service"),
+)
+app.add_middleware(RequestContextMiddleware, verifier=LocalTokenVerifier())
+register_http_metrics(app, service_name="identity-service")
+instrument_fastapi(app, service_name="identity-service")
+instrument_httpx()
+app.include_router(jwks_router)
+app.include_router(auth_router)
+app.include_router(users_router)

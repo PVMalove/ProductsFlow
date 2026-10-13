@@ -1,6 +1,6 @@
 import uuid
 
-from api.schemas import ProductCreateRequest
+from api.http.schemas import ProductCreateRequest
 from application.commands import CreateProductCommand
 from application.ports import Actor
 from contracts.product import ProductView

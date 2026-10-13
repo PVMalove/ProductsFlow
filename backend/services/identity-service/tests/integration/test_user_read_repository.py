@@ -90,8 +90,8 @@ async def test_user_audit_reader_supports_global_offset_and_personal_modes(
         UserAuditAction.REGISTERED,
         UserAuditAction.DEACTIVATED,
     ]
-    assert global_page.page_index == 1
-    assert global_page.page_size == 2
-    assert global_page.total == 3
-    assert global_page.total_pages == 2
+    assert global_page.page_info.page_index == 1
+    assert global_page.page_info.page_size == 2
+    assert global_page.page_info.total == 3
+    assert global_page.page_info.total_pages == 2
     assert len(global_page.items) == 2

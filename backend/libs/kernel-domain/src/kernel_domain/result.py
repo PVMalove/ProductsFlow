@@ -1,4 +1,5 @@
-# ruff: noqa: E501
+from collections.abc import Callable
+
 from kernel_domain.errors import Error
 
 
@@ -71,7 +72,7 @@ class Result[T]:
     def value(self) -> T:
         """Достает полезную нагрузку из успешного результата.
 
-        Если попытаться дернуть этот проперти у фейлового результата, выкинет исключение.
+        Если попытаться дернуть это свойство у фейлового результата, выкинет исключение.
         Ожидается, что вызывающий код предварительно сделает чек через `is_ok`.
 
         Raises:
@@ -99,3 +100,10 @@ class Result[T]:
             raise ValueError("Успешный Result не несёт ошибки")
         assert self._error is not None
         return self._error
+
+    def map[U](self, func: Callable[[T], U]) -> "Result[U]":
+        """Применяет функцию к значению успешного результата.
+        Если результат ошибочный, прокидывает ошибку дальше."""
+        if self._is_ok:
+            return Result[U].ok(func(self.value))
+        return Result[U].fail(self.error)

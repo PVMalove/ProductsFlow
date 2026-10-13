@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from api import worker
+from api.workers import worker
 
 
 @pytest.mark.asyncio

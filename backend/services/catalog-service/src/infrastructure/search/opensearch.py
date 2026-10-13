@@ -197,38 +197,6 @@ class OpenSearchProductSearch:
         response.raise_for_status()
         self._reindex_target = None
 
-    async def _write_snapshot(
-        self,
-        index_name: str,
-        snapshot: ProductSearchSnapshot,
-        *,
-        owner_is_active: bool,
-        ignore_missing: bool = False,
-    ) -> None:
-        async with observe_opensearch_latency("index"):
-            response = await self._client.put(
-                f"/{index_name}/_doc/{snapshot.product_id}",
-                params={
-                    "version": snapshot.search_revision,
-                    "version_type": "external_gte",
-                },
-                json={
-                    "id": str(snapshot.product_id),
-                    "user_id": str(snapshot.user_id),
-                    "name": snapshot.name,
-                    "description": snapshot.description,
-                    "category": snapshot.category,
-                    "price": snapshot.price,
-                    "is_active": snapshot.is_active,
-                    "owner_is_active": owner_is_active,
-                    "created_at": snapshot.created_at.isoformat(),
-                },
-            )
-        # A delayed snapshot must not retry forever after external versioning
-        # rejected it: the newer document is already the desired state.
-        if response.status_code not in ({404, 409} if ignore_missing else {409}):
-            response.raise_for_status()
-
     async def delete(self, tombstone: ProductSearchTombstone) -> None:
         """Apply a versioned tombstone without retaining Product data.
 
@@ -270,6 +238,38 @@ class OpenSearchProductSearch:
             )
             if response.status_code != 404:
                 response.raise_for_status()
+
+    async def _write_snapshot(
+        self,
+        index_name: str,
+        snapshot: ProductSearchSnapshot,
+        *,
+        owner_is_active: bool,
+        ignore_missing: bool = False,
+    ) -> None:
+        async with observe_opensearch_latency("index"):
+            response = await self._client.put(
+                f"/{index_name}/_doc/{snapshot.product_id}",
+                params={
+                    "version": snapshot.search_revision,
+                    "version_type": "external_gte",
+                },
+                json={
+                    "id": str(snapshot.product_id),
+                    "user_id": str(snapshot.user_id),
+                    "name": snapshot.name,
+                    "description": snapshot.description,
+                    "category": snapshot.category,
+                    "price": snapshot.price,
+                    "is_active": snapshot.is_active,
+                    "owner_is_active": owner_is_active,
+                    "created_at": snapshot.created_at.isoformat(),
+                },
+            )
+        # A delayed snapshot must not retry forever after external versioning
+        # rejected it: the newer document is already the desired state.
+        if response.status_code not in ({404, 409} if ignore_missing else {409}):
+            response.raise_for_status()
 
     async def _ensure_index(self) -> None:
         if self._index_ready:

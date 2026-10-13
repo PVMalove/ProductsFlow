@@ -1,0 +1,80 @@
+# ruff: noqa: E501
+"""Команда и handler применения результата `payment.authorize.v1` (issue
+#375, D6) — message-driven use case по прецеденту
+`apply_reservation_result.py`: без UoW/`.commit()`, транзакцией управляет
+вызывающий адаптер (`api/workers/commands/payment_event_handler.py`)."""
+
+import logging
+import uuid
+from dataclasses import dataclass
+
+from application.saga_compensation import void_stored_authorization
+from domain.entities.order import AuthorizationOutcome, Order
+from domain.repositories import OrderRepository, SagaCommandOutboxRepository
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ApplyAuthorizationResultCommand:
+    order_id: uuid.UUID
+    authorization_id: uuid.UUID
+    outcome: AuthorizationOutcome
+
+
+class ApplyAuthorizationResultCommandHandler:
+    """
+    Business Logic Summary
+
+    Context & Purpose: Отражает результат авторизации платежа в Order — успех продолжает Saga к allocation, отказ/таймаут делает Order компенсируемым терминалом (issue #375; issue #376 — allocation-запрос).
+    Validations: Order должен существовать (иначе no-op с warning); Order.apply_authorization_result несёт saga_step no-op guard против повторной доставки.
+    Side Effects: Успех -> payment_authorization_id сохранён, AWAITING_ALLOCATION и intent inventory.allocate.v1; отказ/таймаут -> FAILED + COMPENSATING и intent inventory.release.v1 (allocate не запрашивается). Void не отправляется: отклонённую или неизвестную авторизацию payment-service не аннулирует. Поздний успех после отмены/истечения Order (issue #377) -> payment_authorization_id сохранён и intent payment.void.v1 ровно один раз; поздний отказ/таймаут — no-op.
+    """
+
+    def __init__(
+        self, order_repo: OrderRepository, outbox: SagaCommandOutboxRepository
+    ) -> None:
+        self._order_repo = order_repo
+        self._outbox = outbox
+
+    async def execute(self, command: ApplyAuthorizationResultCommand) -> None:
+        order: Order | None = await self._order_repo.get_locked_by_id(command.order_id)
+        if order is None:
+            logger.warning(
+                "Authorization result проигнорирован: order_id=%s не найден",
+                command.order_id,
+            )
+            return
+
+        applied = order.apply_authorization_result(
+            outcome=command.outcome, authorization_id=command.authorization_id
+        )
+        if not applied:
+            if (
+                command.outcome is AuthorizationOutcome.AUTHORIZED
+                and order.record_late_authorization(
+                    authorization_id=command.authorization_id
+                )
+            ):
+                await self._order_repo.save(order)
+                await void_stored_authorization(order, self._outbox)
+                logger.info(
+                    "Authorization result: поздняя авторизация %s "
+                    "отменённого/истёкшего order_id=%s аннулируется",
+                    command.authorization_id,
+                    command.order_id,
+                )
+                return
+            logger.info(
+                "Authorization result — no-op: order_id=%s уже покинул "
+                "AWAITING_AUTHORIZATION",
+                command.order_id,
+            )
+            return
+
+        await self._order_repo.save(order)
+
+        if command.outcome is AuthorizationOutcome.AUTHORIZED:
+            await self._outbox.enqueue_allocation(order_id=command.order_id)
+        else:
+            await self._outbox.enqueue_release(order_id=command.order_id)
