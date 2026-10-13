@@ -24,8 +24,10 @@ async def cancel_order(
 ) -> ApiResponse[OrderView]:
     # issue #377, D6: как checkout — JWT + синхронная сверка активности
     # пользователя (fail-closed 503 при недоступном identity, ADR 0016).
-    command = CancelOrderCommand(
-        actor=Actor(id=auth.user_id, role=ActorRole.USER), order_id=order_id
-    )
+    command = CancelOrderCommand(actor=_actor(auth), order_id=order_id)
     result: Result[OrderView] = await handler.execute(command)
     return match_result(result)
+
+
+def _actor(auth: RequiredActiveUser) -> Actor:
+    return Actor(id=auth.user_id, role=ActorRole.USER)

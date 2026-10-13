@@ -33,7 +33,12 @@ class OrderRepository:
 
     async def get_locked_by_id(self, order_id: uuid.UUID) -> Order | None:
         row = await self.session.scalar(
-            select(OrderModel).where(OrderModel.id == order_id).with_for_update()
+            select(OrderModel)
+            .where(OrderModel.id == order_id)
+            .with_for_update()
+            # Order уже мог попасть в identity map этой сессии: без refresh
+            # guard домена увидел бы состояние до блокировки (issue #377, D2).
+            .execution_options(populate_existing=True)
         )
         if row is None:
             return None

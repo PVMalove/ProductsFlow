@@ -41,7 +41,7 @@ from infrastructure.db.entity_configurations.models import (
     ReservationOutboxModel,
 )
 from infrastructure.db.order_repository import OrderRepository
-from infrastructure.db.unit_of_work import SqlCartUnitOfWork
+from infrastructure.db.unit_of_work import SqlOrderServiceUnitOfWork
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -728,7 +728,9 @@ async def _cancel(
     session_factory: async_sessionmaker[AsyncSession], checkout: _Checkout
 ) -> Result[OrderView]:
     async with session_factory() as session:
-        return await CancelOrderCommandHandler(SqlCartUnitOfWork(session)).execute(
+        return await CancelOrderCommandHandler(
+            SqlOrderServiceUnitOfWork(session)
+        ).execute(
             CancelOrderCommand(
                 actor=Actor(id=checkout.user_id, role=ActorRole.USER),
                 order_id=checkout.order_id,
@@ -1065,6 +1067,38 @@ async def test_voided_fact_is_acknowledged_without_changes(
     order = await _load_order(saga_session_factory, checkout.order_id)
     assert order.saga_step is OrderSagaStep.COMPENSATING
     assert await _journal(saga_session_factory, checkout.order_id) == journal_before
+
+
+async def test_expiry_before_a_late_reservation_result_expires_the_pending_order(
+    saga_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    checkout = await _checked_out_order(saga_session_factory)
+
+    # Тот же случай, что для отменённого Order: истечение резерва обгоняет его
+    # результат, inventory уже освободил резерв.
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=2, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.EXPIRED
+    assert order.failure_reason == "RESERVATION_EXPIRED"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    lines = await _cart_lines(saga_session_factory, checkout.user_id)
+    assert all(line.locked_by_order_id is None for line in lines.values())
+    assert all(line.unavailable_reason is None for line in lines.values())
+
+    # Поздний результат резерва и повтор истечения — no-op.
+    await _deliver_reserved(saga_session_factory, checkout, message_id=1)
+    await _deliver_released(
+        saga_session_factory, checkout.order_id, message_id=3, reason="expired"
+    )
+
+    order = await _load_order(saga_session_factory, checkout.order_id)
+    assert order.status is OrderStatus.EXPIRED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert len(order.lines) == 2
+    assert await _outbox_rows(saga_session_factory, checkout.order_id) == []
 
 
 async def test_expiry_awaiting_authorization_expires_and_returns_lines(

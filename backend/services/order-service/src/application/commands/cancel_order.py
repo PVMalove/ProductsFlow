@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from kernel_domain.result import Result
 from kernel_platform.security import Actor
 
-from application.errors import OrderAccessDeniedError, OrderNotFoundError
+from application.saga_compensation import void_stored_authorization
 from contracts.order import OrderView
 from domain.entities.order import OrderSagaStep, OrderStatus
 from domain.errors import OrderErrors
@@ -32,7 +32,7 @@ class CancelOrderCommandHandler:
     Business Logic Summary
 
     Context & Purpose: Отмена владельцем PENDING Order до запроса capture (ADR 0016, issue #377).
-    Validations: `order_id` должен существовать (404) и принадлежать вызывающему (403) — обе проверки ДО мутации домена; Order не PENDING или Saga уже запросила capture — Result-ошибка order_not_cancellable (409), ничего не меняется. Повтор отмены уже CANCELLED Order — успех без новых intent'ов.
+    Validations: `order_id` должен существовать (Result-ошибка order_not_found, 404) и принадлежать вызывающему (order_access_denied, 403) — обе проверки ДО мутации домена; Order не PENDING или Saga уже запросила capture — Result-ошибка order_not_cancellable (409), ничего не меняется. Повтор отмены уже CANCELLED Order — успех без новых intent'ов.
     Side Effects: Order -> CANCELLED (CANCELLED_BY_CUSTOMER) под SELECT ... FOR UPDATE; вне AWAITING_RESERVATION Saga -> COMPENSATING и intent inventory.release.v1; сохранённая авторизация -> intent payment.void.v1. В AWAITING_RESERVATION команд нет: компенсацию решает результат резерва в пути.
     """
 
@@ -47,13 +47,13 @@ class CancelOrderCommandHandler:
                     "Отмена заказа отклонена: order_id=%s не найден",
                     command.order_id,
                 )
-                raise OrderNotFoundError
+                return Result[OrderView].fail(OrderErrors.order_not_found())
             if order.user_id != command.actor.id:
                 logger.warning(
                     "Отмена заказа отклонена: order_id=%s принадлежит другому пользователю",
                     command.order_id,
                 )
-                raise OrderAccessDeniedError
+                return Result[OrderView].fail(OrderErrors.order_access_denied())
 
             if order.status is OrderStatus.CANCELLED:
                 logger.info(
@@ -72,11 +72,7 @@ class CancelOrderCommandHandler:
                 return Result[OrderView].fail(OrderErrors.order_not_cancellable())
 
             await self._uow.orders.save(order)
-            if order.payment_authorization_id is not None:
-                await self._uow.saga_command_outbox.enqueue_void(
-                    order_id=order.id,
-                    authorization_id=order.payment_authorization_id,
-                )
+            await void_stored_authorization(order, self._uow.saga_command_outbox)
             if order.saga_step is OrderSagaStep.COMPENSATING:
                 await self._uow.saga_command_outbox.enqueue_release(order_id=order.id)
             await self._uow.commit()

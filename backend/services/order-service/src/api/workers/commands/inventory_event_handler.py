@@ -37,6 +37,7 @@ from application.commands.apply_reservation_result import (
     ApplyReservationResultCommand,
     ApplyReservationResultCommandHandler,
 )
+from domain.entities.order import ReleaseReason
 from infrastructure.db.cart_repository import CartRepository
 from infrastructure.db.order_repository import OrderRepository
 from infrastructure.db.saga_command_outbox_repository import (
@@ -49,10 +50,6 @@ RESERVED_EVENT_TYPE = "inventory.reserved.v1"
 RELEASED_EVENT_TYPE = "inventory.released.v1"
 ALLOCATED_EVENT_TYPE = "inventory.allocated.v1"
 QUEUE_NAME = "order.inventory-events"
-# `inventory.released.v1.reason` (inventory-service): освобождение по команде
-# Saga (`inventory.release.v1`) или истечение резерва.
-RELEASE_REASON_EXPIRED = "expired"
-RELEASE_REASONS = ("manual", RELEASE_REASON_EXPIRED)
 
 
 def _event_type(message: AbstractIncomingMessage) -> str:
@@ -94,21 +91,22 @@ def parse_reservation_result(body: bytes) -> ApplyReservationResultCommand:
 def parse_reservation_release(body: bytes) -> ApplyReservationReleaseCommand:
     """Парсит payload `inventory.released.v1` (`{order_id, reason,
     released_lines}`). Любой `reason` означает, что резерв освобождён;
-    `expired` (issue #377, D7) дополнительно переводит незавершённый Order в
-    `EXPIRED`. Иной `reason` — невалидный payload."""
+    только `expired` (issue #377, D7) дополнительно переводит незавершённый
+    Order в `EXPIRED`, всё остальное — освобождение по команде Saga
+    (`ReleaseReason.MANUAL`), как до #377."""
     payload = _json_object(body)
 
     try:
         order_id = uuid.UUID(str(payload["order_id"]))
-        reason = payload["reason"]
     except (KeyError, ValueError) as exc:
         raise ValueError(f"Invalid reservation event payload: {payload!r}") from exc
-    if reason not in RELEASE_REASONS:
-        raise ValueError(f"Invalid reservation event payload: {payload!r}")
-
-    return ApplyReservationReleaseCommand(
-        order_id=order_id, expired=reason == RELEASE_REASON_EXPIRED
+    reason = (
+        ReleaseReason.EXPIRED
+        if payload.get("reason") == ReleaseReason.EXPIRED
+        else ReleaseReason.MANUAL
     )
+
+    return ApplyReservationReleaseCommand(order_id=order_id, reason=reason)
 
 
 def parse_allocation_result(body: bytes) -> ApplyAllocationResultCommand:

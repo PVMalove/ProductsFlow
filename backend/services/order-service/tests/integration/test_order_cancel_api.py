@@ -249,7 +249,7 @@ async def test_cancel_of_a_foreign_order_is_denied(
     response = await _cancel(cart_client, order.id)
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "ORDER_ACCESS_DENIED"
+    assert response.json()["error"]["code"] == "order_access_denied"
     stored = await OrderRepository(db_session).get_by_id(order.id)
     assert stored is not None
     assert stored.status is OrderStatus.PENDING
@@ -263,7 +263,7 @@ async def test_cancel_of_an_unknown_order_is_not_found(
     response = await _cancel(cart_client, uuid.uuid4())
 
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "ORDER_NOT_FOUND"
+    assert response.json()["error"]["code"] == "order_not_found"
 
 
 async def test_cancel_requires_authentication(

@@ -19,19 +19,19 @@ from domain.unit_of_work import (
 )
 from infrastructure.db.cart_repository import CartRepository as SqlCartRepository
 from infrastructure.db.session import DbSessionDI
-from infrastructure.db.unit_of_work import SqlCartUnitOfWork
+from infrastructure.db.unit_of_work import SqlOrderServiceUnitOfWork
 from infrastructure.http.catalog_client import CatalogClient
 
 
 def get_cart_uow(session: DbSessionDI) -> CartUnitOfWork:
-    return SqlCartUnitOfWork(session)
+    return SqlOrderServiceUnitOfWork(session)
 
 
 CartUnitOfWorkDI = Annotated[CartUnitOfWork, Depends(get_cart_uow)]
 
 
 def get_checkout_uow(session: DbSessionDI) -> CheckoutUnitOfWork:
-    return SqlCartUnitOfWork(session)
+    return SqlOrderServiceUnitOfWork(session)
 
 
 CheckoutUnitOfWorkDI = Annotated[CheckoutUnitOfWork, Depends(get_checkout_uow)]
@@ -97,7 +97,7 @@ CheckoutDI = Annotated[CheckoutCommandHandler, Depends(get_checkout_handler)]
 
 
 def get_order_cancellation_uow(session: DbSessionDI) -> OrderCancellationUnitOfWork:
-    return SqlCartUnitOfWork(session)
+    return SqlOrderServiceUnitOfWork(session)
 
 
 OrderCancellationUnitOfWorkDI = Annotated[

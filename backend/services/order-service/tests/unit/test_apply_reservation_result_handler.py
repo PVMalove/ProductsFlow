@@ -295,3 +295,20 @@ async def test_empty_reservation_after_cancel_unlocks_cart_without_commands() ->
     assert [line.product_id for line in saved_cart.lines] == [product_id]
     assert saved_cart.lines[0].locked_by_order_id is None
     assert saved_cart.lines[0].unavailable_reason is None
+
+
+async def test_reservation_result_reads_the_order_under_a_row_lock() -> None:
+    cart, order, order_id = _locked_cart_and_order([uuid.uuid4()])
+    order_repo = FakeOrderRepository([order])
+    handler = _handler(
+        order_repo, FakeCartRepository([cart]), FakeSagaCommandOutboxRepository()
+    )
+
+    await handler.execute(
+        ApplyReservationResultCommand(
+            order_id=order_id, confirmed_product_ids=frozenset()
+        )
+    )
+
+    assert order_repo.locked_reads == [order_id]
+    assert order_repo.plain_reads == []

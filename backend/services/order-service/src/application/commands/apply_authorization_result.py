@@ -8,6 +8,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 
+from application.saga_compensation import void_stored_authorization
 from domain.entities.order import AuthorizationOutcome, Order
 from domain.repositories import OrderRepository, SagaCommandOutboxRepository
 
@@ -56,10 +57,7 @@ class ApplyAuthorizationResultCommandHandler:
                 )
             ):
                 await self._order_repo.save(order)
-                await self._outbox.enqueue_void(
-                    order_id=command.order_id,
-                    authorization_id=command.authorization_id,
-                )
+                await void_stored_authorization(order, self._outbox)
                 logger.info(
                     "Authorization result: поздняя авторизация %s "
                     "отменённого/истёкшего order_id=%s аннулируется",

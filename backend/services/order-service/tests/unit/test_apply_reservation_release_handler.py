@@ -17,9 +17,9 @@ from domain.entities.cart import Cart
 from domain.entities.order import (
     AuthorizationOutcome,
     Order,
-    OrderLine,
     OrderSagaStep,
     OrderStatus,
+    ReleaseReason,
 )
 from domain.value_objects.cart_id import CartId
 from tests.unit.fake_cart_repository import FakeCartRepository
@@ -28,25 +28,18 @@ from tests.unit.fake_saga_command_outbox_repository import (
     FakeSagaCommandOutboxRepository,
     VoidIntent,
 )
+from tests.unit.order_builders import (
+    order_awaiting_allocation,
+    order_awaiting_authorization,
+    order_awaiting_reservation,
+    order_compensating,
+)
 
 USER_ID = uuid.uuid4()
 
 
 def _order_awaiting_authorization(*, quantities: tuple[int, ...] = (2, 1)) -> Order:
-    lines = [
-        OrderLine(
-            id=uuid.uuid4(),
-            product_id=uuid.uuid4(),
-            quantity=quantity,
-            unit_price_kopecks=100,
-        )
-        for quantity in quantities
-    ]
-    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=lines)
-    order.apply_reservation_result(
-        confirmed_product_ids=frozenset(line.product_id for line in lines)
-    )
-    return order
+    return order_awaiting_authorization(user_id=USER_ID, quantities=quantities)
 
 
 def _handler(
@@ -60,17 +53,19 @@ def _handler(
 
 
 def _manual(order_id: uuid.UUID) -> ApplyReservationReleaseCommand:
-    return ApplyReservationReleaseCommand(order_id=order_id, expired=False)
+    return ApplyReservationReleaseCommand(
+        order_id=order_id, reason=ReleaseReason.MANUAL
+    )
 
 
 def _expired(order_id: uuid.UUID) -> ApplyReservationReleaseCommand:
-    return ApplyReservationReleaseCommand(order_id=order_id, expired=True)
+    return ApplyReservationReleaseCommand(
+        order_id=order_id, reason=ReleaseReason.EXPIRED
+    )
 
 
 def _order_compensating(outcome: AuthorizationOutcome) -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(outcome=outcome, authorization_id=uuid.uuid4())
-    return order
+    return order_compensating(user_id=USER_ID, outcome=outcome, quantities=(2, 1))
 
 
 async def test_unknown_order_is_a_no_op() -> None:
@@ -172,11 +167,24 @@ async def test_release_outside_compensating_changes_nothing() -> None:
 
 
 def _order_awaiting_allocation(authorization_id: uuid.UUID) -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(
-        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=authorization_id
+    return order_awaiting_allocation(
+        user_id=USER_ID, authorization_id=authorization_id, quantities=(2, 1)
     )
-    return order
+
+
+def _locked_cart(order: Order) -> Cart:
+    """Cart пользователя с строками Order, заблокированными под checkout (резерв
+    ещё не вернул результат)."""
+    cart = Cart.create(CartId.new_id(), user_id=USER_ID)
+    for line in order.lines:
+        cart.add_line(
+            line_id=uuid.uuid4(),
+            product_id=line.product_id,
+            quantity=line.quantity,
+            now=datetime.now(UTC),
+        )
+    cart.lock_for_checkout(order_id=order.id)
+    return cart
 
 
 async def test_expiry_awaiting_authorization_expires_and_returns_lines() -> None:
@@ -224,23 +232,28 @@ async def test_expiry_awaiting_allocation_voids_the_stored_authorization() -> No
     assert len(cart.lines) == len(order.lines)
 
 
-async def test_expiry_awaiting_reservation_keeps_the_step_and_the_cart() -> None:
-    line = OrderLine(
-        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, unit_price_kopecks=100
-    )
-    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=[line])
+async def test_expiry_awaiting_reservation_completes_and_unlocks_the_cart() -> None:
+    order = order_awaiting_reservation(user_id=USER_ID)
+    cart = _locked_cart(order)
     order_repo = FakeOrderRepository([order])
-    cart_repo = FakeCartRepository()
+    cart_repo = FakeCartRepository([cart])
     outbox = FakeSagaCommandOutboxRepository()
     handler = _handler(order_repo, cart_repo, outbox)
 
     await handler.execute(_expired(order.id))
 
+    # inventory уже освободил резерв: команд нет, поздний reserved отсечёт
+    # guard шага, строки остаются в Cart и только разблокируются.
     assert order_repo.save_calls == [order]
     assert order.status is OrderStatus.EXPIRED
-    assert order.saga_step is OrderSagaStep.AWAITING_RESERVATION
+    assert order.failure_reason == "RESERVATION_EXPIRED"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert outbox.release_intents == []
     assert outbox.void_intents == []
-    assert cart_repo.save_calls == []
+    assert cart_repo.save_calls == [cart]
+    assert len(cart.lines) == len(order.lines)
+    assert all(cart_line.locked_by_order_id is None for cart_line in cart.lines)
+    assert all(cart_line.unavailable_reason is None for cart_line in cart.lines)
 
 
 async def test_repeated_expiry_returns_lines_and_voids_once() -> None:
@@ -281,19 +294,10 @@ async def test_expiry_while_compensating_a_cancel_completes_it() -> None:
 
 
 async def test_expiry_of_a_cancel_awaiting_reservation_unlocks_the_cart() -> None:
-    line = OrderLine(
-        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, unit_price_kopecks=100
-    )
-    order = Order.create(uuid.uuid4(), user_id=USER_ID, lines=[line])
+    order = order_awaiting_reservation(user_id=USER_ID)
     order.cancel()
-    cart = Cart.create(CartId.new_id(), user_id=USER_ID)
-    cart.add_line(
-        line_id=uuid.uuid4(),
-        product_id=line.product_id,
-        quantity=line.quantity,
-        now=datetime.now(UTC),
-    )
-    cart.lock_for_checkout(order_id=order.id)
+    line = order.lines[0]
+    cart = _locked_cart(order)
     order_repo = FakeOrderRepository([order])
     cart_repo = FakeCartRepository([cart])
     outbox = FakeSagaCommandOutboxRepository()
@@ -354,3 +358,14 @@ async def test_expiry_after_a_terminal_result_changes_nothing() -> None:
     assert order.failure_reason == "PAYMENT_DECLINED"
     assert order_repo.save_calls == []
     assert cart_repo.save_calls == []
+
+
+async def test_release_reads_the_order_under_a_row_lock() -> None:
+    order = _order_compensating(AuthorizationOutcome.DECLINED)
+    order_repo = FakeOrderRepository([order])
+    handler = _handler(order_repo, FakeCartRepository())
+
+    await handler.execute(_manual(order.id))
+
+    assert order_repo.locked_reads == [order.id]
+    assert order_repo.plain_reads == []

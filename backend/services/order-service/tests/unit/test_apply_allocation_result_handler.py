@@ -97,3 +97,16 @@ async def test_allocated_result_before_authorization_is_a_no_op() -> None:
     assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
     assert order_repo.save_calls == []
     assert outbox.capture_intents == []
+
+
+async def test_allocation_result_reads_the_order_under_a_row_lock() -> None:
+    order = _order_awaiting_allocation(uuid.uuid4())
+    order_repo = FakeOrderRepository([order])
+    handler = ApplyAllocationResultCommandHandler(
+        order_repo, FakeSagaCommandOutboxRepository()
+    )
+
+    await handler.execute(ApplyAllocationResultCommand(order_id=order.id))
+
+    assert order_repo.locked_reads == [order.id]
+    assert order_repo.plain_reads == []

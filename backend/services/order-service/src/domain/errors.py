@@ -57,10 +57,22 @@ class OrderErrors:
         )
 
     @staticmethod
+    def order_not_found() -> Error:
+        """`order_id` не существует вовсе (issue #377, D5)."""
+        return Error.not_found("order_not_found", "Заказ не найден")
+
+    @staticmethod
+    def order_access_denied() -> Error:
+        """`order_id` существует, но принадлежит другому пользователю (issue
+        #377, D5 — то же разделение 404/403, что у строк корзины)."""
+        return Error.forbidden("order_access_denied", "Нет прав на этот заказ")
+
+    @staticmethod
     def order_not_cancellable() -> Error:
         """Отмена допустима только для `PENDING` Order до запроса capture
         (issue #377, D1/R1, ADR 0016)."""
         return Error.conflict(
             "order_not_cancellable",
-            "Заказ нельзя отменить: он уже завершён или ожидает списания оплаты",
+            "Заказ нельзя отменить в текущем состоянии: отмена возможна "
+            "только до запроса списания оплаты",
         )

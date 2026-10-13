@@ -36,7 +36,7 @@ class ApplyReservationResultCommandHandler:
 
     Context & Purpose: Отражает результат async reservation round-trip в Order/Cart; нулевой резерв — терминал Saga, непустой — переход к авторизации платежа (issue #375).
     Validations: Order должен существовать (иначе no-op с warning); Order.apply_reservation_result уже несёт собственный saga_step no-op guard против повторной доставки (D7) — повторный факт не ставит второй authorization intent.
-    Side Effects: Нулевой confirmed -> Cart.unlock_all (строки не меняются); частичный/полный confirmed -> Order.lines усечён, intent payment.authorize.v1 на сумму подтверждённых строк, Cart.resolve_partial_reservation (confirmed строки удаляются, недоступные разблокируются с причиной). Order, отменённый пока резерв был в пути (issue #377): подтверждённые строки -> COMPENSATING, intent inventory.release.v1 и тот же Cart.resolve_partial_reservation (строки вернутся по факту release); иначе (пустой резерв, истёкший Order) -> COMPENSATED и Cart.unlock_all.
+    Side Effects: Нулевой confirmed -> Cart.unlock_all (строки не меняются); частичный/полный confirmed -> Order.lines усечён, intent payment.authorize.v1 на сумму подтверждённых строк, Cart.resolve_partial_reservation (confirmed строки удаляются, недоступные разблокируются с причиной). Order, отменённый пока резерв был в пути (issue #377): подтверждённые строки -> COMPENSATING, intent inventory.release.v1 и тот же Cart.resolve_partial_reservation (строки вернутся по факту release); иначе (пустой резерв у отменённого Order) -> COMPENSATED и Cart.unlock_all; истёкший Order сюда не попадает (Order.expire сразу COMPENSATED, результат отсекает guard шага).
     """
 
     def __init__(

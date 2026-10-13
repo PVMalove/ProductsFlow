@@ -8,26 +8,31 @@ import uuid
 from collections.abc import Callable
 
 import pytest
+from kernel_domain.errors import ErrorType
 from kernel_platform.security import Actor, ActorRole
 
 from application.commands.cancel_order import (
     CancelOrderCommand,
     CancelOrderCommandHandler,
 )
-from application.errors import OrderAccessDeniedError, OrderNotFoundError
 from domain.entities.order import (
-    AuthorizationOutcome,
     Order,
-    OrderLine,
     OrderSagaStep,
 )
-from tests.unit.fake_cart_repository import FakeCartRepository
-from tests.unit.fake_checkout_unit_of_work import FakeCheckoutUnitOfWork
-from tests.unit.fake_idempotency_key_repository import FakeIdempotencyKeyRepository
+from tests.unit.fake_order_cancellation_unit_of_work import (
+    FakeOrderCancellationUnitOfWork,
+)
 from tests.unit.fake_order_repository import FakeOrderRepository
 from tests.unit.fake_saga_command_outbox_repository import (
     FakeSagaCommandOutboxRepository,
     VoidIntent,
+)
+from tests.unit.order_builders import (
+    order_awaiting_allocation,
+    order_awaiting_authorization,
+    order_awaiting_capture,
+    order_awaiting_reservation,
+    order_compensating,
 )
 
 ACTOR = Actor(id=uuid.uuid4(), role=ActorRole.USER)
@@ -35,40 +40,25 @@ AUTHORIZATION_ID = uuid.uuid4()
 
 
 def _order_awaiting_reservation() -> Order:
-    line = OrderLine(
-        id=uuid.uuid4(), product_id=uuid.uuid4(), quantity=1, unit_price_kopecks=100
-    )
-    return Order.create(uuid.uuid4(), user_id=ACTOR.id, lines=[line])
+    return order_awaiting_reservation(user_id=ACTOR.id)
 
 
 def _order_awaiting_authorization() -> Order:
-    order = _order_awaiting_reservation()
-    order.apply_reservation_result(
-        confirmed_product_ids=frozenset({order.lines[0].product_id})
-    )
-    return order
+    return order_awaiting_authorization(user_id=ACTOR.id)
 
 
 def _order_awaiting_allocation() -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(
-        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=AUTHORIZATION_ID
+    return order_awaiting_allocation(
+        user_id=ACTOR.id, authorization_id=AUTHORIZATION_ID
     )
-    return order
 
 
 def _order_awaiting_capture() -> Order:
-    order = _order_awaiting_allocation()
-    order.apply_allocation_result()
-    return order
+    return order_awaiting_capture(user_id=ACTOR.id, authorization_id=AUTHORIZATION_ID)
 
 
 def _order_failed_compensating() -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(
-        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
-    )
-    return order
+    return order_compensating(user_id=ACTOR.id)
 
 
 def _order_reservation_failed() -> Order:
@@ -79,11 +69,9 @@ def _order_reservation_failed() -> Order:
 
 def _handler(
     orders: list[Order],
-) -> tuple[CancelOrderCommandHandler, FakeCheckoutUnitOfWork]:
-    uow = FakeCheckoutUnitOfWork(
-        carts=FakeCartRepository(),
+) -> tuple[CancelOrderCommandHandler, FakeOrderCancellationUnitOfWork]:
+    uow = FakeOrderCancellationUnitOfWork(
         orders=FakeOrderRepository(orders),
-        idempotency_keys=FakeIdempotencyKeyRepository(),
         saga_command_outbox=FakeSagaCommandOutboxRepository(),
     )
     return CancelOrderCommandHandler(uow), uow
@@ -125,9 +113,13 @@ async def test_cancel_before_capture_cancels_and_enqueues_compensation(
 async def test_unknown_order_is_not_found() -> None:
     handler, uow = _handler([])
 
-    with pytest.raises(OrderNotFoundError):
-        await handler.execute(CancelOrderCommand(actor=ACTOR, order_id=uuid.uuid4()))
+    result = await handler.execute(
+        CancelOrderCommand(actor=ACTOR, order_id=uuid.uuid4())
+    )
 
+    assert result.is_err
+    assert result.error.code == "order_not_found"
+    assert result.error.type is ErrorType.NOT_FOUND
     assert uow.committed is False
 
 
@@ -136,9 +128,13 @@ async def test_foreign_order_is_denied_and_left_unchanged() -> None:
     handler, uow = _handler([order])
     stranger = Actor(id=uuid.uuid4(), role=ActorRole.USER)
 
-    with pytest.raises(OrderAccessDeniedError):
-        await handler.execute(CancelOrderCommand(actor=stranger, order_id=order.id))
+    result = await handler.execute(
+        CancelOrderCommand(actor=stranger, order_id=order.id)
+    )
 
+    assert result.is_err
+    assert result.error.code == "order_access_denied"
+    assert result.error.type is ErrorType.FORBIDDEN
     assert uow.committed is False
     assert uow.orders.save_calls == []
     assert order.saga_step is OrderSagaStep.AWAITING_AUTHORIZATION
@@ -181,3 +177,13 @@ async def test_repeated_cancel_succeeds_without_new_commands() -> None:
     assert len(uow.orders.save_calls) == 1
     assert uow.saga_command_outbox.release_intents == [order.id]
     assert len(uow.saga_command_outbox.void_intents) == 1
+
+
+async def test_cancel_reads_the_order_under_a_row_lock() -> None:
+    order = _order_awaiting_authorization()
+    handler, uow = _handler([order])
+
+    await handler.execute(CancelOrderCommand(actor=ACTOR, order_id=order.id))
+
+    assert uow.orders.locked_reads == [order.id]
+    assert uow.orders.plain_reads == []

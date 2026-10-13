@@ -117,7 +117,8 @@ def parse_capture_result(body: bytes) -> ApplyCaptureResultCommand:
 def parse_voided_order_id(body: bytes) -> uuid.UUID:
     """Парсит payload `payment.voided.v1` (`{authorization_id,
     correlation_id, causation_id}`, issue #377, D7) — нужен только
-    `correlation_id` (`str(order_id)`) для лога подтверждения."""
+    `correlation_id` (`str(order_id)`): ключ inbox-гейта (`ParsedEvent`) для
+    идемпотентного подтверждения факта."""
     payload = _json_object(body)
 
     try:

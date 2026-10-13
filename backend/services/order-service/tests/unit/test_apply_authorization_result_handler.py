@@ -192,3 +192,16 @@ async def test_late_decline_or_timeout_of_a_cancelled_order_is_a_no_op(
     assert outbox.void_intents == []
     assert outbox.release_intents == []
     assert order.status is OrderStatus.CANCELLED
+
+
+async def test_authorization_result_reads_the_order_under_a_row_lock() -> None:
+    order = _order_awaiting_authorization()
+    order_repo = FakeOrderRepository([order])
+    handler = ApplyAuthorizationResultCommandHandler(
+        order_repo, FakeSagaCommandOutboxRepository()
+    )
+
+    await handler.execute(_command(order.id, AuthorizationOutcome.AUTHORIZED))
+
+    assert order_repo.locked_reads == [order.id]
+    assert order_repo.plain_reads == []

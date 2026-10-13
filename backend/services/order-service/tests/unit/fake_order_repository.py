@@ -12,13 +12,19 @@ class FakeOrderRepository:
             order.id: order for order in (orders or [])
         }
         self.save_calls: list[Order] = []
+        # issue #377, D2: тесты handler'ов фиксируют, что запись идёт через
+        # блокирующее чтение, а не через обычный `get_by_id`.
+        self.locked_reads: list[uuid.UUID] = []
+        self.plain_reads: list[uuid.UUID] = []
 
     async def get_by_id(self, order_id: uuid.UUID) -> Order | None:
+        self.plain_reads.append(order_id)
         return self._by_id.get(order_id)
 
     async def get_locked_by_id(self, order_id: uuid.UUID) -> Order | None:
         # Фейку не нужен реальный SELECT ... FOR UPDATE — семантика чтения
         # идентична get_by_id (issue #377, D2).
+        self.locked_reads.append(order_id)
         return self._by_id.get(order_id)
 
     async def save(self, order: Order) -> None:

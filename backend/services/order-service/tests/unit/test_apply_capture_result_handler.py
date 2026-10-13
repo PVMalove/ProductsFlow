@@ -116,3 +116,14 @@ async def test_captured_result_for_another_authorization_is_a_no_op() -> None:
     assert order.status is OrderStatus.PENDING
     assert order.saga_step is OrderSagaStep.AWAITING_CAPTURE
     assert order.pull_events() == []
+
+
+async def test_capture_result_reads_the_order_under_a_row_lock() -> None:
+    order = _order_awaiting_capture()
+    order_repo = FakeOrderRepository([order])
+    handler = ApplyCaptureResultCommandHandler(order_repo)
+
+    await handler.execute(_command(order))
+
+    assert order_repo.locked_reads == [order.id]
+    assert order_repo.plain_reads == []
