@@ -17,6 +17,7 @@ from observability.tracing import (
 
 from api.http.endpoints.cart import router as cart_router
 from api.http.endpoints.checkout import router as checkout_router
+from api.http.endpoints.orders import router as orders_router
 from application.errors import ApplicationError
 from core.settings import settings
 from infrastructure.db.session import build_sessionmaker
@@ -67,3 +68,4 @@ instrument_fastapi(app, service_name="order-service")
 instrument_httpx()
 app.include_router(cart_router)
 app.include_router(checkout_router)
+app.include_router(orders_router)

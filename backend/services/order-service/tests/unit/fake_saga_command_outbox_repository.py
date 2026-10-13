@@ -1,6 +1,6 @@
 """Фейковый SagaCommandOutboxRepository для юнит-тестов (issue #372;
 issue #375 — authorization/release intents; issue #376 — allocation/capture
-intents)."""
+intents; issue #377 — void intents)."""
 
 import uuid
 from dataclasses import dataclass
@@ -21,6 +21,12 @@ class CaptureIntent:
     authorization_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class VoidIntent:
+    order_id: uuid.UUID
+    authorization_id: uuid.UUID
+
+
 class FakeSagaCommandOutboxRepository:
     def __init__(self) -> None:
         self.enqueue_calls: list[tuple[uuid.UUID, list[OrderLine]]] = []
@@ -28,6 +34,7 @@ class FakeSagaCommandOutboxRepository:
         self.release_intents: list[uuid.UUID] = []
         self.allocation_intents: list[uuid.UUID] = []
         self.capture_intents: list[CaptureIntent] = []
+        self.void_intents: list[VoidIntent] = []
 
     async def enqueue(self, *, order_id: uuid.UUID, lines: list[OrderLine]) -> None:
         self.enqueue_calls.append((order_id, lines))
@@ -54,4 +61,11 @@ class FakeSagaCommandOutboxRepository:
     ) -> None:
         self.capture_intents.append(
             CaptureIntent(order_id=order_id, authorization_id=authorization_id)
+        )
+
+    async def enqueue_void(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        self.void_intents.append(
+            VoidIntent(order_id=order_id, authorization_id=authorization_id)
         )

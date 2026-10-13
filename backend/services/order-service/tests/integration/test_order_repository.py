@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 
 import pytest
 from kernel_platform.outbox.models import OutboxMessage
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import event, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from domain.entities.idempotency_key import IdempotencyKeyRecord
 from domain.entities.order import (
@@ -248,6 +248,54 @@ async def test_order_get_by_id_returns_none_for_unknown_order(
     fetched = await repo.get_by_id(uuid.uuid4())
 
     assert fetched is None
+
+
+async def test_order_get_locked_by_id_round_trips_and_locks_the_order_row(
+    db_engine: AsyncEngine, db_session: AsyncSession
+) -> None:
+    """issue #377, D2: все сессии теста делят одно соединение (E13 брифа),
+    поэтому блокировка доказывается на уровне SQL — `FOR UPDATE` в
+    выборке строки `orders`."""
+    repo = OrderRepository(db_session)
+    order = _order_with_two_lines()
+    await repo.save(order)
+    await db_session.flush()
+    statements: list[str] = []
+
+    def _capture(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(db_engine.sync_engine, "before_cursor_execute", _capture)
+    try:
+        fetched = await repo.get_locked_by_id(order.id)
+    finally:
+        event.remove(db_engine.sync_engine, "before_cursor_execute", _capture)
+
+    assert fetched is not None
+    assert fetched.id == order.id
+    assert fetched.status is OrderStatus.PENDING
+    assert {line.id for line in fetched.lines} == {line.id for line in order.lines}
+    order_selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+        and "FROM ORDERS" in statement.upper()
+    ]
+    assert len(order_selects) == 1
+    assert order_selects[0].upper().rstrip().endswith("FOR UPDATE")
+
+
+async def test_order_get_locked_by_id_returns_none_for_unknown_order(
+    db_session: AsyncSession,
+) -> None:
+    assert await OrderRepository(db_session).get_locked_by_id(uuid.uuid4()) is None
 
 
 async def test_idempotency_key_save_and_get_round_trips(

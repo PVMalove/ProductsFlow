@@ -4,6 +4,7 @@ from fastapi import Depends, Request
 
 from application.commands import (
     AddCartLineCommandHandler,
+    CancelOrderCommandHandler,
     CheckoutCommandHandler,
     RemoveCartLineCommandHandler,
     UpdateCartLineQuantityCommandHandler,
@@ -11,22 +12,26 @@ from application.commands import (
 from application.ports import CatalogQuotePort
 from application.queries import GetCartQueryHandler
 from domain.repositories import CartRepository
-from domain.unit_of_work import CartUnitOfWork, CheckoutUnitOfWork
+from domain.unit_of_work import (
+    CartUnitOfWork,
+    CheckoutUnitOfWork,
+    OrderCancellationUnitOfWork,
+)
 from infrastructure.db.cart_repository import CartRepository as SqlCartRepository
 from infrastructure.db.session import DbSessionDI
-from infrastructure.db.unit_of_work import SqlCartUnitOfWork
+from infrastructure.db.unit_of_work import SqlOrderServiceUnitOfWork
 from infrastructure.http.catalog_client import CatalogClient
 
 
 def get_cart_uow(session: DbSessionDI) -> CartUnitOfWork:
-    return SqlCartUnitOfWork(session)
+    return SqlOrderServiceUnitOfWork(session)
 
 
 CartUnitOfWorkDI = Annotated[CartUnitOfWork, Depends(get_cart_uow)]
 
 
 def get_checkout_uow(session: DbSessionDI) -> CheckoutUnitOfWork:
-    return SqlCartUnitOfWork(session)
+    return SqlOrderServiceUnitOfWork(session)
 
 
 CheckoutUnitOfWorkDI = Annotated[CheckoutUnitOfWork, Depends(get_checkout_uow)]
@@ -91,23 +96,45 @@ def get_checkout_handler(
 CheckoutDI = Annotated[CheckoutCommandHandler, Depends(get_checkout_handler)]
 
 
+def get_order_cancellation_uow(session: DbSessionDI) -> OrderCancellationUnitOfWork:
+    return SqlOrderServiceUnitOfWork(session)
+
+
+OrderCancellationUnitOfWorkDI = Annotated[
+    OrderCancellationUnitOfWork, Depends(get_order_cancellation_uow)
+]
+
+
+def get_cancel_order_handler(
+    uow: OrderCancellationUnitOfWorkDI,
+) -> CancelOrderCommandHandler:
+    return CancelOrderCommandHandler(uow)
+
+
+CancelOrderDI = Annotated[CancelOrderCommandHandler, Depends(get_cancel_order_handler)]
+
+
 __all__ = [
     "AddCartLineDI",
+    "CancelOrderDI",
     "CartRepositoryDI",
     "CartUnitOfWorkDI",
     "CatalogClientDI",
     "CheckoutDI",
     "CheckoutUnitOfWorkDI",
     "GetCartDI",
+    "OrderCancellationUnitOfWorkDI",
     "RemoveCartLineDI",
     "UpdateCartLineQuantityDI",
     "get_add_cart_line_handler",
+    "get_cancel_order_handler",
     "get_cart_repository",
     "get_cart_uow",
     "get_catalog_client",
     "get_checkout_handler",
     "get_checkout_uow",
     "get_get_cart_handler",
+    "get_order_cancellation_uow",
     "get_remove_cart_line_handler",
     "get_update_cart_line_quantity_handler",
 ]

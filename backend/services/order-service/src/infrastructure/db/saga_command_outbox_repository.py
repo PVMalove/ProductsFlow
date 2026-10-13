@@ -1,5 +1,5 @@
 """Пишущая сторона outbox исходящих команд Saga (issue #372, D6; issue #375,
-D3; issue #376, D3).
+D3; issue #376, D3; issue #377, D3).
 
 Порт и репозиторий названы по содержимому — все исходящие команды Saga, не
 только `inventory.reserve.v1` (issue #376, R6). Физическая таблица сохраняет
@@ -24,6 +24,7 @@ AUTHORIZE_COMMAND_TYPE = "payment.authorize.v1"
 RELEASE_COMMAND_TYPE = "inventory.release.v1"
 ALLOCATE_COMMAND_TYPE = "inventory.allocate.v1"
 CAPTURE_COMMAND_TYPE = "payment.capture.v1"
+VOID_COMMAND_TYPE = "payment.void.v1"
 # Все типы, которые order-worker публикует — для объявления command-топологии.
 COMMAND_TYPES = (
     RESERVE_COMMAND_TYPE,
@@ -31,6 +32,7 @@ COMMAND_TYPES = (
     RELEASE_COMMAND_TYPE,
     ALLOCATE_COMMAND_TYPE,
     CAPTURE_COMMAND_TYPE,
+    VOID_COMMAND_TYPE,
 )
 
 
@@ -94,6 +96,17 @@ class SagaCommandOutboxRepository:
         self._add(
             order_id=order_id,
             command_type=CAPTURE_COMMAND_TYPE,
+            payload={"authorization_id": str(authorization_id)},
+        )
+
+    async def enqueue_void(
+        self, *, order_id: uuid.UUID, authorization_id: uuid.UUID
+    ) -> None:
+        # payment-service's `payment.void.v1` читает только
+        # `authorization_id`; idempotency key void — `command_id` строки.
+        self._add(
+            order_id=order_id,
+            command_type=VOID_COMMAND_TYPE,
             payload={"authorization_id": str(authorization_id)},
         )
 

@@ -16,8 +16,16 @@ from domain.entities.order import (
     OrderLine,
     OrderSagaStep,
     OrderStatus,
+    ReleaseReason,
+    ReservationReleaseOutcome,
 )
 from domain.events.order_domain_event import OrderCompleted
+from tests.unit.order_builders import (
+    order_awaiting_allocation,
+    order_awaiting_authorization,
+    order_awaiting_capture,
+    order_compensating,
+)
 
 USER_ID = uuid.uuid4()
 
@@ -154,11 +162,12 @@ def test_reconstitute_preserves_all_fields() -> None:
 
 
 def _order_awaiting_authorization() -> Order:
-    order, lines = _order_with_lines(2)
-    order.apply_reservation_result(
-        confirmed_product_ids=frozenset({lines[0].product_id})
+    return order_awaiting_authorization(
+        user_id=USER_ID,
+        quantities=(1, 1),
+        unit_price_kopecks=10_000,
+        confirmed_lines=1,
     )
-    return order
 
 
 def test_authorized_moves_saga_to_allocation_and_stores_authorization_id() -> None:
@@ -232,11 +241,9 @@ def test_authorization_result_before_reservation_is_a_no_op() -> None:
 
 
 def _order_compensating() -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(
-        outcome=AuthorizationOutcome.DECLINED, authorization_id=uuid.uuid4()
+    return order_compensating(
+        user_id=USER_ID, quantities=(1, 1), unit_price_kopecks=10_000, confirmed_lines=1
     )
-    return order
 
 
 def test_complete_compensation_keeps_failed_order_with_its_lines() -> None:
@@ -271,11 +278,12 @@ def test_compensation_outside_compensating_step_is_a_no_op() -> None:
 
 
 def _order_awaiting_allocation() -> Order:
-    order = _order_awaiting_authorization()
-    order.apply_authorization_result(
-        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=uuid.uuid4()
+    return order_awaiting_allocation(
+        user_id=USER_ID,
+        quantities=(1, 1),
+        unit_price_kopecks=10_000,
+        confirmed_lines=1,
     )
-    return order
 
 
 def test_allocation_result_moves_saga_to_capture_and_keeps_order_pending() -> None:
@@ -323,9 +331,12 @@ def test_allocation_result_outside_awaiting_allocation_is_a_no_op(
 
 
 def _order_awaiting_capture() -> Order:
-    order = _order_awaiting_allocation()
-    order.apply_allocation_result()
-    return order
+    return order_awaiting_capture(
+        user_id=USER_ID,
+        quantities=(1, 1),
+        unit_price_kopecks=10_000,
+        confirmed_lines=1,
+    )
 
 
 def _authorization_id(order: Order) -> uuid.UUID:
@@ -426,3 +437,437 @@ def test_allocation_result_after_capture_is_a_no_op() -> None:
     assert order.apply_allocation_result() is False
     assert order.status is OrderStatus.COMPLETED
     assert order.saga_step is OrderSagaStep.CAPTURED
+
+
+# --- issue #377: отмена владельцем до capture -------------------------------
+
+
+def _order_compensated() -> Order:
+    order = _order_compensating()
+    order.complete_compensation()
+    return order
+
+
+def _order_reservation_failed() -> Order:
+    order, _lines = _order_with_lines()
+    order.apply_reservation_result(confirmed_product_ids=frozenset())
+    return order
+
+
+def _order_captured() -> Order:
+    order = _order_awaiting_capture()
+    order.apply_capture_result(
+        authorization_id=_authorization_id(order), causation_id=uuid.uuid4()
+    )
+    order.pull_events()
+    return order
+
+
+def _order_cancelled_awaiting_reservation() -> Order:
+    order, _lines = _order_with_lines()
+    order.cancel()
+    return order
+
+
+def _order_expired_awaiting_reservation() -> Order:
+    order, _lines = _order_with_lines()
+    order.expire()
+    return order
+
+
+@pytest.mark.parametrize(
+    ("order_factory", "saga_step_after"),
+    [
+        (lambda: _order_with_lines()[0], OrderSagaStep.AWAITING_RESERVATION),
+        (_order_awaiting_authorization, OrderSagaStep.COMPENSATING),
+        (_order_awaiting_allocation, OrderSagaStep.COMPENSATING),
+    ],
+    ids=["awaiting_reservation", "awaiting_authorization", "awaiting_allocation"],
+)
+def test_cancel_before_capture_cancels_the_order(
+    order_factory: Callable[[], Order], saga_step_after: OrderSagaStep
+) -> None:
+    order = order_factory()
+    lines_before = list(order.lines)
+    authorization_before = order.payment_authorization_id
+
+    cancelled = order.cancel()
+
+    assert cancelled is True
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    # В AWAITING_RESERVATION шаг сохраняется: компенсацию решит результат
+    # резерва в пути.
+    assert order.saga_step is saga_step_after
+    assert order.lines == lines_before
+    assert order.payment_authorization_id == authorization_before
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_awaiting_capture,
+        _order_captured,
+        _order_compensating,
+        _order_compensated,
+        _order_reservation_failed,
+        _order_cancelled_awaiting_reservation,
+        _order_expired_awaiting_reservation,
+    ],
+    ids=[
+        "awaiting_capture",
+        "captured",
+        "compensating",
+        "compensated",
+        "reservation_failed",
+        "already_cancelled",
+        "expired",
+    ],
+)
+def test_cancel_outside_pending_before_capture_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+    reason_before = order.failure_reason
+
+    cancelled = order.cancel()
+
+    assert cancelled is False
+    assert order.status is status_before
+    assert order.saga_step is step_before
+    assert order.failure_reason == reason_before
+
+
+def test_reservation_result_after_cancel_compensates_the_confirmed_lines() -> None:
+    order, lines = _order_with_lines(2)
+    order.cancel()
+
+    applied = order.apply_reservation_result(
+        confirmed_product_ids=frozenset({lines[0].product_id})
+    )
+
+    assert applied is True
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert order.lines == [lines[0]]
+
+
+def test_empty_reservation_result_after_cancel_completes_compensation() -> None:
+    order, lines = _order_with_lines(2)
+    order.cancel()
+
+    applied = order.apply_reservation_result(confirmed_product_ids=frozenset())
+
+    assert applied is True
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines
+
+
+def test_reservation_result_after_expiry_is_a_no_op() -> None:
+    order = _order_expired_awaiting_reservation()
+    lines_before = list(order.lines)
+
+    applied = order.apply_reservation_result(
+        confirmed_product_ids=frozenset({lines_before[0].product_id})
+    )
+
+    assert applied is False
+    assert order.status is OrderStatus.EXPIRED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines_before
+
+
+def test_repeated_reservation_result_after_cancel_is_a_no_op() -> None:
+    order, lines = _order_with_lines(2)
+    order.cancel()
+    order.apply_reservation_result(
+        confirmed_product_ids=frozenset({lines[0].product_id})
+    )
+
+    applied_again = order.apply_reservation_result(confirmed_product_ids=frozenset())
+
+    assert applied_again is False
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert order.lines == [lines[0]]
+
+
+def test_compensation_after_cancel_keeps_the_cancelled_order() -> None:
+    order = _order_awaiting_authorization()
+    order.cancel()
+
+    assert order.complete_compensation() is True
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+
+
+def test_authorization_result_after_cancel_does_not_advance_the_saga() -> None:
+    order = _order_awaiting_authorization()
+    order.cancel()
+
+    applied = order.apply_authorization_result(
+        outcome=AuthorizationOutcome.AUTHORIZED, authorization_id=uuid.uuid4()
+    )
+
+    assert applied is False
+    assert order.status is OrderStatus.CANCELLED
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+    assert order.payment_authorization_id is None
+
+
+def test_allocation_result_after_cancel_requests_no_capture() -> None:
+    order = _order_awaiting_allocation()
+    order.cancel()
+
+    assert order.apply_allocation_result() is False
+    assert order.saga_step is OrderSagaStep.COMPENSATING
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_cancelled_awaiting_reservation,
+        _order_expired_awaiting_reservation,
+    ],
+    ids=["cancelled", "expired"],
+)
+def test_late_authorization_of_a_cancelled_or_expired_order_is_recorded_once(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+    authorization_id = uuid.uuid4()
+
+    recorded = order.record_late_authorization(authorization_id=authorization_id)
+    recorded_again = order.record_late_authorization(authorization_id=uuid.uuid4())
+
+    assert recorded is True
+    assert recorded_again is False
+    assert order.payment_authorization_id == authorization_id
+    assert order.status is status_before
+    assert order.saga_step is step_before
+
+
+def test_late_authorization_is_not_recorded_over_a_stored_authorization() -> None:
+    order = _order_awaiting_allocation()
+    stored = order.payment_authorization_id
+    order.cancel()
+
+    assert order.record_late_authorization(authorization_id=uuid.uuid4()) is False
+    assert order.payment_authorization_id == stored
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_awaiting_authorization,
+        _order_compensating,
+        _order_reservation_failed,
+    ],
+    ids=["pending", "failed_compensating", "reservation_failed"],
+)
+def test_late_authorization_outside_cancelled_or_expired_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+
+    assert order.record_late_authorization(authorization_id=uuid.uuid4()) is False
+    assert order.payment_authorization_id is None
+
+
+# --- issue #377: истечение резерва -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("order_factory", "saga_step_after"),
+    [
+        (lambda: _order_with_lines()[0], OrderSagaStep.COMPENSATED),
+        (_order_awaiting_authorization, OrderSagaStep.COMPENSATED),
+        (_order_awaiting_allocation, OrderSagaStep.COMPENSATED),
+    ],
+    ids=["awaiting_reservation", "awaiting_authorization", "awaiting_allocation"],
+)
+def test_expire_before_capture_expires_the_order(
+    order_factory: Callable[[], Order], saga_step_after: OrderSagaStep
+) -> None:
+    order = order_factory()
+    lines_before = list(order.lines)
+    authorization_before = order.payment_authorization_id
+
+    expired = order.expire()
+
+    assert expired is True
+    assert order.status is OrderStatus.EXPIRED
+    assert order.failure_reason == "RESERVATION_EXPIRED"
+    assert order.saga_step is saga_step_after
+    assert order.lines == lines_before
+    assert order.payment_authorization_id == authorization_before
+
+
+@pytest.mark.parametrize(
+    "order_factory",
+    [
+        _order_awaiting_capture,
+        _order_captured,
+        _order_compensating,
+        _order_compensated,
+        _order_reservation_failed,
+        _order_cancelled_awaiting_reservation,
+        _order_expired_awaiting_reservation,
+    ],
+    ids=[
+        "awaiting_capture",
+        "captured",
+        "compensating",
+        "compensated",
+        "reservation_failed",
+        "cancelled",
+        "already_expired",
+    ],
+)
+def test_expire_outside_pending_before_capture_is_a_no_op(
+    order_factory: Callable[[], Order],
+) -> None:
+    order = order_factory()
+    status_before = order.status
+    step_before = order.saga_step
+    reason_before = order.failure_reason
+
+    expired = order.expire()
+
+    assert expired is False
+    assert order.status is status_before
+    assert order.saga_step is step_before
+    assert order.failure_reason == reason_before
+
+
+def test_cancel_after_expiry_is_a_no_op() -> None:
+    order = _order_awaiting_authorization()
+    order.expire()
+
+    assert order.cancel() is False
+    assert order.status is OrderStatus.EXPIRED
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+
+
+def test_expiry_after_cancel_awaiting_reservation_completes_compensation() -> None:
+    order, lines = _order_with_lines(2)
+    order.cancel()
+
+    outcome = order.apply_reservation_release(reason=ReleaseReason.EXPIRED)
+
+    assert outcome is ReservationReleaseOutcome.EXPIRED_LINES_LOCKED
+    assert order.status is OrderStatus.CANCELLED
+    assert order.failure_reason == "CANCELLED_BY_CUSTOMER"
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines
+    # Поздний результат резерва уже освобождённого резерва — no-op.
+    assert (
+        order.apply_reservation_result(
+            confirmed_product_ids=frozenset({lines[0].product_id})
+        )
+        is False
+    )
+    assert order.saga_step is OrderSagaStep.COMPENSATED
+    assert order.lines == lines
+
+
+@pytest.mark.parametrize(
+    ("order_factory", "reason", "expected", "status_after", "saga_step_after"),
+    [
+        (
+            _order_compensating,
+            ReleaseReason.MANUAL,
+            ReservationReleaseOutcome.COMPENSATION_COMPLETED,
+            OrderStatus.FAILED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            _order_compensating,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.COMPENSATION_COMPLETED,
+            OrderStatus.FAILED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            lambda: _order_with_lines()[0],
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.EXPIRED_LINES_LOCKED,
+            OrderStatus.EXPIRED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            _order_awaiting_authorization,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.EXPIRED_LINES_TAKEN,
+            OrderStatus.EXPIRED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            _order_awaiting_allocation,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.EXPIRED_LINES_TAKEN,
+            OrderStatus.EXPIRED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            _order_awaiting_authorization,
+            ReleaseReason.MANUAL,
+            ReservationReleaseOutcome.IGNORED,
+            OrderStatus.PENDING,
+            OrderSagaStep.AWAITING_AUTHORIZATION,
+        ),
+        (
+            _order_awaiting_capture,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.IGNORED,
+            OrderStatus.PENDING,
+            OrderSagaStep.AWAITING_CAPTURE,
+        ),
+        (
+            _order_compensated,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.IGNORED,
+            OrderStatus.FAILED,
+            OrderSagaStep.COMPENSATED,
+        ),
+        (
+            _order_expired_awaiting_reservation,
+            ReleaseReason.EXPIRED,
+            ReservationReleaseOutcome.IGNORED,
+            OrderStatus.EXPIRED,
+            OrderSagaStep.COMPENSATED,
+        ),
+    ],
+    ids=[
+        "compensating_manual",
+        "compensating_expired",
+        "pending_awaiting_reservation_expired",
+        "awaiting_authorization_expired",
+        "awaiting_allocation_expired",
+        "awaiting_authorization_manual",
+        "awaiting_capture_expired",
+        "compensated_expired",
+        "already_expired",
+    ],
+)
+def test_apply_reservation_release_outcome(
+    order_factory: Callable[[], Order],
+    reason: ReleaseReason,
+    expected: ReservationReleaseOutcome,
+    status_after: OrderStatus,
+    saga_step_after: OrderSagaStep,
+) -> None:
+    order = order_factory()
+
+    outcome = order.apply_reservation_release(reason=reason)
+
+    assert outcome is expected
+    assert order.status is status_after
+    assert order.saga_step is saga_step_after

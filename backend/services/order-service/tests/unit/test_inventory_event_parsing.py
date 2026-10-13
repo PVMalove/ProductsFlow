@@ -13,6 +13,7 @@ from api.workers.commands.inventory_event_handler import (
     parse_reservation_release,
     parse_reservation_result,
 )
+from domain.entities.order import ReleaseReason
 
 
 def test_parse_reservation_result_extracts_order_id_and_confirmed_product_ids() -> None:
@@ -70,12 +71,18 @@ def test_parse_reservation_result_rejects_non_object_payload() -> None:
         parse_reservation_result(json.dumps([1, 2, 3]).encode())
 
 
-def test_parse_reservation_release_extracts_order_id() -> None:
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [("manual", ReleaseReason.MANUAL), ("expired", ReleaseReason.EXPIRED)],
+)
+def test_parse_reservation_release_extracts_order_id_and_reason(
+    reason: str, expected: ReleaseReason
+) -> None:
     order_id = uuid.uuid4()
     body = json.dumps(
         {
             "order_id": str(order_id),
-            "reason": "manual",
+            "reason": reason,
             "released_lines": [{"product_id": str(uuid.uuid4()), "quantity": 1}],
         }
     ).encode()
@@ -83,11 +90,34 @@ def test_parse_reservation_release_extracts_order_id() -> None:
     command = parse_reservation_release(body)
 
     assert command.order_id == order_id
+    assert command.reason is expected
 
 
 def test_parse_reservation_release_rejects_missing_order_id() -> None:
     with pytest.raises(ValueError):
         parse_reservation_release(json.dumps({"reason": "expired"}).encode())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"released_lines": []},
+        {"reason": "cancelled", "released_lines": []},
+        {"reason": ["expired"], "released_lines": []},
+    ],
+    ids=["missing_reason", "unknown_reason", "non_string_reason"],
+)
+def test_parse_reservation_release_treats_anything_but_expired_as_a_plain_release(
+    payload: dict[str, object],
+) -> None:
+    order_id = uuid.uuid4()
+
+    command = parse_reservation_release(
+        json.dumps({"order_id": str(order_id), **payload}).encode()
+    )
+
+    assert command.order_id == order_id
+    assert command.reason is ReleaseReason.MANUAL
 
 
 def test_parse_reservation_release_rejects_invalid_json() -> None:

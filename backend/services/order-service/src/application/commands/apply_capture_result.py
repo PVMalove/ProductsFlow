@@ -38,7 +38,7 @@ class ApplyCaptureResultCommandHandler:
         self._order_repo = order_repo
 
     async def execute(self, command: ApplyCaptureResultCommand) -> None:
-        order: Order | None = await self._order_repo.get_by_id(command.order_id)
+        order: Order | None = await self._order_repo.get_locked_by_id(command.order_id)
         if order is None:
             logger.warning(
                 "Capture result проигнорирован: order_id=%s не найден",

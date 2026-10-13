@@ -6,7 +6,9 @@
 `OrderStatus` — внешний, прескрайбленный ADR 0016:7 набор, не раскрывающий
 внутренний Saga Step; `OrderSagaStep` — внутреннее состояние, отдельное поле
 (D4). Saga достигает `PENDING`/`FAILED` (#372/#375) и `COMPLETED` после
-подтверждённого capture (#376); `CANCELLED`/`EXPIRED` — шаги #377.
+подтверждённого capture (#376); `CANCELLED` (отмена владельцем) и `EXPIRED`
+(истечение резерва) — #377: оба допустимы только для `PENDING` до запроса
+capture и компенсируются теми же шагами `COMPENSATING`/`COMPENSATED`.
 
 Конструктор вызывается только через `create()` (новый заказ) или
 `reconstitute()` (гидратация из БД)."""
@@ -14,7 +16,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import cast
 
 from kernel_domain import PRIVATE_MARKER
@@ -46,9 +48,12 @@ class OrderSagaStep(Enum):
     # Терминал успешной Saga: capture подтверждён, Order `COMPLETED`. Имя
     # шага нарочно отличается от значения `OrderStatus` (CONTEXT.md).
     CAPTURED = "captured"
-    # Отказ/таймаут авторизации: Order уже `FAILED`, резерв ещё освобождается.
+    # Терминальный внешний статус уже выставлен (`FAILED` после отказа/
+    # таймаута авторизации, `CANCELLED` после отмены), резерв ещё
+    # освобождается.
     COMPENSATING = "compensating"
-    # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории.
+    # Резерв освобождён, строки возвращены в Cart; Order остаётся в истории
+    # со своим терминальным статусом (`FAILED`/`CANCELLED`/`EXPIRED`).
     COMPENSATED = "compensated"
 
 
@@ -62,8 +67,49 @@ class AuthorizationOutcome(Enum):
     TIMED_OUT = "timed_out"
 
 
+class ReleaseReason(StrEnum):
+    """issue #377, D7: `reason` факта `inventory.released.v1` — резерв
+    освобождён по команде Saga (`MANUAL`) либо истёк по TTL (`EXPIRED`)."""
+
+    MANUAL = "manual"
+    EXPIRED = "expired"
+
+
+class ReservationReleaseOutcome(Enum):
+    """issue #377: что сделал `Order.apply_reservation_release` — вызывающий
+    выбирает по исходу побочные эффекты (void, Cart)."""
+
+    # Нет перехода (повтор, терминал, `AWAITING_CAPTURE`, `manual` вне
+    # `COMPENSATING`).
+    IGNORED = "ignored"
+    # `COMPENSATING` -> `COMPENSATED`: строки Order уже забраны из Cart,
+    # возвращаются в него.
+    COMPENSATION_COMPLETED = "compensation_completed"
+    # Истечение после результата резерва: строки Order забраны из Cart —
+    # вызывающий аннулирует сохранённую авторизацию и возвращает строки.
+    EXPIRED_LINES_TAKEN = "expired_lines_taken"
+    # Истечение в `AWAITING_RESERVATION`: строки ещё в Cart под блокировкой
+    # этого Order — вызывающий только разблокирует их.
+    EXPIRED_LINES_LOCKED = "expired_lines_locked"
+
+
 FAILURE_REASON_PAYMENT_DECLINED = "PAYMENT_DECLINED"
 FAILURE_REASON_PAYMENT_TIMED_OUT = "PAYMENT_TIMED_OUT"
+# issue #377, D1: `failure_reason` несёт и причину отмены/истечения — она же
+# попадает в `unavailable_reason` возвращённых строк Cart.
+FAILURE_REASON_CANCELLED_BY_CUSTOMER = "CANCELLED_BY_CUSTOMER"
+FAILURE_REASON_RESERVATION_EXPIRED = "RESERVATION_EXPIRED"
+
+# issue #377, D1/R1: «до capture» — до запроса `payment.capture.v1`. В
+# `AWAITING_CAPTURE` capture уже отправлен: void после него — тихий no-op
+# payment-service, void до него отправляет capture в DLQ.
+_STEPS_BEFORE_CAPTURE = frozenset(
+    {
+        OrderSagaStep.AWAITING_RESERVATION,
+        OrderSagaStep.AWAITING_AUTHORIZATION,
+        OrderSagaStep.AWAITING_ALLOCATION,
+    }
+)
 
 
 @dataclass
@@ -158,9 +204,28 @@ class Order(Entity[uuid.UUID]):
         двухслойная идемпотентность (issue #367's прецедент): вызывающий
         (event-consumer) уже прошёл `processed_messages`-гейт по `message_id`,
         этот guard дополнительно ловит повторную доставку с ДРУГИМ
-        `message_id`, несущую тот же бизнес-факт."""
+        `message_id`, несущую тот же бизнес-факт.
+
+        issue #377, D1: Order, отменённый, пока резерв был в пути, сохраняет
+        статус и причину; результат резерва решает только компенсацию.
+        Отменённый с подтверждёнными строками — `COMPENSATING` (строки усечены
+        до подтверждённых, резерв надо освободить); иначе — `COMPENSATED`
+        (резерва нет). Истёкший Order сюда не попадает: `expire` сразу
+        `COMPENSATED`, поздний результат отсекает guard выше."""
         if self.saga_step is not OrderSagaStep.AWAITING_RESERVATION:
             return False
+
+        if self.status is not OrderStatus.PENDING:
+            if self.status is OrderStatus.CANCELLED and confirmed_product_ids:
+                self.lines = [
+                    line
+                    for line in self.lines
+                    if line.product_id in confirmed_product_ids
+                ]
+                self.saga_step = OrderSagaStep.COMPENSATING
+            else:
+                self.saga_step = OrderSagaStep.COMPENSATED
+            return True
 
         if not confirmed_product_ids:
             self.status = OrderStatus.FAILED
@@ -238,8 +303,93 @@ class Order(Entity[uuid.UUID]):
         """Фиксирует освобождение резерва (`inventory.released.v1`, issue
         #375, D1). `False` без мутации вне `COMPENSATING` (повторная доставка
         или release в другом шаге). `lines` не усекаются: Order остаётся в
-        истории со своими строками и статусом `FAILED`."""
+        истории со своими строками и терминальным статусом (`FAILED` или
+        `CANCELLED`, issue #377)."""
         if self.saga_step is not OrderSagaStep.COMPENSATING:
             return False
         self.saga_step = OrderSagaStep.COMPENSATED
         return True
+
+    def cancel(self) -> bool:
+        """Отмена владельцем (issue #377, D1). `False` без мутации, если
+        Order не `PENDING` или Saga уже запросила capture. Иначе Order
+        `CANCELLED` с причиной `CANCELLED_BY_CUSTOMER` и Saga в
+        `COMPENSATING` (вызывающий освобождает резерв и аннулирует сохранённую
+        авторизацию). В `AWAITING_RESERVATION` шаг сохраняется: результат
+        резерва в пути, компенсацию решает `apply_reservation_result`."""
+        if not self._terminate_before_capture(
+            OrderStatus.CANCELLED, FAILURE_REASON_CANCELLED_BY_CUSTOMER
+        ):
+            return False
+        if self.saga_step is not OrderSagaStep.AWAITING_RESERVATION:
+            self.saga_step = OrderSagaStep.COMPENSATING
+        return True
+
+    def expire(self) -> bool:
+        """Истечение резерва (`inventory.released.v1` с `reason=expired`,
+        issue #377, D1). Тот же guard, что `cancel`: `False` без мутации, если
+        Order не `PENDING` или Saga уже запросила capture (allocated резерв
+        не истекает). Иначе Order `EXPIRED` с причиной `RESERVATION_EXPIRED`
+        и Saga сразу `COMPENSATED` — inventory уже освободил резерв, а
+        поздний `inventory.reserved.v1` отсекается guard'ом
+        `apply_reservation_result`."""
+        if not self._terminate_before_capture(
+            OrderStatus.EXPIRED, FAILURE_REASON_RESERVATION_EXPIRED
+        ):
+            return False
+        self.saga_step = OrderSagaStep.COMPENSATED
+        return True
+
+    def apply_reservation_release(
+        self, *, reason: ReleaseReason
+    ) -> ReservationReleaseOutcome:
+        """Применяет факт `inventory.released.v1` (issue #375 D1, #377 D4/D7)
+        и возвращает исход. В `COMPENSATING` любой `reason` завершает
+        компенсацию: резерв освобождён в обоих случаях. Иначе только
+        `reason=expired` что-то меняет: `PENDING` до запроса capture истекает
+        (`expire`), а отменённый, пока результат резерва был в пути
+        (`CANCELLED` + `AWAITING_RESERVATION`), сразу `COMPENSATED` — статус и
+        причина отмены сохраняются. Остальное — `IGNORED` без мутации."""
+        if self.complete_compensation():
+            return ReservationReleaseOutcome.COMPENSATION_COMPLETED
+        if reason is not ReleaseReason.EXPIRED:
+            return ReservationReleaseOutcome.IGNORED
+
+        in_flight = self.saga_step is OrderSagaStep.AWAITING_RESERVATION
+        if self.status is OrderStatus.CANCELLED and in_flight:
+            self.saga_step = OrderSagaStep.COMPENSATED
+            return ReservationReleaseOutcome.EXPIRED_LINES_LOCKED
+        if not self.expire():
+            return ReservationReleaseOutcome.IGNORED
+        if in_flight:
+            return ReservationReleaseOutcome.EXPIRED_LINES_LOCKED
+        return ReservationReleaseOutcome.EXPIRED_LINES_TAKEN
+
+    def record_late_authorization(self, *, authorization_id: uuid.UUID) -> bool:
+        """Фиксирует успешную авторизацию, пришедшую после отмены или
+        истечения Order (issue #377, D1): вызывающий обязан её аннулировать
+        (`payment.void.v1`). `False` без мутации для любого другого статуса и
+        для уже сохранённой авторизации (повторный факт не ставит второй
+        void)."""
+        if self.status not in (OrderStatus.CANCELLED, OrderStatus.EXPIRED):
+            return False
+        if self.payment_authorization_id is not None:
+            return False
+        self.payment_authorization_id = authorization_id
+        return True
+
+    def _terminate_before_capture(self, status: OrderStatus, reason: str) -> bool:
+        """Общий скелет `cancel`/`expire` (issue #377): guard «`PENDING` до
+        запроса capture», затем терминальный статус и причина. Шаг Saga
+        выставляет вызывающий."""
+        if not self._is_pending_before_capture():
+            return False
+        self.status = status
+        self.failure_reason = reason
+        return True
+
+    def _is_pending_before_capture(self) -> bool:
+        return (
+            self.status is OrderStatus.PENDING
+            and self.saga_step in _STEPS_BEFORE_CAPTURE
+        )

@@ -37,6 +37,7 @@ from application.commands.apply_reservation_result import (
     ApplyReservationResultCommand,
     ApplyReservationResultCommandHandler,
 )
+from domain.entities.order import ReleaseReason
 from infrastructure.db.cart_repository import CartRepository
 from infrastructure.db.order_repository import OrderRepository
 from infrastructure.db.saga_command_outbox_repository import (
@@ -89,16 +90,23 @@ def parse_reservation_result(body: bytes) -> ApplyReservationResultCommand:
 
 def parse_reservation_release(body: bytes) -> ApplyReservationReleaseCommand:
     """Парсит payload `inventory.released.v1` (`{order_id, reason,
-    released_lines}`) — для компенсации нужен только `order_id`: любой
-    `reason` (`manual`/`expired`) означает, что резерв освобождён."""
+    released_lines}`). Любой `reason` означает, что резерв освобождён;
+    только `expired` (issue #377, D7) дополнительно переводит незавершённый
+    Order в `EXPIRED`, всё остальное — освобождение по команде Saga
+    (`ReleaseReason.MANUAL`), как до #377."""
     payload = _json_object(body)
 
     try:
         order_id = uuid.UUID(str(payload["order_id"]))
     except (KeyError, ValueError) as exc:
         raise ValueError(f"Invalid reservation event payload: {payload!r}") from exc
+    reason = (
+        ReleaseReason.EXPIRED
+        if payload.get("reason") == ReleaseReason.EXPIRED
+        else ReleaseReason.MANUAL
+    )
 
-    return ApplyReservationReleaseCommand(order_id=order_id)
+    return ApplyReservationReleaseCommand(order_id=order_id, reason=reason)
 
 
 def parse_allocation_result(body: bytes) -> ApplyAllocationResultCommand:
@@ -134,7 +142,9 @@ def _route_released(body: bytes, _payment_method_token: str) -> ParsedEvent:
 
     async def apply(session: AsyncSession) -> None:
         await ApplyReservationReleaseCommandHandler(
-            OrderRepository(session), CartRepository(session)
+            OrderRepository(session),
+            CartRepository(session),
+            SagaCommandOutboxRepository(session),
         ).execute(command)
 
     return ParsedEvent(command.order_id, apply)
